@@ -34,6 +34,32 @@ def get_today_workouts_from_db() -> list:
         # База закрывается
         if conn:
             conn.close()
+
+def get_unique_exercises() -> list:
+    """Извлекает упорядоченный список уникальных названий упражнений для авто продления"""
+    conn = None
+    try:
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+
+        query = """
+            SELECT DISTINCT exercise_name
+            FROM workouts
+            WHERE exercise_name IS NOT NULL AND exercise_name != ''
+            ORDER BY exercise_name ASC
+        """
+        cursor.execute(query)
+
+        # Забираем чистые строки из кортежей через [row[0].
+        result = [row[0] for row in cursor.fetchall()]
+        return result
+    except sqlite3.Error as e:
+        print(f"[Ошибка БД при выборке DISTINCT]: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
 def get_workouts_by_date_from_db(search_string: str) -> list:
     """Узел 2.  Гибкий поиск по архиву. Ищет любые совпадения по веденной пользователем строке. """
     conn = None

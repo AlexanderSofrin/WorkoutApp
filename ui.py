@@ -1,14 +1,16 @@
 import tkinter as tk
 from tkinter import messagebox
-import datetime
+from tkinter import ttk
 import models
+import datetime
 from tkinter import simpledialog
 # импортируем логику бэкенда из соседнего файла models.py
 from models import (validate_workout_data,
                     save_workout_to_db,
                     get_last_five_from_bd,
                     WorkoutRecord,
-                    get_today_workouts_from_db)
+                    get_today_workouts_from_db,
+                    get_unique_exercises)
 
 
 class WorkoutApp(tk.Tk):
@@ -16,6 +18,7 @@ class WorkoutApp(tk.Tk):
         super().__init__()
         self.title("Дневник тренировок")
         self.geometry("750x650")
+        self.all_exercises = get_unique_exercises()
 
         self.left_frame = tk.Frame(self)
         self.left_frame.pack(side="left", fill="both", expand=True, padx=20, pady=20)
@@ -287,8 +290,9 @@ class WorkoutApp(tk.Tk):
         win.geometry("450x350")
 
         tk.Label(win, text="Упражнение:").pack()
-        e_ex = tk.Entry(win, width=40)
+        e_ex = ttk.Combobox(win, values=self.all_exercises, width=40)
         e_ex.pack(pady=5)
+        e_ex.bind("<KeyRelease>", lambda event: self.filter_suggestions(event, e_ex))
 
         tk.Label(win, text="Подходы (число):").pack()
         e_sets = tk.Entry(win, width=20)
@@ -325,3 +329,22 @@ class WorkoutApp(tk.Tk):
         btn_save = tk.Button(win, text="Сохранить", bg="#4CAF50", fg="white",
                              font=("Arial", 12, "bold"), command=save_and_close)
         btn_save.pack(pady=20)
+
+    def filter_suggestions(self, event, combo):
+        """Динамический фильтр списка на основе введенных пользователем букв."""
+        if event.keysym in ("Up", "Down", "Left", "Right", "Return", "BackSpase", "Shift_L", "Shift_R"):
+            return
+
+        typed_text = combo.get().lower()
+
+        if typed_text == "":
+            tracking_list = self.all_exercises
+        else:
+            tracking_list = [
+                item for item in self.all_exercises
+                if item.lower().startswith(typed_text)
+            ]
+        combo['values'] = tracking_list
+        if tracking_list:
+            combo.event_generate("<Down")
+
