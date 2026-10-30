@@ -50,7 +50,7 @@ def get_unique_exercises() -> list:
         """
         cursor.execute(query)
 
-        # Забираем чистые строки из кортежей через [row[0].
+        # Забираем чистые строки из кортежей через [row[0]].
         result = [row[0] for row in cursor.fetchall()]
         return result
     except sqlite3.Error as e:
@@ -140,7 +140,7 @@ def save_workout_to_db(workout: WorkoutRecord) -> bool:
         print(f"Запись '{workout.exercise_name}' успешно сохранена в SQLite")
         return True
     except sqlite3.Error as e:
-        raise e
+        return False
     finally:
         if conn:
             conn.close()
@@ -200,7 +200,31 @@ def validate_workout_data(ex: str, sets_str: str, reps_str: str, weight_str: str
     workout_obj = WorkoutRecord(exercise=ex, sets=sets, reps=reps, weight=weight)
     return True, workout_obj  # возвращаем объект, а не словарь
 
+def get_max_records():
+    """
+    Вытаскиваем максимальный вес по каждому упражнению за всю историю тренировок.
+    """
+    # 1. Подключаемся к нашей базе данных
+    conn = sqlite3.connect("workout_vault.db")
+    cursor = conn.cursor()
 
+    try:
+        # Пишем хитрый SQL- запрос с MAX() и GROUP BY
+        cursor.execute("""
+              SELECT exercise_name, MAX(weight)
+              FROM workouts
+              WHERE weight IS NOT NULL AND weight > 0
+              GROUP BY exercise_name
+              ORDER BY MAX(weight) DESC 
+        """)
+        # 3. Забираем все найденные строки
+        return cursor.fetchall()
+    except sqlite3.OperationalError:
+        # Если таблицы еще нет, возвращаем пустой список, чтобы не было вылета
+        return []
+    finally:
+        # 4. Железно закрываем соединение с базой в любом случае.
+         conn.close()
 
 
 

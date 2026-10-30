@@ -4,6 +4,7 @@ from tkinter import ttk
 import models
 import datetime
 from tkinter import simpledialog
+from max_records_feature import open_max_records_window
 # импортируем логику бэкенда из соседнего файла models.py
 from models import (validate_workout_data,
                     save_workout_to_db,
@@ -37,6 +38,8 @@ class WorkoutApp(tk.Tk):
         self.make_sidebar_btn("📋 Тренировка за сегодня", "#8E24AA", "white", self.show_today_workouts, 10)
         self.make_sidebar_btn(" 🔍Поиск по дате", "#FF9800", "black", self.open_search_window, 10)
         self.make_sidebar_btn("⏱️ Секундомер и Таймер", "#FFD700", "black", self.open_timer_window, 10)
+        self.make_sidebar_btn(text="🥇 Рекорды", bg="#00ff00", fg="black", command=lambda: open_max_records_window(self))
+
 
     def make_sidebar_btn(self, text, bg, fg, command, pady_val=10):
         btn = tk.Button(self.sidebar, text=text, bg=bg, fg=fg,
@@ -332,7 +335,7 @@ class WorkoutApp(tk.Tk):
 
     def filter_suggestions(self, event, combo):
         """Динамический фильтр списка на основе введенных пользователем букв."""
-        if event.keysym in ("Up", "Down", "Left", "Right", "Return", "BackSpase", "Shift_L", "Shift_R"):
+        if event.keysym in ("Up", "Down", "Left", "Right", "Return", "BackSpace", "Shift_L", "Shift_R"):
             return
 
         typed_text = combo.get().lower()
@@ -346,5 +349,5 @@ class WorkoutApp(tk.Tk):
             ]
         combo['values'] = tracking_list
         if tracking_list:
-            combo.event_generate("<Down")
+            combo.event_generate("<Down>")
 
