@@ -146,18 +146,19 @@ def save_workout_to_db(workout: WorkoutRecord) -> bool:
             conn.close()
 
 # Для чтения истории из БД
-def get_last_five_from_bd() -> list:
-    # Достает из базы данных последние 5 тренировок
-    conn = None
+def get_all_record_from_last_day():
+    # Достает из базы данных последние тренировки
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
     try:
-        conn = sqlite3.connect(DB_NAME)
-        cursor = conn.cursor()
-        # Выбираем 5 последних строк
+
+        # Умный запрос с подзапросом (ВЫБОРКА ЗА ПОСЛЕДНЮЮ ДАТУ)
+        # Убрал DESC (убывание) и поставил ASC (по возрастанию)
         cursor.execute("""
-            SELECT created_at, exercise_name, sets, reps, weight
+            SELECT created_at, exercise, sets, reps, weight
             FROM workouts
-            ORDER BY id DESC
-            LIMIT 5
+            WHERE created_at = (SELECT MAX(created_at) FROM workouts
+            ORDER BY id ASC 
         """)
         rows = cursor.fetchall()#Забираем результаты в виде списка кортежей
         return rows

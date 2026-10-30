@@ -8,7 +8,7 @@ from max_records_feature import open_max_records_window
 # импортируем логику бэкенда из соседнего файла models.py
 from models import (validate_workout_data,
                     save_workout_to_db,
-                    get_last_five_from_bd,
+                    get_all_record_from_last_day,
                     WorkoutRecord,
                     get_today_workouts_from_db,
                     get_unique_exercises)
@@ -35,7 +35,7 @@ class WorkoutApp(tk.Tk):
         self.sidebar.pack(side="right", fill="y", padx=10, pady=10)
 
         self.make_sidebar_btn("📝 Записать тренировку", "#4CAF50", "white", self.open_record_window, 10)
-        self.make_sidebar_btn("📋 Тренировка за сегодня", "#8E24AA", "white", self.show_today_workouts, 10)
+        self.make_sidebar_btn("📋 Последняя тренировка", "#8E24AA", "white", self.show_today_workouts, 10)
         self.make_sidebar_btn(" 🔍Поиск по дате", "#FF9800", "black", self.open_search_window, 10)
         self.make_sidebar_btn("⏱️ Секундомер и Таймер", "#FFD700", "black", self.open_timer_window, 10)
         self.make_sidebar_btn(text="🥇 Рекорды", bg="#00ff00", fg="black", command=lambda: open_max_records_window(self))
@@ -50,14 +50,14 @@ class WorkoutApp(tk.Tk):
 
     def show_last_five(self):
         try:
-            rows = get_last_five_from_bd()
+            rows = get_all_record_from_last_day()
 
             if not rows:
                 self.msg_label.config(text="Пока нет записей о тренировках в базе данных", fg="#E53935")
                 messagebox.showinfo("Инфо", "В базе данных пока нет записей.")
                 return
 
-            report = "Последние 5 тренировок из (из базы SQLite):\n\n"
+            report = "Последняя тренировка из (из базы SQLite):\n\n"
             for row in rows:
                 date_str, ex, sets, reps, weight = row
                 report += f"{date_str}| {ex} | {sets}x{reps}"
