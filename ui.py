@@ -303,9 +303,29 @@ class WorkoutApp(tk.Tk):
         win.geometry("450x350")
 
         tk.Label(win, text="Упражнение:").pack()
-        e_ex = ttk.Combobox(win, values=self.all_exercises, width=40)
+        # 306. Возвращаем оригинальный, красивый и аккуратный выпадающий список
+        e_ex = ttk.Combobox(win, width=40, font=("Arial", 10))
+
+        # 307. Упаковываем его на экран с красивым отступом
         e_ex.pack(pady=5)
-        e_ex.bind("<KeyRelease>", lambda event: self.filter_suggestions(event, e_ex))
+
+        # === ЖЕСТКИЙ И ЧИСТЫЙ СБРОС ТУПНИ ===
+        # Строку 308 с e_ex.bind("<KeyRelease>") МЫ ВЫРЕЗАЕМ ПОЛНОСТЬЮ И НАВСЕГДА!
+        # Никакого следящего кода во время печати букв.
+
+        # Интеллигентная подсказка: список обновится и красиво выпадет
+        # ТОЛЬКО тогда, когда ты сам кликнешь на стрелочку сбоку combobox!
+        def on_dropdown_click():
+            typed = e_ex.get().strip()  # Читаем то, что ты успел написать руками
+            if not typed:
+                e_ex.configure(values=self.all_exercises)  # Если пусто — показываем всё
+            else:
+                # Фильтруем список: оставляем только совпадения с твоим словом
+                filtered = [ex for ex in self.all_exercises if typed.lower() in ex.lower()]
+                e_ex.configure(values=filtered)
+
+        # Привязываем это действие к нажатию на стрелочку (динамическое обновление списка)
+        e_ex.config(postcommand=on_dropdown_click)
 
         tk.Label(win, text="Подходы (число):").pack()
         e_sets = tk.Entry(win, width=20)
@@ -343,21 +363,5 @@ class WorkoutApp(tk.Tk):
                              font=("Arial", 12, "bold"), command=save_and_close)
         btn_save.pack(pady=20)
 
-    def filter_suggestions(self, event, combo):
-        """Динамический фильтр списка на основе введенных пользователем букв."""
-        if event.keysym in ("Up", "Down", "Left", "Right", "Return", "BackSpace", "Shift_L", "Shift_R"):
-            return
 
-        typed_text = combo.get().lower()
-
-        if typed_text == "":
-            tracking_list = self.all_exercises
-        else:
-            tracking_list = [
-                item for item in self.all_exercises
-                if item.lower().startswith(typed_text)
-            ]
-        combo['values'] = tracking_list
-        if tracking_list:
-            combo.event_generate("<Down>")
 
