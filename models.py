@@ -148,18 +148,22 @@ def save_workout_to_db(workout: WorkoutRecord) -> bool:
 # Для чтения истории из БД
 def get_all_record_from_last_day():
     # Достает из базы данных последние тренировки
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    try:
+    conn = None
 
-        # Умный запрос с подзапросом (ВЫБОРКА ЗА ПОСЛЕДНЮЮ ДАТУ)
-        # Убрал DESC (убывание) и поставил ASC (по возрастанию)
+    try:
+        # Достает из базы данных последние тренировки
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+
+        # Умный и надежный запрос, учитывающий имя exercise_name и наш формат дат
         cursor.execute("""
-            SELECT created_at, exercise, sets, reps, weight
-            FROM workouts
-            WHERE created_at = (SELECT MAX(created_at) FROM workouts
-            ORDER BY id ASC 
-        """)
+                    SELECT created_at, exercise_name, sets, reps, weight
+                    FROM workouts
+                    WHERE SUBSTR(created_at, 1, 10) = (
+                        SELECT SUBSTR(MAX(created_at), 1, 10) FROM workouts
+                    )
+                    ORDER BY id ASC 
+                """)
         rows = cursor.fetchall()#Забираем результаты в виде списка кортежей
         return rows
     except sqlite3.Error as e:

@@ -73,29 +73,39 @@ class WorkoutApp(tk.Tk):
             messagebox.showerror("Ошибка базы данных", f"Не удалось прочитать историю из БД: {e} ")
 
     def show_today_workouts(self):
-        """ Метод класса для вывода тренировок за текущий день. """
         try:
-            rows = get_today_workouts_from_db()
-            today_str = str(datetime.date.today())
+            # 1. Фиолетовый поток: берём данные из бэкенда (MAX день)
+            records = models.get_all_record_from_last_day()
 
-            if not rows:
-                msg = f"За сегодня ({today_str}) тренировок еще не зафиксировано"
-                self.msg_label.config(text=msg, fg="#E53935")
-                messagebox.showinfo("Инфо", f"За сегодня({today_str}) записей нет")
+            # 2. Создаем пустую текстовую коробку и закидываем заголовок
+            report = "=== ПОСЛЕДНЯЯ ТРЕНИРОВКА ===\n\n"
+
+            if not records:
+                report += "В базе данных пока нет записей."
+                self.msg_label.config(text=report, fg="#E53935")
                 return
 
-            report = f"=== ТРЕНИРОВКИ ЗА СЕГОДНЯ ({today_str}) ===\n\n"
-            for row in rows:
-                _, date_str, ex, sets, reps, weight = row
-                report += f"{ex} | {sets}x{reps} "
-                if weight is not None and weight != "":
-                    report += f"({weight} кг)\n"
-                else:
-                    report += "\n"
-            self.msg_label.config(text=report, fg="#2E7D32")
-            messagebox.showinfo("Сегодняшние тренировки", report)
+            # 3. Наращиваем строки упражнений одна за другой
+            for row in records:
+                # Распаковываем сырой кортеж из базы данных SQLite
+                # row[0] - created_at, row[1] - exercise_name, row[2] - sets, row[3] - reps, row[4] - weight
+                ex_name = row[1]
+                sets = row[2]
+                reps = row[3]
+                weight = row[4]
+
+                # Собираем красивую строчку веса, если он есть
+                weight_info = f" ({weight} кг)" if weight else ""
+
+                # Добавляем строчку упражнения к нашему итоговому отчету
+                report += f"{ex_name}: {sets}x{reps}{weight_info}\n"
+
+            # 4. Одним махом выводим весь готовый текст на наш ярлык
+            self.msg_label.config(text=report, fg="#1565C0")
+
         except Exception as e:
-            messagebox.showerror("Ошибка", f"Не удалось получить данные за сегодня: {e}")
+            # Наш надежный бронежилет, теперь с правильным отступом!
+            messagebox.showerror("Ошибка интерфейса", f"Не удалось обновить экран: {e}")
 
     def open_search_window(self):
         """Метод для вызова всплывающего окна и поиска по любой дате в БД."""
