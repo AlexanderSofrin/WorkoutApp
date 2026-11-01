@@ -156,7 +156,7 @@ def get_all_record_from_last_day():
 
         # Надежный срез SUBSTR, который идеально работает с нашим форматом ДД.ММ.ГГГГ
         cursor.execute("""
-                    SELECT created_at, exercise, sets, reps, weight
+                    SELECT created_at, exercise_name, sets, reps, weight
                     FROM workouts
                     WHERE SUBSTR(created_at, 1, 10) = (
                         SELECT SUBSTR(MAX(created_at), 1, 10) FROM workouts
