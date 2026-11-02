@@ -343,7 +343,13 @@ class WorkoutApp(tk.Tk):
             raw_ex = e_ex.get()
             raw_sets = e_sets.get()
             raw_reps = e_reps.get()
-            raw_weight = e_weight.get()
+
+            # === ОРАНЖЕВЫЙ ПОТОК: ИНТЕЛЛИГЕНТНЫЙ САНИТАЙЗЕР ВВОДА ВЕСА ===
+            # Читаем строку, убираем пробелы и на лету меняем запятую на точку!
+            user_weight_input = e_weight.get().strip().replace(",", ".")
+
+            # Передаем очищенную строку с точкой в бэкенд-валидатор
+            raw_weight = user_weight_input
 
             success, result = validate_workout_data(raw_ex, raw_sets, raw_reps, raw_weight)
             if not success:
