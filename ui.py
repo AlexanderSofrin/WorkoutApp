@@ -340,15 +340,32 @@ class WorkoutApp(tk.Tk):
         e_weight.pack(pady=5)
 
         def save_and_close():
+            from tkinter import messagebox  # Гарантируем импорт окон во фронтенде
+
+            # === ВХОДНОЙ КОНТУР: БЕЗОПАСНЫЙ СБОР СЫРЫХ ДАННЫХ ===
             raw_ex = e_ex.get()
             raw_sets = e_sets.get()
             raw_reps = e_reps.get()
 
-            # === ОРАНЖЕВЫЙ ПОТОК: ИНТЕЛЛИГЕНТНЫЙ САНИТАЙЗЕР ВВОДА ВЕСА ===
-            # Читаем строку, убираем пробелы и на лету меняем запятую на точку!
-            user_weight_input = e_weight.get().strip().replace(",", ".")
+            # === АРХИТЕКТУРНЫЙ БРОНЕЖИЛЕТ (ЗАЩИТА ОТ КРАША UI) ===
+            try:
+                # Читаем строку, убираем пробелы, меняем запятую на точку и СРАЗУ во float!
+                # Если пользователь введет буквы (например "софрин"), выскочит ValueError
+                user_weight_input = e_weight.get().strip().replace(",", ".")
 
-            # Передаем очищенную строку с точкой в бэкенд-валидатор
+                # Дополнительно страхуем повторения и подходы на ввод целых чисел
+                int(raw_sets.strip())
+                int(raw_reps.strip())
+
+            except ValueError as e:
+                # Перехватываем панику Python, не даем программе вылететь
+                messagebox.showerror(
+                    "Ошибка ввода",
+                    "Инженер, внимание!\nВес и повторения должны быть строго числами (например: 15.5 или 10)."
+                )
+                return  # Хладнокровно прерываем выполнение! База и UI в полной безопасности.
+
+            # === ПЕРЕДАЧА ОЧИЩЕННЫХ ДАННЫХ В БЭКЕНД-ВАЛИДАТОР ===
             raw_weight = user_weight_input
 
             success, result = validate_workout_data(raw_ex, raw_sets, raw_reps, raw_weight)
@@ -356,7 +373,7 @@ class WorkoutApp(tk.Tk):
                 messagebox.showwarning("Внимание", result)
                 return
 
-            # result — это объект WorkoutRecord, передаём его целиком
+            # === ЗАПЕЧАТЫВАНИЕ В БАЗУ ДАННЫХ REAL ===
             try:
                 save_workout_to_db(result)
                 self.msg_label.config(text=f"Записано: {result.exercise_name}, {result.sets}x{result.reps}")
