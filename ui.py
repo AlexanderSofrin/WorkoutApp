@@ -342,49 +342,52 @@ class WorkoutApp(tk.Tk):
         def save_and_close():
             from tkinter import messagebox  # Гарантируем импорт окон во фронтенде
 
-            # === ВХОДНОЙ КОНТУР: БЕЗОПАСНЫЙ СБОР СЫРЫХ ДАННЫХ ===
+            # === 1. ВХОДНОЙ КОНТУР: БЕЗОПАСНЫЙ СБОР СЫРЫХ ДАННЫХ ===
             raw_ex = e_ex.get()
             raw_sets = e_sets.get()
             raw_reps = e_reps.get()
+            raw_weight = e_weight.get().strip().replace(",", ".")
 
-            # === АРХИТЕКТУРНЫЙ БРОНЕЖИЛЕТ (ЗАЩИТА ОТ КРАША UI) ===
+            # === 2. UI-БРОНЕЖИЛЕТ (ВЕСЬ КОНТРОЛЬ ТИПОВ ЗДЕСЬ) ===
             try:
-                # Читаем строку, убираем пробелы, меняем запятую на точку и СРАЗУ во float!
-                # Если пользователь введет буквы (например "софрин"), выскочит ValueError
-                user_weight_input = e_weight.get().strip().replace(",", ".")
-
-                # Дополнительно страхуем повторения и подходы на ввод целых чисел
+                # Жестко проверяем на числа ДО отправки в бэкенд
                 int(raw_sets.strip())
                 int(raw_reps.strip())
+                if raw_weight:  # Если вес заполнен, проверяем его на буквы
+                    float(raw_weight)
 
-            except ValueError as e:
-                # Перехватываем панику Python, не даем программе вылететь
+            except ValueError:
+                # Перехватываем опечатку. Окно ошибки привязываем строго к маленькому окну win
                 messagebox.showerror(
                     "Ошибка ввода",
-                    "Инженер, внимание!\nВес и повторения должны быть строго числами (например: 15.5 или 10)."
+                    "Внимание!\nВес, подходы и повторения должны быть строго числами (например: 15.5 или 10).",
+                    parent=win
                 )
-                return  # Хладнокровно прерываем выполнение! База и UI в полной безопасности.
+                return  # ХЛАДНОКРОВНЫЙ РАННИЙ ВОЗВРАТ! Функция прервана, поля не тронуты, окно открыто!
 
-            # === ПЕРЕДАЧА ОЧИЩЕННЫХ ДАННЫХ В БЭКЕНД-ВАЛИДАТОР ===
-            raw_weight = user_weight_input
-
+            # === 3. ПЕРЕДАЧА ДАННЫХ В БЭКЕНД-ВАЛИДАТОР ===
             success, result = validate_workout_data(raw_ex, raw_sets, raw_reps, raw_weight)
             if not success:
-                messagebox.showwarning("Внимание", result)
-                return
+                messagebox.showwarning("Внимание", result, parent=win)
+                return  # Если бэкенд выявил логическую ошибку — тоже стопим код и держим окно
 
-            # === ЗАПЕЧАТЫВАНИЕ В БАЗУ ДАННЫХ REAL ===
+            # === 4. ЗАПЕЧАТЫВАНИЕ В БАЗУ ДАННЫХ REAL ===
             try:
                 save_workout_to_db(result)
                 self.msg_label.config(text=f"Записано: {result.exercise_name}, {result.sets}x{result.reps}")
-                messagebox.showinfo("Готово", "Тренировка успешно сохранена в базу данных!")
+                messagebox.showinfo("Готово", "Тренировка успешно сохранена в базу данных!", parent=win)
+
+                # И только теперь, когда всё прошло идеально, мы уничтожаем окно ввода!
                 win.destroy()
             except Exception as e:
-                messagebox.showerror("Ошибка", f"Не удалось сохранить: {e}")
+                messagebox.showerror("Ошибка", f"Не удалось сохранить: {e}", parent=win)
 
+        # === 5. ПРАВИЛЬНАЯ СБОРКА КНОПКИ БЕЗ СКАЧКОВ ПОТОКОВ ===
         btn_save = tk.Button(win, text="Сохранить", bg="#4CAF50", fg="white",
                              font=("Arial", 12, "bold"), command=save_and_close)
         btn_save.pack(pady=20)
+
+
 
 
 
