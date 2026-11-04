@@ -231,4 +231,35 @@ def get_max_records():
          conn.close()
 
 
+def update_workout_in_db(workout_id: int, exercise: str, sets: int, reps: int, weight: float) -> bool:
+    """Принимает ID записи и новые параметры, намертво перезаписывая строку в SQLite."""
+    conn = None
+    try:
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+
+        # Суровый и точный SQL-оператор UPDATE с фильтрацией по PRIMARY KEY (id)
+        query = """
+            UPDATE workouts 
+            SET exercise_name = ?, sets = ?, reps = ?, weight = ?
+            WHERE id = ?
+        """
+
+        # Выполняем через безопасный кортеж параметров (защита от SQL-инъекций)
+        cursor.execute(query, (exercise.strip(), sets, reps, weight, workout_id))
+        conn.commit()
+
+        print(f"[БЭКЕНД]: Запись с ID {workout_id} успешно модифицирована в базе.")
+        return True
+
+    except sqlite3.Error as e:
+        print(f"[БЭКЕНД ОШИБКА]: Не удалось обновить запись в SQLite: {e}")
+        return False
+
+    finally:
+        if conn:
+            conn.close()  # Железное закрытие соединения в любом сценарии
+
+
+
 

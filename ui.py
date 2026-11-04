@@ -8,6 +8,7 @@ from max_records_feature import open_max_records_window
 # импортируем логику бэкенда из соседнего файла models.py
 from models import (validate_workout_data,
                     save_workout_to_db,
+                    update_workout_in_db,
                     get_all_record_from_last_day,
                     WorkoutRecord,
                     get_today_workouts_from_db,
@@ -74,10 +75,9 @@ class WorkoutApp(tk.Tk):
 
     def show_today_workouts(self):
         try:
-            # 1. Фиолетовый поток: берём данные из бэкенда (MAX день)
+            # 1. Берём данные из бэкенда (последний тренировочный день)
             records = models.get_all_record_from_last_day()
 
-            # 2. Создаем пустую текстовую коробку и закидываем заголовок
             report = "=== ПОСЛЕДНЯЯ ТРЕНИРОВКА ===\n\n"
 
             if not records:
@@ -85,26 +85,42 @@ class WorkoutApp(tk.Tk):
                 self.msg_label.config(text=report, fg="#E53935")
                 return
 
-            # 3. Наращиваем строки упражнений одна за другой
+            # Удаляем старую кнопку редактирования, если она уже была создана ранее, чтобы они не плодились
+            if hasattr(self, 'btn_edit_last'):
+                self.btn_edit_last.destroy()
+
+            # 2. Наращиваем строки упражнений
             for row in records:
-                # Распаковываем сырой кортеж из базы данных SQLite
-                # row[0] - created_at, row[1] - exercise_name, row[2] - sets, row[3] - reps, row[4] - weight
                 ex_name = row[1]
                 sets = row[2]
                 reps = row[3]
                 weight = row[4]
 
-                # Собираем красивую строчку веса, если он есть
                 weight_info = f" ({weight} кг)" if weight else ""
-
-                # Добавляем строчку упражнения к нашему итоговому отчету
                 report += f"{ex_name}: {sets}x{reps}{weight_info}\n"
 
-            # 4. Одним махом выводим весь готовый текст на наш ярлык
+            # 3. Выводим готовый текст на наш ярлык
             self.msg_label.config(text=report, fg="#1565C0")
 
+            # 4. ДИПЛОМАТИЯ ДАННЫХ: Берем САМУЮ ПОСЛЕДНЮЮ запись из списка для редактирования
+            # В SQLite get_all_record_from_last_day возвращает записи. Возьмем самую последнюю (последний элемент или по ID)
+            # Чтобы узнать ID, нам нужно сделать микро-запрос. Но мы схитрим: у нас есть метод get_today_workouts_from_db, который возвращает ID!
+            raw_today_rows = models.get_today_workouts_from_db()
+            if raw_today_rows:
+                # Самая свежая запись в get_today_workouts_from_db идет первой (ORDER BY id DESC)
+                last_record = raw_today_rows[0]
+                rec_id, rec_date, rec_ex, rec_sets, rec_reps, rec_weight = last_record
+
+                # Создаем кнопку динамически прямо под отчетом!
+                self.btn_edit_last = tk.Button(
+                    self.left_frame,
+                    text="✏️ Исправить помарку в последней записи",
+                    bg="#FF9800", fg="black", font=("Arial", 11, "bold"),
+                    command=lambda: self.open_record_window(rec_id, rec_ex, rec_sets, rec_reps, rec_weight)
+                )
+                self.btn_edit_last.pack(pady=10)
+
         except Exception as e:
-            # Наш надежный бронежилет, теперь с правильным отступом!
             messagebox.showerror("Ошибка интерфейса", f"Не удалось обновить экран: {e}")
 
     def open_search_window(self):
@@ -296,51 +312,44 @@ class WorkoutApp(tk.Tk):
         # Кнопка экстренного сброса таймера
         tk.Button(timer_pin, text="Сброс", width=18, bg="#FFCDD2", command=stop_rest_timer).pack(pady=10)
 
-
-    def open_record_window(self):
+    def open_record_window(self, edit_record_id=None, old_ex="", old_sets="", old_reps="", old_weight=""):
         win = tk.Toplevel(self)
-        win.title("Новая тренировка")
+        # Меняем заголовок окна в зависимости от режима (Дипломатия UI)
+        win.title("Редактировать запись" if edit_record_id else "Новая тренировка")
         win.geometry("450x350")
 
         tk.Label(win, text="Упражнение:").pack()
-        # 306. Возвращаем оригинальный, красивый и аккуратный выпадающий список
         e_ex = ttk.Combobox(win, width=40, font=("Arial", 10))
-
-        # 307. Упаковываем его на экран с красивым отступом
         e_ex.pack(pady=5)
+        e_ex.insert(0, old_ex)  # Автоматически подтягиваем старое значение при редактировании
 
-        # === ЖЕСТКИЙ И ЧИСТЫЙ СБРОС ТУПНИ ===
-        # Строку 308 с e_ex.bind("<KeyRelease>") МЫ ВЫРЕЗАЕМ ПОЛНОСТЬЮ И НАВСЕГДА!
-        # Никакого следящего кода во время печати букв.
-
-        # Интеллигентная подсказка: список обновится и красиво выпадет
-        # ТОЛЬКО тогда, когда ты сам кликнешь на стрелочку сбоку combobox!
         def on_dropdown_click():
-            typed = e_ex.get().strip()  # Читаем то, что ты успел написать руками
+            typed = e_ex.get().strip()
             if not typed:
-                e_ex.configure(values=self.all_exercises)  # Если пусто — показываем всё
+                e_ex.configure(values=self.all_exercises)
             else:
-                # Фильтруем список: оставляем только совпадения с твоим словом
                 filtered = [ex for ex in self.all_exercises if typed.lower() in ex.lower()]
                 e_ex.configure(values=filtered)
 
-        # Привязываем это действие к нажатию на стрелочку (динамическое обновление списка)
         e_ex.config(postcommand=on_dropdown_click)
 
         tk.Label(win, text="Подходы (число):").pack()
         e_sets = tk.Entry(win, width=20)
         e_sets.pack(pady=5)
+        e_sets.insert(0, str(old_sets))  # Подтягиваем старые подходы
 
         tk.Label(win, text="Повторения (число):").pack()
         e_reps = tk.Entry(win, width=20)
         e_reps.pack(pady=5)
+        e_reps.insert(0, str(old_reps))  # Подтягиваем старые повторения
 
         tk.Label(win, text="Вес (кг):").pack()
         e_weight = tk.Entry(win, width=20)
         e_weight.pack(pady=5)
+        e_weight.insert(0, str(old_weight) if old_weight is not None else "")  # Подтягиваем старый вес
 
         def save_and_close():
-            from tkinter import messagebox  # Гарантируем импорт окон во фронтенде
+            from tkinter import messagebox
 
             # === 1. ВХОДНОЙ КОНТУР: БЕЗОПАСНЫЙ СБОР СЫРЫХ ДАННЫХ ===
             raw_ex = e_ex.get()
@@ -350,42 +359,54 @@ class WorkoutApp(tk.Tk):
 
             # === 2. UI-БРОНЕЖИЛЕТ (ВЕСЬ КОНТРОЛЬ ТИПОВ ЗДЕСЬ) ===
             try:
-                # Жестко проверяем на числа ДО отправки в бэкенд
                 int(raw_sets.strip())
                 int(raw_reps.strip())
-                if raw_weight:  # Если вес заполнен, проверяем его на буквы
+                if raw_weight:
                     float(raw_weight)
-
             except ValueError:
-                # Перехватываем опечатку. Окно ошибки привязываем строго к маленькому окну win
                 messagebox.showerror(
                     "Ошибка ввода",
-                    "Внимание!\nВес, подходы и повторения должны быть строго числами (например: 15.5 или 10).",
+                    "Инженер, внимание!\nВес, подходы и повторения должны быть строго числами (например: 15.5 или 10).",
                     parent=win
                 )
-                return  # ХЛАДНОКРОВНЫЙ РАННИЙ ВОЗВРАТ! Функция прервана, поля не тронуты, окно открыто!
+                return
 
             # === 3. ПЕРЕДАЧА ДАННЫХ В БЭКЕНД-ВАЛИДАТОР ===
             success, result = validate_workout_data(raw_ex, raw_sets, raw_reps, raw_weight)
             if not success:
                 messagebox.showwarning("Внимание", result, parent=win)
-                return  # Если бэкенд выявил логическую ошибку — тоже стопим код и держим окно
+                return
 
-            # === 4. ЗАПЕЧАТЫВАНИЕ В БАЗУ ДАННЫХ REAL ===
+            # === 4. ОПРЕДЕЛЕНИЕ РЕЖИМА: СОХРАНЕНИЕ ИЛИ ОБНОВЛЕНИЕ ===
             try:
-                save_workout_to_db(result)
-                self.msg_label.config(text=f"Записано: {result.exercise_name}, {result.sets}x{result.reps}")
-                messagebox.showinfo("Готово", "Тренировка успешно сохранена в базу данных!", parent=win)
+                if edit_record_id:
+                    # Режим "Редактирование": бьем по базе через SQL-таран UPDATE
+                    db_weight = float(raw_weight) if raw_weight else None
+                    db_success = update_workout_in_db(
+                        edit_record_id, result.exercise_name, result.sets, result.reps, db_weight
+                    )
+                    if db_success:
+                        messagebox.showinfo("Готово", "Запись успешно обновлена в базе данных!", parent=win)
+                    else:
+                        raise Exception("Ошибка выполнения SQL UPDATE на бэкенде")
+                else:
+                    # Режим "Создание": классический INSERT новой записи
+                    save_workout_to_db(result)
+                    messagebox.showinfo("Готово", "Тренировка успешно сохранена в базу данных!", parent=win)
 
-                # И только теперь, когда всё прошло идеально, мы уничтожаем окно ввода!
+                # Обновляем список уникальных упражнений в памяти приложения
+                self.all_exercises = get_unique_exercises()
                 win.destroy()
+
             except Exception as e:
                 messagebox.showerror("Ошибка", f"Не удалось сохранить: {e}", parent=win)
 
-        # === 5. ПРАВИЛЬНАЯ СБОРКА КНОПКИ БЕЗ СКАЧКОВ ПОТОКОВ ===
-        btn_save = tk.Button(win, text="Сохранить", bg="#4CAF50", fg="white",
+        # Меняем текст кнопки в зависимости от контекста
+        btn_text = "Обновить запись" if edit_record_id else "Сохранить"
+        btn_save = tk.Button(win, text=btn_text, bg="#4CAF50", fg="white",
                              font=("Arial", 12, "bold"), command=save_and_close)
         btn_save.pack(pady=20)
+
 
 
 
