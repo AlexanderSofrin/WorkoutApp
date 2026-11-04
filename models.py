@@ -159,7 +159,7 @@ def get_all_record_from_last_day():
                     SELECT created_at, exercise_name, sets, reps, weight
                     FROM workouts
                     WHERE SUBSTR(created_at, 1, 10) = (
-                        SELECT SUBSTR(MAX(created_at), 1, 10) FROM workouts
+                        SELECT SUBSTR(created_at, 1, 10) FROM workouts ORDER BY id DESC LIMIT 1
                     )
                     ORDER BY id ASC
                 """)
