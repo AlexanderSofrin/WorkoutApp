@@ -59,11 +59,13 @@ class WorkoutApp(tk.Tk):
                 return
 
             report = "Последняя тренировка из (из базы SQLite):\n\n"
+
             for row in rows:
-                date_str, ex, sets, reps, weight = row
-                report += f"{date_str}| {ex} | {sets}x{reps}"
+
+                _, date_str, ex, sets, reps, weight = row
+                report += f"{date_str[:10]} | {ex} | {sets}x{reps}"
                 if weight is not None and weight != "":
-                    report += f"({weight} кг)\n"
+                    report += f" ({weight} кг)\n"
                 else:
                     report += "\n"
 
@@ -75,7 +77,13 @@ class WorkoutApp(tk.Tk):
 
     def show_today_workouts(self):
         try:
-            # 1. Берём данные из бэкенда (последний тренировочный день)
+            # 1. ОЧИСТКА КОНТУРА: Удаляем ВСЕ старые динамические кнопки, если они были созданы ранее
+            if hasattr(self, 'dynamic_edit_buttons'):
+                for btn in self.dynamic_edit_buttons:
+                    btn.destroy()
+            self.dynamic_edit_buttons = []  # Сбрасываем кэш кнопок (Паттерн Log Rotation)
+
+            # 2. Берём данные из обновленного бэкенда (теперь тут есть ID!)
             records = models.get_all_record_from_last_day()
 
             report = "=== ПОСЛЕДНЯЯ ТРЕНИРОВКА ===\n\n"
@@ -85,40 +93,32 @@ class WorkoutApp(tk.Tk):
                 self.msg_label.config(text=report, fg="#E53935")
                 return
 
-            # Удаляем старую кнопку редактирования, если она уже была создана ранее, чтобы они не плодились
-            if hasattr(self, 'btn_edit_last'):
-                self.btn_edit_last.destroy()
-
-            # 2. Наращиваем строки упражнений
+            # 3. Наращиваем строки упражнений для отчета и параллельно создаем кнопки управления
             for row in records:
-                ex_name = row[1]
-                sets = row[2]
-                reps = row[3]
-                weight = row[4]
+                # Внимание: структура теперь row[0]=id, row[1]=date, row[2]=name, row[3]=sets, row[4]=reps, row[5]=weight
+                rec_id = row[0]
+                ex_name = row[2]
+                sets = row[3]
+                reps = row[4]
+                weight = row[5]
 
                 weight_info = f" ({weight} кг)" if weight else ""
                 report += f"{ex_name}: {sets}x{reps}{weight_info}\n"
 
-            # 3. Выводим готовый текст на наш ярлык
-            self.msg_label.config(text=report, fg="#1565C0")
-
-            # 4. ДИПЛОМАТИЯ ДАННЫХ: Берем САМУЮ ПОСЛЕДНЮЮ запись из списка для редактирования
-            # В SQLite get_all_record_from_last_day возвращает записи. Возьмем самую последнюю (последний элемент или по ID)
-            # Чтобы узнать ID, нам нужно сделать микро-запрос. Но мы схитрим: у нас есть метод get_today_workouts_from_db, который возвращает ID!
-            raw_today_rows = models.get_today_workouts_from_db()
-            if raw_today_rows:
-                # Самая свежая запись в get_today_workouts_from_db идет первой (ORDER BY id DESC)
-                last_record = raw_today_rows[0]
-                rec_id, rec_date, rec_ex, rec_sets, rec_reps, rec_weight = last_record
-
-                # Создаем кнопку динамически прямо под отчетом!
-                self.btn_edit_last = tk.Button(
+                # ДИПЛОМАТИЯ ИНТЕРФЕЙСА: Создаем персональную кнопку под текущую запись в цикле!
+                # Используем дефолтные аргументы в lambda (id=rec_id и т.д.), чтобы Python жестко зафиксировал значения конкретной итерации
+                btn_edit = tk.Button(
                     self.left_frame,
-                    text="✏️ Исправить помарку в последней записи",
-                    bg="#FF9800", fg="black", font=("Arial", 11, "bold"),
-                    command=lambda: self.open_record_window(rec_id, rec_ex, rec_sets, rec_reps, rec_weight)
+                    text=f"✏️ Исправить: {ex_name}",
+                    bg="#FF9800", fg="black", font=("Arial", 9, "bold"),
+                    command=lambda r_id=rec_id, ex=ex_name, s=sets, r=reps, w=weight:
+                    self.open_record_window(r_id, ex, s, r, w)
                 )
-                self.btn_edit_last.pack(pady=10)
+                btn_edit.pack(pady=2, fill="x")  # Компактно укладываем кнопки одну за другой
+                self.dynamic_edit_buttons.append(btn_edit)  # Сохраняем ссылку для последующего удаления
+
+            # 4. Выводим готовый текстовый рапорт на экран
+            self.msg_label.config(text=report, fg="#1565C0")
 
         except Exception as e:
             messagebox.showerror("Ошибка интерфейса", f"Не удалось обновить экран: {e}")
