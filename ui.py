@@ -145,64 +145,55 @@ class WorkoutApp(tk.Tk):
 
     def open_search_window(self):
         """Метод для вызова всплывающего окна и поиска по любой дате в БД."""
-        # Вызываем встроенное диалоговое окно ввода текста
         user_input = simpledialog.askstring(
             "Поиск по архиву",
-            "Введите дату для поиска,(например, 26-10 или год и месяц)"
+            "Введите дату для поиска (например, 26-10-2026 или 28-10)"
         )
-        # Если пользователь нажал отмена или закрыл окно просто выходим
         if not user_input:
             return
-        # Защищаем случайные пробелы по краям
         user_input = user_input.strip()
+
+        # Железно фиксируем дату архивного поиска в сессию (даже если она пустая!)
+        self.current_search_date = user_input
+
+        # Перерисовываем благородную графитовую кнопку под этот день
+        if hasattr(self, 'btn_edit_hub') and self.btn_edit_hub.winfo_exists():
+            self.btn_edit_hub.destroy()
+
+        self.btn_edit_hub = tk.Button(
+            self.left_frame,
+            text="✏️ Управление записями дневника",
+            bg="#37474F", fg="white", font=("Arial", 11, "bold"),
+            command=self.open_edit_hub_window
+        )
+        self.btn_edit_hub.pack(pady=15, fill="x")
+        self.update_idletasks()
+
         try:
-            # Запрашиваем данные из бэкенда models.py по нашему оператору LIKE
             rows = models.get_workouts_by_date_from_db(user_input)
-            # Если база вернула пустой список
+
+            # ИНТЕЛЛЕКТУАЛЬНЫЙ ФРОНТЕНД ДЛЯ ПУСТОГО ДНЯ:
             if not rows:
-                msg = f"🔍По запросу '{user_input}' ничего не найдено в базе."
+                msg = f"🔍 По запросу '{user_input}' ничего не найдено.\nВы можете нажать 'Управление записями', чтобы добавить новую тренировку на этот день!"
                 self.msg_label.config(text=msg, fg="#E53935")
                 messagebox.showinfo("Результаты поиска", msg)
                 return
 
-            # Форматируем отчет, если записи не найдены
             report = f"=== РЕЗУЛЬТАТЫ ПОИСКА ДЛЯ: {user_input} ===\n"
             for row in rows:
-                # Распаковываем кортеж из БД
                 _, date_str, ex, sets, reps, weight = row
-                # Обрезаем длинное время, оставляем только ДД-ММ-ГГГГ для красоты
                 short_date = date_str[:10]
-
-                report += f"📅{short_date} | {ex} | {sets}x{reps}"
+                report += f"📅 {short_date} | {ex} | {sets}x{reps}"
                 if weight is not None and weight != "":
+                    report += f" ({weight} кг)\n"
+                else:
                     report += "\n"
 
-            # Выводим результат на экран и дублируем всплывающий отчет
             self.msg_label.config(text=report, fg="#1565C0")
             messagebox.showinfo("Найденные тренировки", report)
-            # Третий шаг: фиксируем дату архивного поиска в сессию
-            self.current_search_date = user_input
 
-            # Перерисовываем благородную графитовую кнопку под результаты поиска
-            if hasattr(self, 'btn_edit_hub') and self.btn_edit_hub.winfo_exists():
-                self.btn_edit_hub.destroy()
-
-            self.btn_edit_hub = tk.Button(
-                self.left_frame,
-                text="✏️ Управление записями дневника",
-                bg="#37474F", fg="white", font=("Arial", 11, "bold"),
-                command=self.open_edit_hub_window
-            )
-            self.btn_edit_hub.pack(pady=15, fill="x")
-            # Железный фикс: силой заставляем интерфейс отобразить кнопку до вызова окна
-            self.update_idletasks()
-            # Дублируем всплывающий отчет
-            messagebox.showinfo("Найденные тренировки", report)
         except Exception as e:
             messagebox.showerror("Ошибка поиска", f"Не удалось выполнить поиск: {e}")
-
-
-
 
     def open_timer_window(self):
         timer_pin = tk.Toplevel(self)
@@ -353,16 +344,24 @@ class WorkoutApp(tk.Tk):
         # Кнопка экстренного сброса таймера
         tk.Button(timer_pin, text="Сброс", width=18, bg="#FFCDD2", command=stop_rest_timer).pack(pady=10)
 
-    def open_record_window(self, edit_record_id=None, old_ex="", old_sets="", old_reps="", old_weight=""):
+    def open_record_window(self, edit_record_id=None, old_ex="", old_sets="", old_reps="", old_weight="",
+                           target_date=None):
         win = tk.Toplevel(self)
-        # Меняем заголовок окна в зависимости от режима (Дипломатия UI)
-        win.title("Редактировать запись" if edit_record_id else "Новая тренировка")
+
+        # Интеллектуальный заголовок окна
+        if edit_record_id:
+            win.title("Редактировать запись")
+        elif target_date:
+            win.title(f"Новая запись на [{target_date}]")
+        else:
+            win.title("Новая тренировка")
+
         win.geometry("450x350")
 
         tk.Label(win, text="Упражнение:").pack()
         e_ex = ttk.Combobox(win, width=40, font=("Arial", 10))
         e_ex.pack(pady=5)
-        e_ex.insert(0, old_ex)  # Автоматически подтягиваем старое значение при редактировании
+        e_ex.insert(0, old_ex)
 
         def on_dropdown_click():
             typed = e_ex.get().strip()
@@ -377,28 +376,24 @@ class WorkoutApp(tk.Tk):
         tk.Label(win, text="Подходы (число):").pack()
         e_sets = tk.Entry(win, width=20)
         e_sets.pack(pady=5)
-        e_sets.insert(0, str(old_sets))  # Подтягиваем старые подходы
+        e_sets.insert(0, str(old_sets))
 
         tk.Label(win, text="Повторения (число):").pack()
         e_reps = tk.Entry(win, width=20)
         e_reps.pack(pady=5)
-        e_reps.insert(0, str(old_reps))  # Подтягиваем старые повторения
+        e_reps.insert(0, str(old_reps))
 
         tk.Label(win, text="Вес (кг):").pack()
         e_weight = tk.Entry(win, width=20)
         e_weight.pack(pady=5)
-        e_weight.insert(0, str(old_weight) if old_weight is not None else "")  # Подтягиваем старый вес
+        e_weight.insert(0, str(old_weight) if old_weight is not None else "")
 
         def save_and_close():
-            from tkinter import messagebox
-
-            # === 1. ВХОДНОЙ КОНТУР: БЕЗОПАСНЫЙ СБОР СЫРЫХ ДАННЫХ ===
             raw_ex = e_ex.get()
             raw_sets = e_sets.get()
             raw_reps = e_reps.get()
             raw_weight = e_weight.get().strip().replace(",", ".")
 
-            # === 2. UI-БРОНЕЖИЛЕТ (ВЕСЬ КОНТРОЛЬ ТИПОВ ЗДЕСЬ) ===
             try:
                 int(raw_sets.strip())
                 int(raw_reps.strip())
@@ -407,65 +402,68 @@ class WorkoutApp(tk.Tk):
             except ValueError:
                 messagebox.showerror(
                     "Ошибка ввода",
-                    "Инженер, внимание!\nВес, подходы и повторения должны быть строго числами (например: 15.5 или 10).",
+                    "Инженер, внимание!\nВес, подходы и повторения должны быть строго числами.",
                     parent=win
                 )
                 return
 
-            # === 3. ПЕРЕДАЧА ДАННЫХ В БЭКЕНД-ВАЛИДАТОР ===
-            success, result = validate_workout_data(raw_ex, raw_sets, raw_reps, raw_weight)
+            # Передаем target_date в валидатор, чтобы объект WorkoutRecord помнил архивную дату
+            success, result = models.validate_workout_data(raw_ex, raw_sets, raw_reps, raw_weight,
+                                                           custom_date=target_date)
             if not success:
                 messagebox.showwarning("Внимание", result, parent=win)
                 return
 
-            # === 4. ОПРЕДЕЛЕНИЕ РЕЖИМА: СОХРАНЕНИЕ ИЛИ ОБНОВЛЕНИЕ ===
             try:
                 if edit_record_id:
-                    # Режим "Редактирование": бьем по базе через SQL-таран UPDATE
                     db_weight = float(raw_weight) if raw_weight else None
-                    db_success = update_workout_in_db(
+                    db_success = models.update_workout_in_db(
                         edit_record_id, result.exercise_name, result.sets, result.reps, db_weight
                     )
                     if db_success:
                         messagebox.showinfo("Готово", "Запись успешно обновлена в базе данных!", parent=win)
                     else:
-                        raise Exception("Ошибка выполнения SQL UPDATE на бэкенде")
+                        raise Exception("Ошибка выполнения SQL UPDATE")
                 else:
-                    # Режим "Создание": классический INSERT новой записи
-                    save_workout_to_db(result)
-                    messagebox.showinfo("Готово", "Тренировка успешно сохранена в базу данных!", parent=win)
+                    models.save_workout_to_db(result)
+                    messagebox.showinfo("Готово", f"Тренировка успешно сохранена на дату {result.created_at[:10]}!",
+                                        parent=win)
 
-                # Обновляем список уникальных упражнений в памяти приложения
-                self.all_exercises = get_unique_exercises()
+                self.all_exercises = models.get_unique_exercises()
                 win.destroy()
 
             except Exception as e:
                 messagebox.showerror("Ошибка", f"Не удалось сохранить: {e}", parent=win)
 
-        # Меняем текст кнопки в зависимости от контекста
         btn_text = "Обновить запись" if edit_record_id else "Сохранить"
         btn_save = tk.Button(win, text=btn_text, bg="#4CAF50", fg="white",
                              font=("Arial", 12, "bold"), command=save_and_close)
         btn_save.pack(pady=20)
 
     def open_edit_hub_window(self):
-        """Абсолютно универсальный интерактивный диспетчер Treeview"""
+        """Абсолютно универсальный интерактивный диспетчер Treeview с защитой пустых дат"""
+        records = models.get_workouts_by_date_from_db(self.current_search_date)
+
+        # ЗАЩИТА КОГНИТИВНОГО ТЕРПЕНИЯ: если день пустой, шлем сразу на форму добавления в прошлое!
+        if not records:
+            self.open_record_window(target_date=self.current_search_date)
+            return
+
+        # Если записи есть, разворачиваем наш любимый диспетчер
         hub_win = tk.Toplevel(self)
         hub_win.title("Управление записями")
         hub_win.geometry("550x350")
         hub_win.configure(bg="#FAFAFA")
-        hub_win.attributes("-topmost", True)  # Окно всегда поверх остальных
+        hub_win.attributes("-topmost", True)
 
         tk.Label(
             hub_win, text=f"Записи в архиве по запросу '{self.current_search_date}':",
             font=("Arial", 11, "bold"), bg="#FAFAFA", fg="#212121"
         ).pack(pady=10)
 
-        # Проектируем структуру интерактивной таблицы
         columns = ("id", "date", "exercise", "sets", "reps", "weight")
         tree = ttk.Treeview(hub_win, columns=columns, show="headings", height=8)
 
-        # Запечатываем заголовки колонок
         tree.heading("id", text="ID")
         tree.heading("date", text="Дата")
         tree.heading("exercise", text="Упражнение")
@@ -473,7 +471,6 @@ class WorkoutApp(tk.Tk):
         tree.heading("reps", text="Повторения")
         tree.heading("weight", text="Вес (кг)")
 
-        # Настраиваем компактную геометрию столбцов
         tree.column("id", width=40, anchor="center")
         tree.column("date", width=80, anchor="center")
         tree.column("exercise", width=150, anchor="w")
@@ -483,21 +480,17 @@ class WorkoutApp(tk.Tk):
 
         tree.pack(padx=15, pady=5, fill="both", expand=True)
 
-        # Вытаскиваем данные по сохраненной в сессии дате
-        records = models.get_workouts_by_date_from_db(self.current_search_date)
         for row in records:
-            short_date = row[1][:10]  # Срезаем точное время, оставляем только дату
+            short_date = row[1][:10]
             rec_weight = f"{row[5]}" if row[5] is not None else "—"
             tree.insert("", "end", values=(row[0], short_date, row[2], row[3], row[4], rec_weight))
 
         def pre_open_edit():
-            """Контур сбора данных из выделенной пользователем строки таблицы"""
             selected_item = tree.selection()
             if not selected_item:
                 messagebox.showwarning("Внимание", "Пожалуйста, выберите строчку из таблицы!", parent=hub_win)
                 return
 
-            # Извлекаем значения ячеек из выбранной строки
             item_values = tree.item(selected_item, "values")
             r_id = int(item_values[0])
             ex = item_values[2]
@@ -505,11 +498,9 @@ class WorkoutApp(tk.Tk):
             r = item_values[4]
             w = item_values[5] if item_values[5] != "—" else ""
 
-            # Закрываем диспетчер и открываем твое базовое окно редактирования
             hub_win.destroy()
-            self.open_record_window(r_id, ex, s, r, w)
+            self.open_record_window(edit_record_id=r_id, old_ex=ex, old_sets=s, old_reps=r, old_weight=w)
 
-        # Ниже кнопка подтверждения выбора
         btn_select = tk.Button(
             hub_win, text="Открыть для редактирования 💪",
             font=("Arial", 11, "bold"), bg="#4CAF50", fg="white",
@@ -517,8 +508,8 @@ class WorkoutApp(tk.Tk):
         )
         btn_select.pack(pady=15)
 
-        # Горячая привязка: двойной клик мыши по строке таблицы запускает редактирование
         tree.bind("<Double-1>", lambda event: pre_open_edit())
+
 
 
 

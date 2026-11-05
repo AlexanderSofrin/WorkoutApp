@@ -83,18 +83,24 @@ def get_workouts_by_date_from_db(search_string: str) -> list:
 
 
 class WorkoutRecord:
-    def __init__(self, exercise: str, sets: int, reps: int, weight: float = None):
+    def __init__(self, exercise: str, sets: int, reps: int, weight: float = None, custom_date: str = None):
         self.exercise_name = exercise.strip()
         self.sets = sets
         self.reps = reps
         self.weight = weight
-        self.created_at = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
 
-
+        # Интеллектуальное выставление времени: если передан пустой день из архива, пишем туда
+        if custom_date:
+            # Склеиваем архивную дату с текущим временем для структуры БД
+            current_time = datetime.now().strftime("%H:%M:%S")
+            self.created_at = f"{custom_date} {current_time}"
+        else:
+            self.created_at = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
 
     def to_summary_string(self) -> str:
         weight_info = f"({self.weight} кг)" if self.weight is not None else ""
         return f"{self.exercise_name}: {self.sets}x{self.reps}{weight_info}"
+
 
 #==============================================================================================
 # Блок работы с базой данных(SQLite) - НАШ ФУНДАМЕНТ
@@ -153,8 +159,7 @@ def get_all_record_from_last_day():
         conn = sqlite3.connect(DB_NAME)
         cursor = conn.cursor()
 
-
-        # Надежный срез SUBSTR, который идеально работает с нашим форматом ДД.ММ.ГГГГ
+        # ШАГ 1: Добавили id в выборку на первое место!
         cursor.execute("""
                     SELECT id, created_at, exercise_name, sets, reps, weight
                     FROM workouts
@@ -163,7 +168,7 @@ def get_all_record_from_last_day():
                     )
                     ORDER BY id ASC
                 """)
-        rows = cursor.fetchall()#Забираем результаты в виде списка кортежей
+        rows = cursor.fetchall() # Забираем результаты в виде списка кортежей
         return rows
     except sqlite3.Error as e:
         print(f"Ошибка при чтении из SQLite: {e}")
@@ -173,10 +178,11 @@ def get_all_record_from_last_day():
             conn.close()
 
 
+
 #===============================================================================
 # Блок первых шагов
 #===============================================================================
-def validate_workout_data(ex: str, sets_str: str, reps_str: str, weight_str: str):
+def validate_workout_data(ex: str, sets_str: str, reps_str: str, weight_str: str, custom_date: str = None):
     ex = ex.strip()
     sets_str = sets_str.strip()
     reps_str = reps_str.strip()
@@ -201,8 +207,10 @@ def validate_workout_data(ex: str, sets_str: str, reps_str: str, weight_str: str
         except ValueError:
             return False, "Вес должен быть числом"
 
-    workout_obj = WorkoutRecord(exercise=ex, sets=sets, reps=reps, weight=weight)
-    return True, workout_obj  # возвращаем объект, а не словарь
+    # Передаем custom_date третьим шагом в конструктор
+    workout_obj = WorkoutRecord(exercise=ex, sets=sets, reps=reps, weight=weight, custom_date=custom_date)
+    return True, workout_obj
+
 
 def get_max_records():
     """
