@@ -21,6 +21,8 @@ class WorkoutApp(tk.Tk):
         self.title("Дневник тренировок")
         self.geometry("750x650")
         self.all_exercises = get_unique_exercises()
+        self.current_search_date = datetime.datetime.now().strftime("%d-%m-%Y") # Хранит активную дату сессии
+
 
         self.left_frame = tk.Frame(self)
         self.left_frame.pack(side="left", fill="both", expand=True, padx=20, pady=20)
@@ -70,58 +72,76 @@ class WorkoutApp(tk.Tk):
                     report += "\n"
 
             self.msg_label.config(text=report, fg="#1565C0")
-            messagebox.showinfo("Отчет из БД", report)
+            # Запоминаем дату, которую успешно нашёл пользователь
+            if "ДЛЯ:" in report:
+                self.current_search_date = report.split("ДЛЯ:")[1].split("===")[0].strip()
+
+            # Перерисовываем благородную графитовую кнопку под архивный поиск
+            if hasattr(self, 'btn_edit_hub') and self.btn_edit_hub.winfo_exists():
+                self.btn_edit_hub.destroy()
+
+            self.btn_edit_hub = tk.Button(
+                self.left_frame,
+                text="✏️ Управление записями дневника",
+                bg="#37474F", fg="white", font=("Arial", 11, "bold"),
+                command=self.open_edit_hub_window
+            )
+            self.btn_edit_hub.pack(pady=15, fill="x")
+
+            # Железный фикс: силой заставляем интерфейс отобразить кнопку до вызова окна
+            self.update_idletasks()
+
+            # Дублируем всплывающий отчет
+            messagebox.showinfo("Найденные тренировки", report)
 
         except Exception as e:
-            messagebox.showerror("Ошибка базы данных", f"Не удалось прочитать историю из БД: {e} ")
+            messagebox.showerror("Ошибка поиска", f"Не удалось выполнить поиск: {e}")
+
 
     def show_today_workouts(self):
-        try:
-            # 1. ОЧИСТКА КОНТУРА: Удаляем ВСЕ старые динамические кнопки, если они были созданы ранее
-            if hasattr(self, 'dynamic_edit_buttons'):
-                for btn in self.dynamic_edit_buttons:
-                    btn.destroy()
-            self.dynamic_edit_buttons = []  # Сбрасываем кэш кнопок (Паттерн Log Rotation)
+            try:
+                # Автоматически подтягиваем дату САМОЙ ПОСЛЕДНЕЙ физической записи из базы
+                self.current_search_date = models.get_all_record_from_last_day()[0][1][
+                    :10] if models.get_all_record_from_last_day() else datetime.datetime.now().strftime("%d-%m-%Y")
 
-            # 2. Берём данные из обновленного бэкенда (теперь тут есть ID!)
-            records = models.get_all_record_from_last_day()
+                # 2. Берём данные за сегодня из бэкенда
+                records = models.get_workouts_by_date_from_db(self.current_search_date)
 
-            report = "=== ПОСЛЕДНЯЯ ТРЕНИРОВКА ===\n\n"
+                report = "=== ПОСЛЕДНЯЯ ТРЕНИРОВКА ===\n\n"
 
-            if not records:
-                report += "В базе данных пока нет записей."
-                self.msg_label.config(text=report, fg="#E53935")
-                return
+                if not records:
+                    report += "В базе данных пока нет записей за сегодня."
+                    self.msg_label.config(text=report, fg="#E53935")
+                    if hasattr(self, 'btn_edit_hub'):
+                        self.btn_edit_hub.destroy()
+                    return
 
-            # 3. Наращиваем строки упражнений для отчета и параллельно создаем кнопки управления
-            for row in records:
-                # Внимание: структура теперь row[0]=id, row[1]=date, row[2]=name, row[3]=sets, row[4]=reps, row[5]=weight
-                rec_id = row[0]
-                ex_name = row[2]
-                sets = row[3]
-                reps = row[4]
-                weight = row[5]
+                # Наращиваем строки упражнений для текстового рапорта (БЕЗ КНОПОК!)
+                for row in records:
+                    ex_name = row[2]
+                    sets = row[3]
+                    reps = row[4]
+                    weight = row[5]
+                    weight_info = f" ({weight} кг)" if weight else ""
+                    report += f"• {ex_name}: {sets}x{reps}{weight_info}\n"
 
-                weight_info = f" ({weight} кг)" if weight else ""
-                report += f"{ex_name}: {sets}x{reps}{weight_info}\n"
+                # Выводим чистый текст на экран
+                self.msg_label.config(text=report, fg="#1565C0")
 
-                # ДИПЛОМАТИЯ ИНТЕРФЕЙСА: Создаем персональную кнопку под текущую запись в цикле!
-                # Используем дефолтные аргументы в lambda (id=rec_id и т.д.), чтобы Python жестко зафиксировал значения конкретной итерации
-                btn_edit = tk.Button(
+                # 3. Создаем ВСЕГО ОДНУ стильную графитовую кнопку под отчетом
+                if hasattr(self, 'btn_edit_hub') and self.btn_edit_hub.winfo_exists():
+                    self.btn_edit_hub.destroy()
+
+                self.btn_edit_hub = tk.Button(
                     self.left_frame,
-                    text=f"✏️ Исправить: {ex_name}",
-                    bg="#FF9800", fg="black", font=("Arial", 9, "bold"),
-                    command=lambda r_id=rec_id, ex=ex_name, s=sets, r=reps, w=weight:
-                    self.open_record_window(r_id, ex, s, r, w)
+                    text="✏️ Управление записями дневника",
+                    bg="#37474F", fg="white", font=("Arial", 11, "bold"),
+                    command=self.open_edit_hub_window
                 )
-                btn_edit.pack(pady=2, fill="x")  # Компактно укладываем кнопки одну за другой
-                self.dynamic_edit_buttons.append(btn_edit)  # Сохраняем ссылку для последующего удаления
+                self.btn_edit_hub.pack(pady=15, fill="x")
 
-            # 4. Выводим готовый текстовый рапорт на экран
-            self.msg_label.config(text=report, fg="#1565C0")
-
-        except Exception as e:
-            messagebox.showerror("Ошибка интерфейса", f"Не удалось обновить экран: {e}")
+            except Exception as e:
+                messagebox.showerror("Ошибка интерфейса", f"Не удалось обновить экран: {e}")
 
     def open_search_window(self):
         """Метод для вызова всплывающего окна и поиска по любой дате в БД."""
@@ -160,8 +180,29 @@ class WorkoutApp(tk.Tk):
             # Выводим результат на экран и дублируем всплывающий отчет
             self.msg_label.config(text=report, fg="#1565C0")
             messagebox.showinfo("Найденные тренировки", report)
+            # Третий шаг: фиксируем дату архивного поиска в сессию
+            self.current_search_date = user_input
+
+            # Перерисовываем благородную графитовую кнопку под результаты поиска
+            if hasattr(self, 'btn_edit_hub') and self.btn_edit_hub.winfo_exists():
+                self.btn_edit_hub.destroy()
+
+            self.btn_edit_hub = tk.Button(
+                self.left_frame,
+                text="✏️ Управление записями дневника",
+                bg="#37474F", fg="white", font=("Arial", 11, "bold"),
+                command=self.open_edit_hub_window
+            )
+            self.btn_edit_hub.pack(pady=15, fill="x")
+            # Железный фикс: силой заставляем интерфейс отобразить кнопку до вызова окна
+            self.update_idletasks()
+            # Дублируем всплывающий отчет
+            messagebox.showinfo("Найденные тренировки", report)
         except Exception as e:
             messagebox.showerror("Ошибка поиска", f"Не удалось выполнить поиск: {e}")
+
+
+
 
     def open_timer_window(self):
         timer_pin = tk.Toplevel(self)
@@ -406,6 +447,80 @@ class WorkoutApp(tk.Tk):
         btn_save = tk.Button(win, text=btn_text, bg="#4CAF50", fg="white",
                              font=("Arial", 12, "bold"), command=save_and_close)
         btn_save.pack(pady=20)
+
+    def open_edit_hub_window(self):
+        """Абсолютно универсальный интерактивный диспетчер Treeview"""
+        hub_win = tk.Toplevel(self)
+        hub_win.title("Управление записями")
+        hub_win.geometry("550x350")
+        hub_win.configure(bg="#FAFAFA")
+        hub_win.attributes("-topmost", True)  # Окно всегда поверх остальных
+
+        tk.Label(
+            hub_win, text=f"Записи в архиве по запросу '{self.current_search_date}':",
+            font=("Arial", 11, "bold"), bg="#FAFAFA", fg="#212121"
+        ).pack(pady=10)
+
+        # Проектируем структуру интерактивной таблицы
+        columns = ("id", "date", "exercise", "sets", "reps", "weight")
+        tree = ttk.Treeview(hub_win, columns=columns, show="headings", height=8)
+
+        # Запечатываем заголовки колонок
+        tree.heading("id", text="ID")
+        tree.heading("date", text="Дата")
+        tree.heading("exercise", text="Упражнение")
+        tree.heading("sets", text="Подходы")
+        tree.heading("reps", text="Повторения")
+        tree.heading("weight", text="Вес (кг)")
+
+        # Настраиваем компактную геометрию столбцов
+        tree.column("id", width=40, anchor="center")
+        tree.column("date", width=80, anchor="center")
+        tree.column("exercise", width=150, anchor="w")
+        tree.column("sets", width=60, anchor="center")
+        tree.column("reps", width=80, anchor="center")
+        tree.column("weight", width=70, anchor="center")
+
+        tree.pack(padx=15, pady=5, fill="both", expand=True)
+
+        # Вытаскиваем данные по сохраненной в сессии дате
+        records = models.get_workouts_by_date_from_db(self.current_search_date)
+        for row in records:
+            short_date = row[1][:10]  # Срезаем точное время, оставляем только дату
+            rec_weight = f"{row[5]}" if row[5] is not None else "—"
+            tree.insert("", "end", values=(row[0], short_date, row[2], row[3], row[4], rec_weight))
+
+        def pre_open_edit():
+            """Контур сбора данных из выделенной пользователем строки таблицы"""
+            selected_item = tree.selection()
+            if not selected_item:
+                messagebox.showwarning("Внимание", "Пожалуйста, выберите строчку из таблицы!", parent=hub_win)
+                return
+
+            # Извлекаем значения ячеек из выбранной строки
+            item_values = tree.item(selected_item, "values")
+            r_id = int(item_values[0])
+            ex = item_values[2]
+            s = item_values[3]
+            r = item_values[4]
+            w = item_values[5] if item_values[5] != "—" else ""
+
+            # Закрываем диспетчер и открываем твое базовое окно редактирования
+            hub_win.destroy()
+            self.open_record_window(r_id, ex, s, r, w)
+
+        # Ниже кнопка подтверждения выбора
+        btn_select = tk.Button(
+            hub_win, text="Открыть для редактирования 💪",
+            font=("Arial", 11, "bold"), bg="#4CAF50", fg="white",
+            command=pre_open_edit
+        )
+        btn_select.pack(pady=15)
+
+        # Горячая привязка: двойной клик мыши по строке таблицы запускает редактирование
+        tree.bind("<Double-1>", lambda event: pre_open_edit())
+
+
 
 
 
