@@ -347,6 +347,7 @@ class WorkoutApp(tk.Tk):
     def open_record_window(self, edit_record_id=None, old_ex="", old_sets="", old_reps="", old_weight="",
                            target_date=None):
         win = tk.Toplevel(self)
+        win.configure(bg="#1a1a1a")  # Стильный графитовый фон для окна ввода
 
         # Интеллектуальный заголовок окна
         if edit_record_id:
@@ -356,9 +357,12 @@ class WorkoutApp(tk.Tk):
         else:
             win.title("Новая тренировка")
 
-        win.geometry("450x350")
+        win.geometry("450x420")  # Слегка увеличили высоту, чтобы дать интерфейсу «дышать»
 
-        tk.Label(win, text="Упражнение:").pack()
+        # Стилизация меток под темную тему
+        lbl_style = {"bg": "#0f172a", "fg": "#ffffff", "font": ("Arial", 10, "bold")}
+
+        tk.Label(win, text="Упражнение:", **lbl_style).pack(pady=(10, 0))
         e_ex = ttk.Combobox(win, width=40, font=("Arial", 10))
         e_ex.pack(pady=5)
         e_ex.insert(0, old_ex)
@@ -373,45 +377,55 @@ class WorkoutApp(tk.Tk):
 
         e_ex.config(postcommand=on_dropdown_click)
 
-        tk.Label(win, text="Подходы (число):").pack()
-        e_sets = tk.Entry(win, width=20)
+        tk.Label(win, text="Подходы (число):", **lbl_style).pack()
+        e_sets = tk.Entry(win, width=20, font=("Arial", 10))
         e_sets.pack(pady=5)
         e_sets.insert(0, str(old_sets))
 
-        tk.Label(win, text="Повторения (число):").pack()
-        e_reps = tk.Entry(win, width=20)
+        tk.Label(win, text="Повторения (число):", **lbl_style).pack()
+        e_reps = tk.Entry(win, width=20, font=("Arial", 10))
         e_reps.pack(pady=5)
         e_reps.insert(0, str(old_reps))
 
-        tk.Label(win, text="Вес (кг):").pack()
-        e_weight = tk.Entry(win, width=20)
+        tk.Label(win, text="Вес (кг):", **lbl_style).pack()
+        e_weight = tk.Entry(win, width=20, font=("Arial", 10))
         e_weight.pack(pady=5)
         e_weight.insert(0, str(old_weight) if old_weight is not None else "")
 
-        def save_and_close():
-            raw_ex = e_ex.get()
-            raw_sets = e_sets.get()
-            raw_reps = e_reps.get()
+        # 1. СТРАТЕГИЧЕСКИЙ УЗЕЛ: Когнитивный статус-лейбл для мягких уведомлений
+        status_lbl = tk.Label(win, text="", font=("Arial", 10, "italic"), bg="#1a1a1a", wraplength=400)
+        status_lbl.pack(pady=5)
+
+        def save_and_close(event=None):  # Добавили event=None, чтобы метод корректно работал и от клика, и от Enter
+            raw_ex = e_ex.get().strip()
+            raw_sets = e_sets.get().strip()
+            raw_reps = e_reps.get().strip()
             raw_weight = e_weight.get().strip().replace(",", ".")
 
+            # Мягкая проверка на пустоту перед валидацией
+            if not raw_ex or not raw_sets or not raw_reps:
+                status_lbl.config(text="❌ Заполните упражнение, подходы и повторения!", fg="#E53935")
+                return
+
             try:
-                int(raw_sets.strip())
-                int(raw_reps.strip())
+                int(raw_sets)
+                int(raw_reps)
                 if raw_weight:
                     float(raw_weight)
             except ValueError:
-                messagebox.showerror(
-                    "Ошибка ввода",
-                    "Инженер, внимание!\nВес, подходы и повторения должны быть строго числами.",
-                    parent=win
+                status_lbl.config(
+                    text="❌ Внимание! Вес, подходы и повторения должны быть строго числами.",
+                    fg="#E53935"
                 )
                 return
 
-            # Передаем target_date в валидатор, чтобы объект WorkoutRecord помнил архивную дату
+            # Вычисляем активную дату: приоритет у target_date, затем у глобальной сессии
+            active_date = target_date if target_date else self.current_search_date
+
             success, result = models.validate_workout_data(raw_ex, raw_sets, raw_reps, raw_weight,
-                                                           custom_date=target_date)
+                                                           custom_date=active_date)
             if not success:
-                messagebox.showwarning("Внимание", result, parent=win)
+                status_lbl.config(text=f"⚠️ {result}", fg="#FF9800")
                 return
 
             try:
@@ -422,23 +436,40 @@ class WorkoutApp(tk.Tk):
                     )
                     if db_success:
                         messagebox.showinfo("Готово", "Запись успешно обновлена в базе данных!", parent=win)
+                        self.all_exercises = models.get_unique_exercises()
+                        win.destroy()  # При редактировании старой записи окно закрывать логично
                     else:
                         raise Exception("Ошибка выполнения SQL UPDATE")
                 else:
+                    # ПОТОКОВЫЙ ВВОД ДЛЯ НОВЫХ ЗАПИСЕЙ
                     models.save_workout_to_db(result)
-                    messagebox.showinfo("Готово", f"Тренировка успешно сохранена на дату {result.created_at[:10]}!",
-                                        parent=win)
 
-                self.all_exercises = models.get_unique_exercises()
-                win.destroy()
+                    # Мягко рапортуем об успехе внизу окна
+                    status_lbl.config(text=f"💪 '{result.exercise_name}' успешно сохранено на {result.created_at[:10]}!",
+                                      fg="#00ff00")
+
+                    # Мгновенно вычищаем поля ввода для следующего упражнения
+                    e_ex.set("")
+                    e_sets.delete(0, tk.END)
+                    e_reps.delete(0, tk.END)
+                    e_weight.delete(0, tk.END)
+
+                    # Обновляем список уникальных упражнений в памяти
+                    self.all_exercises = models.get_unique_exercises()
+
+                    # Автоматически возвращаем фокус на поле выбора упражнения
+                    e_ex.focus()
 
             except Exception as e:
-                messagebox.showerror("Ошибка", f"Не удалось сохранить: {e}", parent=win)
+                status_lbl.config(text=f"❌ Не удалось сохранить: {e}", fg="#E53935")
 
-        btn_text = "Обновить запись" if edit_record_id else "Сохранить"
+        # 2. ШЛЮЗ ГОРЯЧИХ КЛАВИШ: Привязываем Enter (Return) ко всему окну Toplevel
+        win.bind("<Return>", save_and_close)
+
+        btn_text = "Обновить запись" if edit_record_id else "Сохранить (Enter)"
         btn_save = tk.Button(win, text=btn_text, bg="#4CAF50", fg="white",
                              font=("Arial", 12, "bold"), command=save_and_close)
-        btn_save.pack(pady=20)
+        btn_save.pack(pady=10)
 
     def open_edit_hub_window(self):
         """Абсолютно универсальный интерактивный диспетчер Treeview с защитой пустых дат"""
