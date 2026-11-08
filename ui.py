@@ -101,7 +101,8 @@ class WorkoutApp(tk.Tk):
     def show_today_workouts(self):
             try:
                 # Автоматически подтягиваем дату САМОЙ ПОСЛЕДНЕЙ физической записи из базы
-                self.current_search_date = models.get_all_record_from_last_day()[0][1] if models.get_all_record_from_last_day() else datetime.datetime.now().strftime("%d-%m-%Y")
+                self.current_search_date = models.get_all_record_from_last_day()[0][1][:10] if models.get_all_record_from_last_day() else datetime.datetime.now().strftime("%d-%m-%Y")
+
 
 
                 # 2. Берём данные за сегодня из бэкенда
