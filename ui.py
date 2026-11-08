@@ -27,7 +27,7 @@ class WorkoutApp(tk.Tk):
         self.left_frame = tk.Frame(self)
         self.left_frame.pack(side="left", fill="both", expand=True, padx=20, pady=20)
 
-        self.label_hello = tk.Label(self.left_frame, text="Привет, чемпион!", font=("Arial", 18))
+        self.label_hello = tk.Label(self.left_frame, text="В движении к цели!", font=("Arial", 18), fg="black")
         self.label_hello.pack(pady=40)
 
         self.msg_label = tk.Label(self.left_frame, text="", fg="#2E7D32", font=("Arial", 12),
