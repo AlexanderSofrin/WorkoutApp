@@ -65,7 +65,7 @@ class WorkoutApp(tk.Tk):
             for row in rows:
 
                 _, date_str, ex, sets, reps, weight = row
-                report += f"{date_str[:10]} | {ex} | {sets}x{reps}"
+                report += f"{date_str} | {ex} | {sets}x{reps}"
                 if weight is not None and weight != "":
                     report += f" ({weight} кг)\n"
                 else:
@@ -101,8 +101,8 @@ class WorkoutApp(tk.Tk):
     def show_today_workouts(self):
             try:
                 # Автоматически подтягиваем дату САМОЙ ПОСЛЕДНЕЙ физической записи из базы
-                self.current_search_date = models.get_all_record_from_last_day()[0][1][
-                    :10] if models.get_all_record_from_last_day() else datetime.datetime.now().strftime("%d-%m-%Y")
+                self.current_search_date = models.get_all_record_from_last_day()[0][1] if models.get_all_record_from_last_day() else datetime.datetime.now().strftime("%d-%m-%Y")
+
 
                 # 2. Берём данные за сегодня из бэкенда
                 records = models.get_workouts_by_date_from_db(self.current_search_date)
@@ -471,7 +471,7 @@ class WorkoutApp(tk.Tk):
         btn_save.pack(pady=10)
 
     def open_edit_hub_window(self):
-        """Абсолютно универсальный интерактивный диспетчер Treeview с защитой пустых дат"""
+        """Абсолютно универсальный интерактивный диспетчер Treeview с кнопками Редактирования и Добавления"""
         records = models.get_workouts_by_date_from_db(self.current_search_date)
 
         # ЗАЩИТА КОГНИТИВНОГО ТЕРПЕНИЯ: если день пустой, шлем сразу на форму добавления в прошлое!
@@ -482,7 +482,7 @@ class WorkoutApp(tk.Tk):
         # Если записи есть, разворачиваем наш любимый диспетчер
         hub_win = tk.Toplevel(self)
         hub_win.title("Управление записями")
-        hub_win.geometry("550x350")
+        hub_win.geometry("550x400")  # Слегка увеличили высоту для двух кнопок
         hub_win.configure(bg="#FAFAFA")
         hub_win.attributes("-topmost", True)
 
@@ -511,9 +511,13 @@ class WorkoutApp(tk.Tk):
         tree.pack(padx=15, pady=5, fill="both", expand=True)
 
         for row in records:
-            short_date = row[1][:10]
+            db_date = row[1]  # Берем полную дату без срезов
             rec_weight = f"{row[5]}" if row[5] is not None else "—"
-            tree.insert("", "end", values=(row[0], short_date, row[2], row[3], row[4], rec_weight))
+            tree.insert("", "end", values=(row[0], db_date, row[2], row[3], row[4], rec_weight))
+
+        # Панель управления (фрейм для красивого размещения двух кнопок в ряд)
+        btn_frame = tk.Frame(hub_win, bg="#FAFAFA")
+        btn_frame.pack(pady=15)
 
         def pre_open_edit():
             selected_item = tree.selection()
@@ -531,14 +535,29 @@ class WorkoutApp(tk.Tk):
             hub_win.destroy()
             self.open_record_window(edit_record_id=r_id, old_ex=ex, old_sets=s, old_reps=r, old_weight=w)
 
+        def add_record_here():
+            """Открывает окно ввода, жестко передавая текущую дату архивного дня"""
+            hub_win.destroy()
+            self.open_record_window(target_date=self.current_search_date)
+
+        # Кнопка 1: Редактировать выбранное
         btn_select = tk.Button(
-            hub_win, text="Открыть для редактирования 💪",
+            btn_frame, text="✏️ Редактировать запись",
             font=("Arial", 11, "bold"), bg="#4CAF50", fg="white",
             command=pre_open_edit
         )
-        btn_select.pack(pady=15)
+        btn_select.pack(side="left", padx=10)
+
+        # Кнопка 2: Добавить новое в этот же день (Твой продуктовый инсайт!)
+        btn_add_inline = tk.Button(
+            btn_frame, text="📝 Добавить в этот день",
+            font=("Arial", 11, "bold"), bg="#0284c7", fg="white",  # Фирменная синяя кнопка
+            command=add_record_here
+        )
+        btn_add_inline.pack(side="left", padx=10)
 
         tree.bind("<Double-1>", lambda event: pre_open_edit())
+
 
 
 
