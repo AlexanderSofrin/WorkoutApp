@@ -182,8 +182,7 @@ class WorkoutApp(tk.Tk):
             report = f"=== РЕЗУЛЬТАТЫ ПОИСКА ДЛЯ: {user_input} ===\n"
             for row in rows:
                 _, date_str, ex, sets, reps, weight = row
-                short_date = date_str[:10]
-                report += f"📅 {short_date} | {ex} | {sets}x{reps}"
+                report += f"📅 {date_str} | {ex} | {sets}x{reps}"
                 if weight is not None and weight != "":
                     report += f" ({weight} кг)\n"
                 else:
@@ -347,7 +346,7 @@ class WorkoutApp(tk.Tk):
     def open_record_window(self, edit_record_id=None, old_ex="", old_sets="", old_reps="", old_weight="",
                            target_date=None):
         win = tk.Toplevel(self)
-        win.configure(bg="#1a1a1a")  # Стильный графитовый фон для окна ввода
+        win.configure(bg="#0f172a")  # 🔵 Премиальный глубокий темно-синий фон окна ввода
 
         # Интеллектуальный заголовок окна
         if edit_record_id:
@@ -357,9 +356,9 @@ class WorkoutApp(tk.Tk):
         else:
             win.title("Новая тренировка")
 
-        win.geometry("450x420")  # Слегка увеличили высоту, чтобы дать интерфейсу «дышать»
+        win.geometry("450x420")  # Увеличили высоту для статус-лейбла
 
-        # Стилизация меток под темную тему
+        # Стилизация меток под синюю тему
         lbl_style = {"bg": "#0f172a", "fg": "#ffffff", "font": ("Arial", 10, "bold")}
 
         tk.Label(win, text="Упражнение:", **lbl_style).pack(pady=(10, 0))
@@ -392,8 +391,8 @@ class WorkoutApp(tk.Tk):
         e_weight.pack(pady=5)
         e_weight.insert(0, str(old_weight) if old_weight is not None else "")
 
-        # 1. СТРАТЕГИЧЕСКИЙ УЗЕЛ: Когнитивный статус-лейбл для мягких уведомлений
-        status_lbl = tk.Label(win, text="", font=("Arial", 10, "italic"), bg="#1a1a1a", wraplength=400)
+        # 1. СТРАТЕГИЧЕСКИЙ УЗЕЛ: Когнитивный статус-лейбл на синем фоне
+        status_lbl = tk.Label(win, text="", font=("Arial", 10, "italic"), bg="#0f172a", wraplength=400)
         status_lbl.pack(pady=5)
 
         def save_and_close(event=None):  # Добавили event=None, чтобы метод корректно работал и от клика, и от Enter
@@ -444,11 +443,11 @@ class WorkoutApp(tk.Tk):
                     # ПОТОКОВЫЙ ВВОД ДЛЯ НОВЫХ ЗАПИСЕЙ
                     models.save_workout_to_db(result)
 
-                    # Мягко рапортуем об успехе внизу окна
-                    status_lbl.config(text=f"💪 '{result.exercise_name}' успешно сохранено на {result.created_at[:10]}!",
-                                      fg="#00ff00")
+                    # 💎 ЖЕЛЕЗНЫЙ ФИКС ВРЕМЕНИ: Берем чистую active_date без всяких опасных срезов строк!
+                    status_lbl.config(text=f"💪 '{result.exercise_name}' успешно сохранено на {active_date}!",
+                                      fg="#38bdf8")
 
-                    # Мгновенно вычищаем поля ввода для следующего упражнения
+                    # Мгновенная очистка полей для следующего упражнения
                     e_ex.set("")
                     e_sets.delete(0, tk.END)
                     e_reps.delete(0, tk.END)
@@ -467,7 +466,7 @@ class WorkoutApp(tk.Tk):
         win.bind("<Return>", save_and_close)
 
         btn_text = "Обновить запись" if edit_record_id else "Сохранить (Enter)"
-        btn_save = tk.Button(win, text=btn_text, bg="#4CAF50", fg="white",
+        btn_save = tk.Button(win, text=btn_text, bg="#0284c7", fg="white",  # Насыщенная синяя кнопка
                              font=("Arial", 12, "bold"), command=save_and_close)
         btn_save.pack(pady=10)
 
