@@ -3,6 +3,7 @@ from tkinter import messagebox
 from tkinter import ttk
 import models
 from strings import LANGUAGES
+from  auth_window import AuthWindow
 import datetime
 from tkinter import simpledialog
 from max_records_feature import open_max_records_window
@@ -21,12 +22,30 @@ class WorkoutApp(tk.Tk):
         super().__init__()
         self.title("Дневник тренировок")
         self.geometry("750x650")
+
+        # 1. Железно прячем главное окно в фон на старте сессии
+        self.withdraw()
+
+        # 2. Инициализируем переменные базовыми значениями (всё сохранено!)
+        self.active_user = "Александр"
+        self.current_lang = "ru"
         self.all_exercises = get_unique_exercises()
-        self.current_search_date = datetime.datetime.now().strftime("%d-%m-%Y") # Хранит активную дату сессии
-        self.current_lang = "ru" # Активный язык сессии "ru" или "en"
-        lang_pack = LANGUAGES[self.current_lang] # Подтягиваем нужный языковой пакет
+        self.current_search_date = datetime.datetime.now().strftime("%d-%m-%Y")
+
+        # 3. Вызываем стартовое окно авторизации сессии
+        AuthWindow(self, self.start_main_session)
 
 
+
+    def start_main_session(self, user_name, lang):
+        """Callback-метод: принимает данные из шлюза авторизации и разворачивает интерфейс"""
+        self.active_user = user_name
+        self.current_lang = lang  # Фиксируем выбор пользователя
+
+        # Подтягиваем нужный языковой пакет из strings.py
+        lang_pack = LANGUAGES[self.current_lang]
+
+        # Строим архитектурные слои интерфейса
         self.left_frame = tk.Frame(self)
         self.left_frame.pack(side="left", fill="both", expand=True, padx=20, pady=20)
 
@@ -40,6 +59,7 @@ class WorkoutApp(tk.Tk):
         self.sidebar = tk.Frame(self, width=180, bg="#f0f0f0")
         self.sidebar.pack(side="right", fill="y", padx=10, pady=10)
 
+        # Прошиваем динамический текст кнопок из словаря strings.py
         self.make_sidebar_btn(lang_pack["btn_record"], "#4CAF50", "white", self.open_record_window, 10)
         self.make_sidebar_btn(lang_pack["btn_last_workout"], "#8E24AA", "white", self.show_today_workouts, 10)
         self.make_sidebar_btn(lang_pack["btn_search"], "#FF9800", "black", self.open_search_window, 10)
@@ -47,6 +67,8 @@ class WorkoutApp(tk.Tk):
         self.make_sidebar_btn(text=lang_pack["btn_records"], bg="#00ff00", fg="black",
                               command=lambda: open_max_records_window(self))
 
+        # Выводим главное окно из фона на передний план во всей красе!
+        self.deiconify()
 
     def make_sidebar_btn(self, text, bg, fg, command, pady_val=10):
         btn = tk.Button(self.sidebar, text=text, bg=bg, fg=fg,
