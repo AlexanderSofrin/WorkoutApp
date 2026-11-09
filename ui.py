@@ -107,7 +107,8 @@ class WorkoutApp(tk.Tk):
 
     def show_last_five(self):
         try:
-            rows = get_all_record_from_last_day()
+            # Передаем ID активного атлета в бэкенд
+            rows = get_all_record_from_last_day(self.active_user_id)
 
             if not rows:
                 self.msg_label.config(text="Пока нет записей о тренировках в базе данных", fg="#E53935")
@@ -117,9 +118,9 @@ class WorkoutApp(tk.Tk):
             report = "Последняя тренировка из (из базы SQLite):\n\n"
 
             for row in rows:
-
+                # В кортеже 6 элементов: id(0), created_at(1), exercise_name(2), sets(3), reps(4), weight(5)
                 _, date_str, ex, sets, reps, weight = row
-                report += f"{date_str} | {ex} | {sets}x{reps}"
+                report += f"{date_str[:10]} | {ex} | {sets}x{reps}"
                 if weight is not None and weight != "":
                     report += f" ({weight} кг)\n"
                 else:
@@ -151,52 +152,55 @@ class WorkoutApp(tk.Tk):
         except Exception as e:
             messagebox.showerror("Ошибка поиска", f"Не удалось выполнить поиск: {e}")
 
-
     def show_today_workouts(self):
-            try:
-                # Автоматически подтягиваем дату САМОЙ ПОСЛЕДНЕЙ физической записи из базы
-                self.current_search_date = models.get_all_record_from_last_day()[0][1][:10] if models.get_all_record_from_last_day() else datetime.datetime.now().strftime("%d-%m-%Y")
+        try:
+            # 1. Запрашиваем последний активный день конкретного пользователя
+            last_day_data = models.get_all_record_from_last_day(self.active_user_id)
 
+            if last_day_data:
+                # Из первой записи [0] берем поле даты [1] (created_at) и отсекаем время [:10]
+                self.current_search_date = last_day_data[0][1][:10]
+            else:
+                self.current_search_date = datetime.datetime.now().strftime("%d-%m-%Y")
 
+            # 2. Берём данные из бэкенда с жесткой фильтрацией по нашему user_id
+            records = models.get_workouts_by_date_from_db(self.current_search_date, self.active_user_id)
 
-                # 2. Берём данные за сегодня из бэкенда
-                records = models.get_workouts_by_date_from_db(self.current_search_date)
+            report = "=== ПОСЛЕДНЯЯ ТРЕНИРОВКА ===\n\n"
 
-                report = "=== ПОСЛЕДНЯЯ ТРЕНИРОВКА ===\n\n"
-
-                if not records:
-                    report += "В базе данных пока нет записей за сегодня."
-                    self.msg_label.config(text=report, fg="#E53935")
-                    if hasattr(self, 'btn_edit_hub'):
-                        self.btn_edit_hub.destroy()
-                    return
-
-                # Наращиваем строки упражнений для текстового рапорта (БЕЗ КНОПОК!)
-                for row in records:
-                    ex_name = row[2]
-                    sets = row[3]
-                    reps = row[4]
-                    weight = row[5]
-                    weight_info = f" ({weight} кг)" if weight else ""
-                    report += f"• {ex_name}: {sets}x{reps}{weight_info}\n"
-
-                # Выводим чистый текст на экран
-                self.msg_label.config(text=report, fg="#1565C0")
-
-                # 3. Создаем ВСЕГО ОДНУ стильную графитовую кнопку под отчетом
-                if hasattr(self, 'btn_edit_hub') and self.btn_edit_hub.winfo_exists():
+            if not records:
+                report += "В базе данных пока нет записей за сегодня."
+                self.msg_label.config(text=report, fg="#E53935")
+                if hasattr(self, 'btn_edit_hub'):
                     self.btn_edit_hub.destroy()
+                return
 
-                self.btn_edit_hub = tk.Button(
-                    self.left_frame,
-                    text="✏️ Управление записями дневника",
-                    bg="#37474F", fg="white", font=("Arial", 11, "bold"),
-                    command=self.open_edit_hub_window
-                )
-                self.btn_edit_hub.pack(pady=15, fill="x")
+            # Наращиваем строки упражнений для текстового рапорта (индексы строго по models.py)
+            for row in records:
+                ex_name = row[2]  # Индекс 2: exercise_name
+                sets = row[3]  # Индекс 3: sets
+                reps = row[4]  # Индекс 4: reps
+                weight = row[5]  # Индекс 5: weight
+                weight_info = f" ({weight} кг)" if weight else ""
+                report += f"• {ex_name}: {sets}x{reps}{weight_info}\n"
 
-            except Exception as e:
-                messagebox.showerror("Ошибка интерфейса", f"Не удалось обновить экран: {e}")
+            # Выводим чистый текст на экран
+            self.msg_label.config(text=report, fg="#1565C0")
+
+            # 3. Создаем кнопку под отчетом
+            if hasattr(self, 'btn_edit_hub') and self.btn_edit_hub.winfo_exists():
+                self.btn_edit_hub.destroy()
+
+            self.btn_edit_hub = tk.Button(
+                self.left_frame,
+                text="✏️ Управление записями дневника",
+                bg="#37474F", fg="white", font=("Arial", 11, "bold"),
+                command=self.open_edit_hub_window
+            )
+            self.btn_edit_hub.pack(pady=15, fill="x")
+
+        except Exception as e:
+            messagebox.showerror("Ошибка интерфейса", f"Не удалось обновить экран: {e}")
 
     def open_search_window(self):
         """Метод для вызова всплывающего интерактивного календаря и поиска по архиву."""
@@ -225,7 +229,11 @@ class WorkoutApp(tk.Tk):
 
         def confirm_date(event=None):
             """Считывает клик по дате, закрывает календарь и запускает поиск"""
+            # ЖЕЛЕЗНО ДОБАВЛЯЕМ ЭТУ СТРОКУ СЮДА:
+            lang_pack = LANGUAGES[self.current_lang]
+
             selected_date = cal.get_date()
+            # ... далее весь твой код идет абсолютно без изменений ...
 
             # Железно фиксируем дату архивного поиска в сессию в один клик
             self.current_search_date = selected_date
@@ -246,11 +254,10 @@ class WorkoutApp(tk.Tk):
             cal_win.grab_release()
             cal_win.destroy()  # Закрываем календарь
 
-            # Запускаем штатный поиск по базе SQLite
+            # Запускаем штатный поиск по базе SQLite с передачей active_user_id
             try:
-                rows = models.get_workouts_by_date_from_db(selected_date)
+                rows = models.get_workouts_by_date_from_db(selected_date, self.active_user_id)
 
-                # Интеллектуальный фронтенд для пустого дня
                 if not rows:
                     msg = f"🔍 По запросу '{selected_date}' ничего не найдено.\nВы можете нажать 'Управление записями', чтобы добавить новую тренировку на этот день!"
                     self.msg_label.config(text=msg, fg="#E53935")
@@ -259,8 +266,9 @@ class WorkoutApp(tk.Tk):
 
                 report = f"=== РЕЗУЛЬТАТЫ ПОИСКА ДЛЯ: {selected_date} ===\n"
                 for row in rows:
-                    _, date_str, ex, sets, reps, weight = row
-                    report += f"📅 {date_str} | {ex} | {sets}x{reps}"
+                    # Учитываем сдвиг индексов: пропускаем id (0) и user_id (1)
+                    _, _, date_str, ex, sets, reps, weight = row
+                    report += f"📅 {date_str[:10]} | {ex} | {sets}x{reps}"
                     if weight is not None and weight != "":
                         report += f" ({weight} кг)\n"
                     else:
@@ -268,7 +276,6 @@ class WorkoutApp(tk.Tk):
 
                 self.msg_label.config(text=report, fg="#1565C0")
                 messagebox.showinfo(lang_pack["search_results_title"], report)
-
             except Exception as e:
                 messagebox.showerror(lang_pack["error_search_title"], f"{lang_pack['error_search_msg']}{e}")
 
