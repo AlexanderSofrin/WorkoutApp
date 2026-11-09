@@ -5,6 +5,7 @@ import models
 from strings import LANGUAGES
 from  auth_window import AuthWindow
 from tkcalendar import Calendar
+from settings_window import SettingsWindow
 import datetime
 from tkinter import simpledialog
 from max_records_feature import open_max_records_window
@@ -67,9 +68,30 @@ class WorkoutApp(tk.Tk):
         self.make_sidebar_btn(lang_pack["btn_timer"], "#FFD700", "black", self.open_timer_window, 10)
         self.make_sidebar_btn(text=lang_pack["btn_records"], bg="#00ff00", fg="black",
                               command=lambda: open_max_records_window(self))
+        # Интегрируем премиальную кнопку вызова Центра Настроек
+        btn_settings_text = "⚙️ Настройки" if self.current_lang == "ru" else "⚙️ Settings"
+        self.make_sidebar_btn(btn_settings_text, "#607D8B", "white", self.open_settings_hub_window, 10)
+
 
         # Выводим главное окно из фона на передний план во всей красе!
         self.deiconify()
+
+    def open_settings_hub_window(self):
+        """Вызывает модальное окно настроек"""
+        SettingsWindow(self, self.apply_new_settings)
+
+    def apply_new_settings(self, new_lang):
+        """Callback: принимает новые настройки и полностью перерисовывает главный экран"""
+        self.current_lang = new_lang
+
+        # Полностью сносим старые фреймы, чтобы пересобрать интерфейс без дубликатов строк!
+        if hasattr(self, 'left_frame'):
+            self.left_frame.destroy()
+        if hasattr(self, 'sidebar'):
+            self.sidebar.destroy()
+
+        # Каскадно перезапускаем сессию с новыми параметрами
+        self.start_main_session(self.active_user, self.current_lang)
 
     def make_sidebar_btn(self, text, bg, fg, command, pady_val=10):
         btn = tk.Button(self.sidebar, text=text, bg=bg, fg=fg,
@@ -407,7 +429,21 @@ class WorkoutApp(tk.Tk):
     def open_record_window(self, edit_record_id=None, old_ex="", old_sets="", old_reps="", old_weight="",
                            target_date=None):
         win = tk.Toplevel(self)
-        win.configure(bg="#0f172a")  # 🔵 Премиальный глубокий темно-синий фон окна ввода
+
+        # 💎 ЛЮКСОВЫЙ ГЕНДЕРНЫЙ ИНСАЙТ : Автоматическая прошивка цветов сессии!
+        # 💎 ОБНОВЛЕННАЯ ЛЮКСОВАЯ ПАЛИТРА СОФРИНА: Чистый розовый йогурт для девочки!
+        if self.active_user == "Супруга":
+            bg_main = "#fce7f3"  # Нежно-розовый пастельный фон (светлый, приятный глазу)
+            fg_label = "#1e293b"  # Темно-графитовый текст меток для идеальной контрастности
+            fg_accent = "#db2777"  # Насыщенный розовый цвет для когнитивного статуса
+            bg_btn = "#ec4899"  # Яркая, красивая розовая кнопка сохранения
+        else:
+            bg_main = "#0f172a"  # Твой стальной глубокий синий фон
+            fg_label = "#ffffff"
+            fg_accent = "#38bdf8"  # Неоново-голубой акцент
+            bg_btn = "#0284c7"  # Синяя кнопка
+
+        win.configure(bg=bg_main)  # Накатываем выбранный фон на окно сессии
 
         # Интеллектуальный заголовок окна
         if edit_record_id:
@@ -417,10 +453,10 @@ class WorkoutApp(tk.Tk):
         else:
             win.title("Новая тренировка")
 
-        win.geometry("450x420")  # Увеличили высоту для статус-лейбла
+        win.geometry("450x420")
 
-        # Стилизация меток под синюю тему
-        lbl_style = {"bg": "#0f172a", "fg": "#ffffff", "font": ("Arial", 10, "bold")}
+        # Перепрошиваем стилизацию меток под динамические переменные
+        lbl_style = {"bg": bg_main, "fg": fg_label, "font": ("Arial", 10, "bold")}
 
         tk.Label(win, text="Упражнение:", **lbl_style).pack(pady=(10, 0))
         e_ex = ttk.Combobox(win, width=40, font=("Arial", 10))
@@ -452,8 +488,7 @@ class WorkoutApp(tk.Tk):
         e_weight.pack(pady=5)
         e_weight.insert(0, str(old_weight) if old_weight is not None else "")
 
-        # 1. СТРАТЕГИЧЕСКИЙ УЗЕЛ: Когнитивный статус-лейбл на синем фоне
-        status_lbl = tk.Label(win, text="", font=("Arial", 10, "italic"), bg="#0f172a", wraplength=400)
+        status_lbl = tk.Label(win, text="", font=("Arial", 10, "italic"), bg=bg_main, wraplength=400)
         status_lbl.pack(pady=5)
 
         def save_and_close(event=None):  # Добавили event=None, чтобы метод корректно работал и от клика, и от Enter
@@ -527,7 +562,7 @@ class WorkoutApp(tk.Tk):
         win.bind("<Return>", save_and_close)
 
         btn_text = "Обновить запись" if edit_record_id else "Сохранить (Enter)"
-        btn_save = tk.Button(win, text=btn_text, bg="#0284c7", fg="white",  # Насыщенная синяя кнопка
+        btn_save = tk.Button(win, text=btn_text, bg=bg_btn, fg="white",
                              font=("Arial", 12, "bold"), command=save_and_close)
         btn_save.pack(pady=10)
 
