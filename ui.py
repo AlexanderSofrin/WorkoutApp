@@ -31,18 +31,23 @@ class WorkoutApp(tk.Tk):
         # 2. Инициализируем переменные базовыми значениями (всё сохранено!)
         self.active_user = "Александр"
         self.current_lang = "ru"
-        self.all_exercises = get_unique_exercises()
+        self.all_exercises = get_unique_exercises(1)
+
         self.current_search_date = datetime.datetime.now().strftime("%d-%m-%Y")
 
         # 3. Вызываем стартовое окно авторизации сессии
         AuthWindow(self, self.start_main_session)
 
-
-
-    def start_main_session(self, user_name, lang):
+    def start_main_session(self, user_name, lang, user_id):  # Добавили user_id в аргументы
         """Callback-метод: принимает данные из шлюза авторизации и разворачивает интерфейс"""
         self.active_user = user_name
-        self.current_lang = lang  # Фиксируем выбор пользователя
+        self.current_lang = lang
+        self.active_user_id = user_id  # Железно фиксируем ID в сессию
+
+        # Теперь подгружаем уникальные упражнения конкретного пользователя из бэкенда
+        self.all_exercises = get_unique_exercises(self.active_user_id)
+
+        # ... далее ваш код отрисовки интерфейса идет без изменений ...
 
         # Подтягиваем нужный языковой пакет из strings.py
         lang_pack = LANGUAGES[self.current_lang]
@@ -84,14 +89,14 @@ class WorkoutApp(tk.Tk):
         """Callback: принимает новые настройки и полностью перерисовывает главный экран"""
         self.current_lang = new_lang
 
-        # Полностью сносим старые фреймы, чтобы пересобрать интерфейс без дубликатов строк!
+        # Полностью сносим старые фреймы
         if hasattr(self, 'left_frame'):
             self.left_frame.destroy()
         if hasattr(self, 'sidebar'):
             self.sidebar.destroy()
 
-        # Каскадно перезапускаем сессию с новыми параметрами
-        self.start_main_session(self.active_user, self.current_lang)
+        # Каскадно перезапускаем сессию с сохранением текущего ID пользователя
+        self.start_main_session(self.active_user, self.current_lang, self.active_user_id)
 
     def make_sidebar_btn(self, text, bg, fg, command, pady_val=10):
         btn = tk.Button(self.sidebar, text=text, bg=bg, fg=fg,
@@ -536,10 +541,11 @@ class WorkoutApp(tk.Tk):
                     else:
                         raise Exception("Ошибка выполнения SQL UPDATE")
                 else:
-                    # ПОТОКОВЫЙ ВВОД ДЛЯ НОВЫХ ЗАПИСЕЙ
-                    models.save_workout_to_db(result)
 
-                    # 💎 ЖЕЛЕЗНЫЙ ФИКС ВРЕМЕНИ: Берем чистую active_date без всяких опасных срезов строк!
+                    # ПОТОКОВЫЙ ВВОД ДЛЯ НОВЫХ ЗАПИСЕЙ — передаем объект и наш active_user_id
+                    models.save_workout_to_db(result, self.active_user_id)
+
+                    # Железный фикс времени: берем чистую active_date
                     status_lbl.config(text=f"💪 '{result.exercise_name}' успешно сохранено на {active_date}!",
                                       fg="#38bdf8")
 
@@ -567,10 +573,11 @@ class WorkoutApp(tk.Tk):
         btn_save.pack(pady=10)
 
     def open_edit_hub_window(self):
-        """Абсолютно универсальный интерактивный диспетчер Treeview с кнопками Редактирования и Добавления"""
-        records = models.get_workouts_by_date_from_db(self.current_search_date)
+        """Абсолютно универсальный интерактивный диспетчер Treeview с кнопками Редактирования"""
+        # Передаем дату и числовой ID пользователя в бэкенд
+        records = models.get_workouts_by_date_from_db(self.current_search_date, self.active_user_id)
 
-        # ЗАЩИТА КОГНИТИВНОГО ТЕРПЕНИЯ: если день пустой, шлем сразу на форму добавления в прошлое!
+        # Защита когнитивного терпения: если день пустой, шлем сразу на форму добавления
         if not records:
             self.open_record_window(target_date=self.current_search_date)
             return

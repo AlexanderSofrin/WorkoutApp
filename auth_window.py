@@ -89,10 +89,17 @@ class AuthWindow(tk.Toplevel):
         self.build_ui()  # Каскадная перерисовка интерфейса стартового окна
 
     def login_success(self):
-        """Считывает параметры сессии и швыряет их в главный контур программы"""
+        """Считывает параметры сессии и определяет числовой ID пользователя для базы данных."""
         user_name = self.combo_user.get()
-        # Вызываем callback-функцию в главном ui.py и передаем туда данные
-        self.on_success_callback(user_name, self.current_lang)
+
+        # Интеллектуальный маппинг профиля в ID СУБД (подготовка под регистрацию)
+        if user_name == "Александр":
+            user_id = 1
+        else:
+            user_id = 2  # Супруга
+
+        # Вызываем callback-функцию в главном WorkoutApp и передаем имя, язык и числовой ID
+        self.on_success_callback(user_name, self.current_lang, user_id)
         self.grab_release()
         self.destroy()  # Бесшовное уничтожение стартового шлюза
 
