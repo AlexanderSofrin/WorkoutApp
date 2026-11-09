@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import messagebox
 from tkinter import ttk
 import models
+from strings import LANGUAGES
 import datetime
 from tkinter import simpledialog
 from max_records_feature import open_max_records_window
@@ -22,12 +23,14 @@ class WorkoutApp(tk.Tk):
         self.geometry("750x650")
         self.all_exercises = get_unique_exercises()
         self.current_search_date = datetime.datetime.now().strftime("%d-%m-%Y") # Хранит активную дату сессии
+        self.current_lang = "ru" # Активный язык сессии "ru" или "en"
+        lang_pack = LANGUAGES[self.current_lang] # Подтягиваем нужный языковой пакет
 
 
         self.left_frame = tk.Frame(self)
         self.left_frame.pack(side="left", fill="both", expand=True, padx=20, pady=20)
 
-        self.label_hello = tk.Label(self.left_frame, text="В движении к цели!", font=("Arial", 18), fg="black")
+        self.label_hello = tk.Label(self.left_frame, text=lang_pack["hello"], font=("Arial", 18), fg="black")
         self.label_hello.pack(pady=40)
 
         self.msg_label = tk.Label(self.left_frame, text="", fg="#2E7D32", font=("Arial", 12),
@@ -37,11 +40,12 @@ class WorkoutApp(tk.Tk):
         self.sidebar = tk.Frame(self, width=180, bg="#f0f0f0")
         self.sidebar.pack(side="right", fill="y", padx=10, pady=10)
 
-        self.make_sidebar_btn("📝 Записать тренировку", "#4CAF50", "white", self.open_record_window, 10)
-        self.make_sidebar_btn("📋 Последняя тренировка", "#8E24AA", "white", self.show_today_workouts, 10)
-        self.make_sidebar_btn(" 🔍Поиск по дате", "#FF9800", "black", self.open_search_window, 10)
-        self.make_sidebar_btn("⏱️ Секундомер и Таймер", "#FFD700", "black", self.open_timer_window, 10)
-        self.make_sidebar_btn(text="🥇 Рекорды", bg="#00ff00", fg="black", command=lambda: open_max_records_window(self))
+        self.make_sidebar_btn(lang_pack["btn_record"], "#4CAF50", "white", self.open_record_window, 10)
+        self.make_sidebar_btn(lang_pack["btn_last_workout"], "#8E24AA", "white", self.show_today_workouts, 10)
+        self.make_sidebar_btn(lang_pack["btn_search"], "#FF9800", "black", self.open_search_window, 10)
+        self.make_sidebar_btn(lang_pack["btn_timer"], "#FFD700", "black", self.open_timer_window, 10)
+        self.make_sidebar_btn(text=lang_pack["btn_records"], bg="#00ff00", fg="black",
+                              command=lambda: open_max_records_window(self))
 
 
     def make_sidebar_btn(self, text, bg, fg, command, pady_val=10):
