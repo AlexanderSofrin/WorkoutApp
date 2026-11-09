@@ -4,6 +4,7 @@ from tkinter import ttk
 import models
 from strings import LANGUAGES
 from  auth_window import AuthWindow
+from tkcalendar import Calendar
 import datetime
 from tkinter import simpledialog
 from max_records_feature import open_max_records_window
@@ -171,55 +172,88 @@ class WorkoutApp(tk.Tk):
                 messagebox.showerror("Ошибка интерфейса", f"Не удалось обновить экран: {e}")
 
     def open_search_window(self):
-        """Метод для вызова всплывающего окна и поиска по любой дате в БД."""
-        user_input = simpledialog.askstring(
-            "Поиск по архиву",
-            "Введите дату для поиска (например, 26-10-2026 или 28-10)"
+        """Метод для вызова всплывающего интерактивного календаря и поиска по архиву."""
+        # 1. Создаем красивое всплывающее Toplevel-окно для календаря
+        cal_win = tk.Toplevel(self)
+        cal_win.title("Выбор даты поиска")
+        cal_win.geometry("320x340")
+        cal_win.configure(bg="#0f172a")  # Наш фирменный благородный темно-синий фон
+        cal_win.attributes("-topmost", True)
+        cal_win.grab_set()
+
+        lang_pack = LANGUAGES[self.current_lang]
+
+        # 2. Разворачиваем визуальный кубик календаря
+        # Передаем дату сессии, чтобы календарь сразу открывался на текущем дне
+        now = datetime.datetime.now()
+        cal = Calendar(
+            cal_win,
+            selectmode="day",
+            date_pattern="dd-mm-yyyy",  # Наш железный формат дат для SQLite
+            year=now.year,
+            month=now.month,
+            day=now.day
         )
-        if not user_input:
-            return
-        user_input = user_input.strip()
+        cal.pack(padx=15, pady=15, fill="both", expand=True)
 
-        # Железно фиксируем дату архивного поиска в сессию (даже если она пустая!)
-        self.current_search_date = user_input
+        def confirm_date(event=None):
+            """Считывает клик по дате, закрывает календарь и запускает поиск"""
+            selected_date = cal.get_date()
 
-        # Перерисовываем благородную графитовую кнопку под этот день
-        if hasattr(self, 'btn_edit_hub') and self.btn_edit_hub.winfo_exists():
-            self.btn_edit_hub.destroy()
+            # Железно фиксируем дату архивного поиска в сессию в один клик
+            self.current_search_date = selected_date
 
-        self.btn_edit_hub = tk.Button(
-            self.left_frame,
-            text="✏️ Управление записями дневника",
-            bg="#37474F", fg="white", font=("Arial", 11, "bold"),
-            command=self.open_edit_hub_window
-        )
-        self.btn_edit_hub.pack(pady=15, fill="x")
-        self.update_idletasks()
+            # Перерисовываем благородную графитовую кнопку под этот день
+            if hasattr(self, 'btn_edit_hub') and self.btn_edit_hub.winfo_exists():
+                self.btn_edit_hub.destroy()
 
-        try:
-            rows = models.get_workouts_by_date_from_db(user_input)
+            self.btn_edit_hub = tk.Button(
+                self.left_frame,
+                text="✏️ Управление записями дневника",
+                bg="#37474F", fg="white", font=("Arial", 11, "bold"),
+                command=self.open_edit_hub_window
+            )
+            self.btn_edit_hub.pack(pady=15, fill="x")
+            self.update_idletasks()
 
-            # ИНТЕЛЛЕКТУАЛЬНЫЙ ФРОНТЕНД ДЛЯ ПУСТОГО ДНЯ:
-            if not rows:
-                msg = f"🔍 По запросу '{user_input}' ничего не найдено.\nВы можете нажать 'Управление записями', чтобы добавить новую тренировку на этот день!"
-                self.msg_label.config(text=msg, fg="#E53935")
-                messagebox.showinfo("Результаты поиска", msg)
-                return
+            cal_win.grab_release()
+            cal_win.destroy()  # Закрываем календарь
 
-            report = f"=== РЕЗУЛЬТАТЫ ПОИСКА ДЛЯ: {user_input} ===\n"
-            for row in rows:
-                _, date_str, ex, sets, reps, weight = row
-                report += f"📅 {date_str} | {ex} | {sets}x{reps}"
-                if weight is not None and weight != "":
-                    report += f" ({weight} кг)\n"
-                else:
-                    report += "\n"
+            # Запускаем штатный поиск по базе SQLite
+            try:
+                rows = models.get_workouts_by_date_from_db(selected_date)
 
-            self.msg_label.config(text=report, fg="#1565C0")
-            messagebox.showinfo("Найденные тренировки", report)
+                # Интеллектуальный фронтенд для пустого дня
+                if not rows:
+                    msg = f"🔍 По запросу '{selected_date}' ничего не найдено.\nВы можете нажать 'Управление записями', чтобы добавить новую тренировку на этот день!"
+                    self.msg_label.config(text=msg, fg="#E53935")
+                    messagebox.showinfo(lang_pack["info_title"], msg)
+                    return
 
-        except Exception as e:
-            messagebox.showerror("Ошибка поиска", f"Не удалось выполнить поиск: {e}")
+                report = f"=== РЕЗУЛЬТАТЫ ПОИСКА ДЛЯ: {selected_date} ===\n"
+                for row in rows:
+                    _, date_str, ex, sets, reps, weight = row
+                    report += f"📅 {date_str} | {ex} | {sets}x{reps}"
+                    if weight is not None and weight != "":
+                        report += f" ({weight} кг)\n"
+                    else:
+                        report += "\n"
+
+                self.msg_label.config(text=report, fg="#1565C0")
+                messagebox.showinfo(lang_pack["search_results_title"], report)
+
+            except Exception as e:
+                messagebox.showerror(lang_pack["error_search_title"], f"{lang_pack['error_search_msg']}{e}")
+
+        # 3. Кнопка подтверждения выбора
+        btn_text = "Выбрать дату" if self.current_lang == "ru" else "Select Date"
+        tk.Button(
+            cal_win, text=btn_text, font=("Arial", 11, "bold"),
+            bg="#0284c7", fg="white", command=confirm_date
+        ).pack(pady=(0, 15))
+
+        # Горячая клавиша Enter (Return) для мгновенного выбора
+        cal_win.bind("<Return>", confirm_date)
 
     def open_timer_window(self):
         timer_pin = tk.Toplevel(self)
