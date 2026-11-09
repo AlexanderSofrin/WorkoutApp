@@ -177,61 +177,9 @@ def validate_workout_data(ex: str, sets_str: str, reps_str: str, weight_str: str
     return True, workout_obj
 
 
-def get_max_records():
-    """
-    Вытаскиваем максимальный вес по каждому упражнению за всю историю тренировок.
-    """
-    # 1. Подключаемся к нашей базе данных
-    conn = sqlite3.connect("workout_vault.db")
-    cursor = conn.cursor()
-
-    try:
-        # Пишем хитрый SQL- запрос с MAX() и GROUP BY
-        cursor.execute("""
-              SELECT exercise_name, MAX(weight)
-              FROM workouts
-              WHERE weight IS NOT NULL AND weight > 0
-              GROUP BY exercise_name
-              ORDER BY MAX(weight) DESC 
-        """)
-        # 3. Забираем все найденные строки
-        return cursor.fetchall()
-    except sqlite3.OperationalError:
-        # Если таблицы еще нет, возвращаем пустой список, чтобы не было вылета
-        return []
-    finally:
-        # 4. Железно закрываем соединение с базой в любом случае.
-         conn.close()
 
 
-def update_workout_in_db(workout_id: int, exercise: str, sets: int, reps: int, weight: float) -> bool:
-    """Принимает ID записи и новые параметры, намертво перезаписывая строку в SQLite."""
-    conn = None
-    try:
-        conn = sqlite3.connect(DB_NAME)
-        cursor = conn.cursor()
 
-        # Суровый и точный SQL-оператор UPDATE с фильтрацией по PRIMARY KEY (id)
-        query = """
-            UPDATE workouts 
-            SET exercise_name = ?, sets = ?, reps = ?, weight = ?
-            WHERE id = ?
-        """
-
-        # Выполняем через безопасный кортеж параметров (защита от SQL-инъекций)
-        cursor.execute(query, (exercise.strip(), sets, reps, weight, workout_id))
-        conn.commit()
-
-        print(f"[БЭКЕНД]: Запись с ID {workout_id} успешно модифицирована в базе.")
-        return True
-
-    except sqlite3.Error as e:
-        print(f"[БЭКЕНД ОШИБКА]: Не удалось обновить запись в SQLite: {e}")
-        return False
-
-    finally:
-        if conn:
-            conn.close()  # Железное закрытие соединения в любом сценарии
 
 
 
