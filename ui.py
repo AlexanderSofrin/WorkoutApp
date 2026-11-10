@@ -59,9 +59,37 @@ class WorkoutApp(tk.Tk):
         self.label_hello = tk.Label(self.left_frame, text=lang_pack["hello"], font=("Arial", 18), fg="black")
         self.label_hello.pack(pady=40)
 
-        self.msg_label = tk.Label(self.left_frame, text="", fg="#2E7D32", font=("Arial", 12),
-                                  justify="left", wraplength=450)
-        self.msg_label.pack(pady=10)
+        # Настраиваем премиальный стальной стиль для таблиц Treeview
+        style = ttk.Style()
+        style.theme_use("clam")
+        style.configure(
+            "Treeview",
+            background="#2b2b2b", foreground="#ffffff", fieldbackground="#2b2b2b",
+            rowheight=28, font=("Arial", 10)
+        )
+        style.configure(
+            "Treeview.Heading",
+            background="#37474F", foreground="#ffffff", font=("Arial", 10, "bold")
+        )
+
+        # Создаем визуальную таблицу вместо старой текстовой метки
+        self.report_frame = tk.LabelFrame(self.left_frame, text="📊 Отчёт по тренировке", font=("Arial", 11, "bold"),
+                                          fg="#1565C0")
+        self.report_frame.pack(fill="both", expand=True, pady=10)
+
+        columns = ("exercise", "sets", "reps", "weight")
+        self.tree = ttk.Treeview(self.report_frame, columns=columns, show="headings", selectmode="browse")
+
+        self.tree.heading("exercise", text="🏋️ Упражнение")
+        self.tree.heading("sets", text="🔢 Подходы")
+        self.tree.heading("reps", text="🔁 Повторы")
+        self.tree.heading("weight", text="⚖️ Вес")
+
+        self.tree.column("exercise", width=180, anchor=tk.W)
+        self.tree.column("sets", width=70, anchor=tk.CENTER)
+        self.tree.column("reps", width=70, anchor=tk.CENTER)
+        self.tree.column("weight", width=90, anchor=tk.CENTER)
+        self.tree.pack(fill="both", expand=True, padx=10, pady=10)
 
         self.sidebar = tk.Frame(self, width=180, bg="#f0f0f0")
         self.sidebar.pack(side="right", fill="y", padx=10, pady=10)
@@ -80,6 +108,14 @@ class WorkoutApp(tk.Tk):
 
         # Выводим главное окно из фона на передний план во всей красе!
         self.deiconify()
+        # Интегрируем премиальный футер (Подпись автора и статус сессии)
+        self.footer_label = tk.Label(
+            self.left_frame,
+            text=f"v1.0.0-alpha | 🛡️ Разработчик: Александр | Активный профиль: {self.active_user} (ID: {self.active_user_id})",
+            font=("Arial", 9, "italic"), fg="#555555"
+        )
+        self.footer_label.pack(side="bottom", pady=5)
+
 
     def open_settings_hub_window(self):
         """Вызывает модальное окно настроек"""
@@ -105,60 +141,36 @@ class WorkoutApp(tk.Tk):
         btn.pack(fill="x", pady=pady_val)
         return btn
 
-    def show_last_five(self):
-        try:
-            # Передаем ID активного атлета в бэкенд
-            rows = get_all_record_from_last_day(self.active_user_id)
+    def populate_tree_table(self, rows):
+        """Метод для бесшовного вывода строк в главную таблицу Treeview"""
+        for row in self.tree.get_children():
+            self.tree.delete(row)
 
-            if not rows:
-                self.msg_label.config(text="Пока нет записей о тренировках в базе данных", fg="#E53935")
-                messagebox.showinfo("Инфо", "В базе данных пока нет записей.")
-                return
+        for row in rows:
+            # Прецизионная распаковка кортежа бэкенда из 6 элементов
+            _, _, ex, sets, reps, weight = row
+            weight_str = f"{weight} кг" if weight else "—"
+            self.tree.insert("", "end", values=(ex, sets, reps, weight_str))
 
-            report = "Последняя тренировка из (из базы SQLite):\n\n"
+        if hasattr(self, 'btn_edit_hub') and self.btn_edit_hub.winfo_exists():
+            self.btn_edit_hub.destroy()
 
-            for row in rows:
-                # В кортеже 6 элементов: id(0), created_at(1), exercise_name(2), sets(3), reps(4), weight(5)
-                _, date_str, ex, sets, reps, weight = row
-                report += f"{date_str[:10]} | {ex} | {sets}x{reps}"
-                if weight is not None and weight != "":
-                    report += f" ({weight} кг)\n"
-                else:
-                    report += "\n"
-
-            self.msg_label.config(text=report, fg="#1565C0")
-            # Запоминаем дату, которую успешно нашёл пользователь
-            if "ДЛЯ:" in report:
-                self.current_search_date = report.split("ДЛЯ:")[1].split("===")[0].strip()
-
-            # Перерисовываем благородную графитовую кнопку под архивный поиск
-            if hasattr(self, 'btn_edit_hub') and self.btn_edit_hub.winfo_exists():
-                self.btn_edit_hub.destroy()
-
-            self.btn_edit_hub = tk.Button(
-                self.left_frame,
-                text="✏️ Управление записями дневника",
-                bg="#37474F", fg="white", font=("Arial", 11, "bold"),
-                command=self.open_edit_hub_window
-            )
-            self.btn_edit_hub.pack(pady=15, fill="x")
-
-            # Железный фикс: силой заставляем интерфейс отобразить кнопку до вызова окна
-            self.update_idletasks()
-
-            # Дублируем всплывающий отчет
-            messagebox.showinfo("Найденные тренировки", report)
-
-        except Exception as e:
-            messagebox.showerror("Ошибка поиска", f"Не удалось выполнить поиск: {e}")
+        self.btn_edit_hub = tk.Button(
+            self.left_frame,
+            text="✏️ Управление записями дневника",
+            bg="#37474F", fg="white", font=("Arial", 11, "bold"),
+            command=self.open_edit_hub_window
+        )
+        self.btn_edit_hub.pack(pady=15, fill="x")
+        self.update_idletasks()
 
     def show_today_workouts(self):
         try:
-            # 1. Запрашиваем последний активный день конкретного пользователя
+            # 1. Запрашиваем данные за самый последний активный день
             last_day_data = models.get_all_record_from_last_day(self.active_user_id)
 
             if last_day_data:
-                # Из первой записи [0] берем поле даты [1] (created_at) и отсекаем время [:10]
+                # ХИРУРГИЧЕСКИЙ ФИКС: берем первую запись, поле даты [1] и отсекаем первые 10 символов
                 self.current_search_date = last_day_data[0][1][:10]
             else:
                 self.current_search_date = datetime.datetime.now().strftime("%d-%m-%Y")
@@ -166,128 +178,126 @@ class WorkoutApp(tk.Tk):
             # 2. Берём данные из бэкенда с жесткой фильтрацией по нашему user_id
             records = models.get_workouts_by_date_from_db(self.current_search_date, self.active_user_id)
 
-            report = "=== ПОСЛЕДНЯЯ ТРЕНИРОВКА ===\n\n"
-
             if not records:
-                report += "В базе данных пока нет записей за сегодня."
-                self.msg_label.config(text=report, fg="#E53935")
+                for row in self.tree.get_children():
+                    self.tree.delete(row)
                 if hasattr(self, 'btn_edit_hub'):
                     self.btn_edit_hub.destroy()
                 return
 
-            # Наращиваем строки упражнений для текстового рапорта (индексы строго по models.py)
-            for row in records:
-                ex_name = row[2]  # Индекс 2: exercise_name
-                sets = row[3]  # Индекс 3: sets
-                reps = row[4]  # Индекс 4: reps
-                weight = row[5]  # Индекс 5: weight
-                weight_info = f" ({weight} кг)" if weight else ""
-                report += f"• {ex_name}: {sets}x{reps}{weight_info}\n"
+            # 3. Бесшовно выводим в нашу новую красивую таблицу Treeview!
+            self.populate_tree_table(records)
 
-            # Выводим чистый текст на экран
-            self.msg_label.config(text=report, fg="#1565C0")
+        except Exception as e:
+            messagebox.showerror("Ошибка интерфейса", f"Не удалось обновить экран: {e}")
 
-            # 3. Создаем кнопку под отчетом
-            if hasattr(self, 'btn_edit_hub') and self.btn_edit_hub.winfo_exists():
-                self.btn_edit_hub.destroy()
+    def show_today_workouts(self):
+        try:
+            # 1. Запрашиваем данные за самый последний активный день
+            last_day_data = models.get_all_record_from_last_day(self.active_user_id)
 
-            self.btn_edit_hub = tk.Button(
-                self.left_frame,
-                text="✏️ Управление записями дневника",
-                bg="#37474F", fg="white", font=("Arial", 11, "bold"),
-                command=self.open_edit_hub_window
-            )
-            self.btn_edit_hub.pack(pady=15, fill="x")
+            if last_day_data:
+                # ХИРУРГИЧЕСКИЙ ФИКС: берем первую запись, поле даты и отсекаем первые 10 символов
+                self.current_search_date = last_day_data[0][1][:10]
+            else:
+                self.current_search_date = datetime.datetime.now().strftime("%d-%m-%Y")
+
+            # 2. Берём данные из бэкенда с жесткой фильтрацией по нашему user_id
+            records = models.get_workouts_by_date_from_db(self.current_search_date, self.active_user_id)
+
+            if not records:
+                for row in self.tree.get_children():
+                    self.tree.delete(row)
+                if hasattr(self, 'btn_edit_hub'):
+                    self.btn_edit_hub.destroy()
+                return
+
+            # 3. Бесшовно выводим в нашу новую красивую таблицу Treeview!
+            self.populate_tree_table(records)
 
         except Exception as e:
             messagebox.showerror("Ошибка интерфейса", f"Не удалось обновить экран: {e}")
 
     def open_search_window(self):
-        """Метод для вызова всплывающего интерактивного календаря и поиска по архиву."""
-        # 1. Создаем красивое всплывающее Toplevel-окно для календаря
-        cal_win = tk.Toplevel(self)
-        cal_win.title("Выбор даты поиска")
-        cal_win.geometry("320x340")
-        cal_win.configure(bg="#0f172a")  # Наш фирменный благородный темно-синий фон
-        cal_win.attributes("-topmost", True)
-        cal_win.grab_set()
+        """Двухпанельный Центр Аналитики архива"""
+        search_win = tk.Toplevel(self)
+        search_win.title("Центр Аналитики: Поиск по архиву")
+        search_win.geometry("750x400")
+        search_win.configure(bg="#0f172a")
+        search_win.attributes("-topmost", True)
+        search_win.grab_set()
 
         lang_pack = LANGUAGES[self.current_lang]
 
-        # 2. Разворачиваем визуальный кубик календаря
-        # Передаем дату сессии, чтобы календарь сразу открывался на текущем дне
+        # ЛЕВАЯ ПАНЕЛЬ: Календарь
+        left_panel = tk.Frame(search_win, bg="#0f172a")
+        left_panel.pack(side="left", fill="y", padx=15, pady=15)
+
         now = datetime.datetime.now()
         cal = Calendar(
-            cal_win,
-            selectmode="day",
-            date_pattern="dd-mm-yyyy",  # Наш железный формат дат для SQLite
-            year=now.year,
-            month=now.month,
-            day=now.day
+            left_panel, selectmode="day", date_pattern="dd-mm-yyyy",
+            year=now.year, month=now.month, day=now.day
         )
-        cal.pack(padx=15, pady=15, fill="both", expand=True)
+        cal.pack(padx=5, pady=5, fill="both", expand=True)
+
+        # ПРАВАЯ ПАНЕЛЬ: Таблица результатов
+        right_panel = tk.LabelFrame(search_win, text="📋 Результаты поиска", font=("Arial", 11, "bold"), bg="#1e293b",
+                                    fg="#38bdf8")
+        right_panel.pack(side="right", fill="both", expand=True, padx=15, pady=15)
+
+        columns = ("exercise", "sets", "reps", "weight")
+        search_tree = ttk.Treeview(right_panel, columns=columns, show="headings", selectmode="browse")
+        search_tree.heading("exercise", text="🏋️ Упражнение")
+        search_tree.heading("sets", text="🔢 Подходы")
+        search_tree.heading("reps", text="🔁 Повторы")
+        search_tree.heading("weight", text="⚖️ Вес")
+
+        search_tree.column("exercise", width=180, anchor=tk.W)
+        search_tree.column("sets", width=60, anchor=tk.CENTER)
+        search_tree.column("reps", width=60, anchor=tk.CENTER)
+        search_tree.column("weight", width=80, anchor=tk.CENTER)
+        search_tree.pack(fill="both", expand=True, padx=10, pady=10)
 
         def confirm_date(event=None):
-            """Считывает клик по дате, закрывает календарь и запускает поиск"""
-            # ЖЕЛЕЗНО ДОБАВЛЯЕМ ЭТУ СТРОКУ СЮДА:
-            lang_pack = LANGUAGES[self.current_lang]
-
             selected_date = cal.get_date()
-            # ... далее весь твой код идет абсолютно без изменений ...
-
-            # Железно фиксируем дату архивного поиска в сессию в один клик
             self.current_search_date = selected_date
 
-            # Перерисовываем благородную графитовую кнопку под этот день
             if hasattr(self, 'btn_edit_hub') and self.btn_edit_hub.winfo_exists():
                 self.btn_edit_hub.destroy()
 
             self.btn_edit_hub = tk.Button(
-                self.left_frame,
-                text="✏️ Управление записями дневника",
+                self.left_frame, text="✏️ Управление записями дневника",
                 bg="#37474F", fg="white", font=("Arial", 11, "bold"),
                 command=self.open_edit_hub_window
             )
             self.btn_edit_hub.pack(pady=15, fill="x")
             self.update_idletasks()
 
-            cal_win.grab_release()
-            cal_win.destroy()  # Закрываем календарь
-
-            # Запускаем штатный поиск по базе SQLite с передачей active_user_id
             try:
                 rows = models.get_workouts_by_date_from_db(selected_date, self.active_user_id)
 
+                for row in search_tree.get_children():
+                    search_tree.delete(row)
+
                 if not rows:
-                    msg = f"🔍 По запросу '{selected_date}' ничего не найдено.\nВы можете нажать 'Управление записями', чтобы добавить новую тренировку на этот день!"
-                    self.msg_label.config(text=msg, fg="#E53935")
-                    messagebox.showinfo(lang_pack["info_title"], msg)
+                    messagebox.showinfo(lang_pack["info_title"], f"🔍 По запросу '{selected_date}' ничего не найдено.")
                     return
 
-                report = f"=== РЕЗУЛЬТАТЫ ПОИСКА ДЛЯ: {selected_date} ===\n"
                 for row in rows:
-                    # Учитываем сдвиг индексов: пропускаем id (0) и user_id (1)
-                    _, _, date_str, ex, sets, reps, weight = row
-                    report += f"📅 {date_str[:10]} | {ex} | {sets}x{reps}"
-                    if weight is not None and weight != "":
-                        report += f" ({weight} кг)\n"
-                    else:
-                        report += "\n"
+                    _, _, ex, sets, reps, weight = row
+                    weight_str = f"{weight} кг" if weight else "—"
+                    search_tree.insert("", "end", values=(ex, sets, reps, weight_str))
 
-                self.msg_label.config(text=report, fg="#1565C0")
-                messagebox.showinfo(lang_pack["search_results_title"], report)
+                # Дублируем вывод на главный экран
+                self.populate_tree_table(rows)
+
             except Exception as e:
                 messagebox.showerror(lang_pack["error_search_title"], f"{lang_pack['error_search_msg']}{e}")
 
-        # 3. Кнопка подтверждения выбора
         btn_text = "Выбрать дату" if self.current_lang == "ru" else "Select Date"
-        tk.Button(
-            cal_win, text=btn_text, font=("Arial", 11, "bold"),
-            bg="#0284c7", fg="white", command=confirm_date
-        ).pack(pady=(0, 15))
-
-        # Горячая клавиша Enter (Return) для мгновенного выбора
-        cal_win.bind("<Return>", confirm_date)
+        tk.Button(left_panel, text=btn_text, font=("Arial", 11, "bold"), bg="#0284c7", fg="white",
+                  command=confirm_date).pack(pady=10, fill="x")
+        search_win.bind("<Return>", confirm_date)
 
     def open_timer_window(self):
         timer_pin = tk.Toplevel(self)
