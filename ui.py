@@ -105,9 +105,13 @@ class WorkoutApp(tk.Tk):
         btn_settings_text = "⚙️ Настройки" if self.current_lang == "ru" else "⚙️ Settings"
         self.make_sidebar_btn(btn_settings_text, "#607D8B", "white", self.open_settings_hub_window, 10)
 
+        # === ВОТ СЮДА ВШИВАЕМ ЦЕНТРИРОВАНИЕ ПЕРЕД ВЫВОДОМ ИЗ ФОНА ===
+        # Твоя геометрия 750x650, берем её за основу
+        self._center_window(750, 650)
 
         # Выводим главное окно из фона на передний план во всей красе!
         self.deiconify()
+
         # Интегрируем премиальный футер (Подпись автора и статус сессии)
         self.footer_label = tk.Label(
             self.left_frame,
@@ -116,6 +120,17 @@ class WorkoutApp(tk.Tk):
         )
         self.footer_label.pack(side="bottom", pady=5)
 
+    def _center_window(self, width: int, height: int):
+        """Вычисляет координаты и позиционирует окно строго по центру экрана."""
+        self.update_idletasks()  # Обновляем размеры подсистемы
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+
+        # Точный расчет координат
+        x = (screen_width // 2) - (width // 2)
+        y = (screen_height // 2) - (height // 2)
+
+        self.geometry(f"{width}x{height}+{x}+{y}")
 
     def open_settings_hub_window(self):
         """Вызывает модальное окно настроек"""
