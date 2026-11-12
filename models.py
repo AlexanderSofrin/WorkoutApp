@@ -1,171 +1,159 @@
-import sqlite3
 from datetime import datetime
-
-DB_NAME = "workout_vault.db"
-
+from sqlalchemy import func, cast, Date
+from database import SessionLocal, engine
+from db_models import Base, User, Workout
 
 # ==============================================================================================
-# БЛОК РАБОТЫ С БАЗОЙ ДАННЫХ (SQLite) - НАШ ЖЕЛЕЗОБЕТОННЫЙ ФУНДАМЕНТ (РЕФАКТОРИНГ ЧЕРЕЗ WITH)
+# БЛОК РАБОТЫ С БАЗОЙ ДАННЫХ (PostgreSQL 17 + SQLAlchemy)
 # ==============================================================================================
+
+def _format_dt(dt: datetime) -> str:
+    """Переводит дату из PostgreSQL в привычный для интерфейса формат ДД-ММ-ГГГГ ЧЧ:ММ:СС."""
+    return dt.strftime("%d-%m-%Y %H:%M:%S") if dt else ""
+
 
 def get_today_workouts_from_db(user_id: int) -> list:
-    """Забирает тренировки за сегодня строго для активного пользователя."""
-    today_date_str = datetime.now().strftime("%d-%m-%Y")
-
-    with sqlite3.connect(DB_NAME) as conn:
-        cursor = conn.cursor()
-        query = """
-            SELECT id, created_at, exercise_name, sets, reps, weight 
-            FROM workouts 
-            WHERE user_id = ? AND created_at LIKE ? 
-            ORDER BY id DESC
-        """
-        search_pattern = f"{today_date_str}%"
-        cursor.execute(query, (user_id, search_pattern))
-        return cursor.fetchall()
+    """Забирает тренировки за сегодня строго для активного пользователя из PostgreSQL."""
+    today_date = datetime.now().date()
+    with SessionLocal() as db:
+        rows = (
+            db.query(Workout)
+            .filter(Workout.user_id == user_id, cast(Workout.created_at, Date) == today_date)
+            .order_by(Workout.id.desc())
+            .all()
+        )
+        return [(w.id, _format_dt(w.created_at), w.exercise_name, w.sets, w.reps, w.weight) for w in rows]
 
 
 def get_unique_exercises(user_id: int) -> list:
     """Извлекает список уникальных названий упражнений конкретного пользователя."""
-    with sqlite3.connect(DB_NAME) as conn:
-        cursor = conn.cursor()
-        query = """
-            SELECT DISTINCT exercise_name
-            FROM workouts
-            WHERE user_id = ? AND exercise_name IS NOT NULL AND exercise_name != ''
-            ORDER BY exercise_name ASC
-        """
-        cursor.execute(query, (user_id,))
-        return [row[0] for row in cursor.fetchall()]
+    with SessionLocal() as db:
+        rows = (
+            db.query(Workout.exercise_name)
+            .filter(Workout.user_id == user_id, Workout.exercise_name.isnot(None), Workout.exercise_name != "")
+            .distinct()
+            .order_by(Workout.exercise_name.asc())
+            .all()
+        )
+        return [row[0] for row in rows]
 
 
 def get_workouts_by_date_from_db(search_string: str, user_id: int) -> list:
-    """Поиск по архиву строго в контуре данных конкретного пользователя."""
-    with sqlite3.connect(DB_NAME) as conn:
-        cursor = conn.cursor()
-        query = """
-            SELECT id, created_at, exercise_name, sets, reps, weight 
-            FROM workouts 
-            WHERE user_id = ? AND created_at LIKE ? 
-            ORDER BY id DESC
-        """
-        search_pattern = f"{search_string}%"
-        cursor.execute(query, (user_id, search_pattern))
-        return cursor.fetchall()
+    """Поиск по архиву (по дате ДД-ММ-ГГГГ или тексту) в контуре пользователя."""
+    with SessionLocal() as db:
+        rows = (
+            db.query(Workout)
+            .filter(Workout.user_id == user_id)
+            .order_by(Workout.id.desc())
+            .all()
+        )
+        result = []
+        for w in rows:
+            dt_str = _format_dt(w.created_at)
+            if dt_str.startswith(search_string):
+                result.append((w.id, dt_str, w.exercise_name, w.sets, w.reps, w.weight))
+        return result
 
 
 def init_db():
-    """Инициализация базы данных, создание пользователей кластера и миграция."""
-    with sqlite3.connect(DB_NAME) as conn:
-        cursor = conn.cursor()
-
-        # 1. Таблица пользователей
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                gender TEXT NOT NULL
-            )
-        """)
-
-        # 2. Таблица тренировок
-        cursor.execute(""" 
-            CREATE TABLE IF NOT EXISTS workouts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL DEFAULT 1,
-                created_at TEXT NOT NULL,
-                exercise_name TEXT NOT NULL, 
-                sets INTEGER NOT NULL,
-                reps INTEGER NOT NULL, 
-                weight REAL,
-                FOREIGN KEY (user_id) REFERENCES users(id)
-            ) 
-        """)
-
-        # --- БЛОК БЕЗОПАСНОЙ МИГРАЦИИ ДАННЫХ ---
-        cursor.execute("PRAGMA table_info(workouts)")
-        columns = [col[1] for col in cursor.fetchall()]
-        if "user_id" not in columns:
-            cursor.execute("ALTER TABLE workouts ADD COLUMN user_id INTEGER NOT NULL DEFAULT 1")
-            conn.commit()
-            print("[БЭКЕНД]: Миграция успешна. Колонка user_id добавлена в таблицу workouts.")
-        # --------------------------------------
-
-        # 3. Наполнение дефолтными профилями штаба
-        cursor.execute("INSERT OR IGNORE INTO users (id, username, gender) VALUES (1, 'Александр', 'male')")
-        cursor.execute("INSERT OR IGNORE INTO users (id, username, gender) VALUES (2, 'Супруга', 'female')")
-
-        conn.commit()
+    """Инициализация таблиц PostgreSQL и базовых профилей кластера."""
+    Base.metadata.create_all(bind=engine)
+    with SessionLocal() as db:
+        if not db.query(User).filter(User.id == 1).first():
+            db.add(User(id=1, username="Александр", password_hash="default_hash"))
+        if not db.query(User).filter(User.id == 2).first():
+            db.add(User(id=2, username="Супруга", password_hash="default_hash"))
+        db.commit()
 
 
 def save_workout_to_db(workout, user_id: int) -> bool:
-    """Намертво вшивает тренировку в SQLite с жесткой привязкой к user_id."""
+    """Намертво вшивает тренировку в PostgreSQL с жесткой привязкой к user_id."""
     try:
-        with sqlite3.connect(DB_NAME) as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO workouts (user_id, created_at, exercise_name, sets, reps, weight)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (user_id, workout.created_at, workout.exercise_name, workout.sets, workout.reps, workout.weight))
-            print(f"Запись '{workout.exercise_name}' успешно сохранена в SQLite для user_id={user_id}")
+        dt_obj = datetime.strptime(workout.created_at, "%d-%m-%Y %H:%M:%S")
+    except ValueError:
+        dt_obj = datetime.now()
+
+    with SessionLocal() as db:
+        try:
+            new_record = Workout(
+                user_id=user_id,
+                created_at=dt_obj,
+                exercise_name=workout.exercise_name,
+                sets=workout.sets,
+                reps=workout.reps,
+                weight=workout.weight
+            )
+            db.add(new_record)
+            db.commit()
+            print(f"[БЭКЕНД PG]: Запись '{workout.exercise_name}' сохранена в PostgreSQL для user_id={user_id}")
             return True
-    except sqlite3.Error as e:
-        print(f"[БЭКЕНД ОШИБКА]: На удалось сохранить тренировку: {e}")
-        return False
+        except Exception as e:
+            db.rollback()
+            print(f"[БЭКЕНД ОШИБКА]: Не удалось сохранить тренировку: {e}")
+            return False
 
 
 def get_all_record_from_last_day(user_id: int):
     """Достает тренировки за самый последний активный день конкретного пользователя."""
-    with sqlite3.connect(DB_NAME) as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT id, created_at, exercise_name, sets, reps, weight
-            FROM workouts
-            WHERE user_id = ? AND SUBSTR(created_at, 1, 10) = (
-                SELECT SUBSTR(created_at, 1, 10) FROM workouts WHERE user_id = ? ORDER BY id DESC LIMIT 1
-            )
-            ORDER BY id ASC
-        """, (user_id, user_id))
-        return cursor.fetchall()
+    with SessionLocal() as db:
+        last_workout = (
+            db.query(Workout)
+            .filter(Workout.user_id == user_id)
+            .order_by(Workout.created_at.desc(), Workout.id.desc())
+            .first()
+        )
+        if not last_workout:
+            return []
+
+        last_date = last_workout.created_at.date()
+        rows = (
+            db.query(Workout)
+            .filter(Workout.user_id == user_id, cast(Workout.created_at, Date) == last_date)
+            .order_by(Workout.id.asc())
+            .all()
+        )
+        return [(w.id, _format_dt(w.created_at), w.exercise_name, w.sets, w.reps, w.weight) for w in rows]
 
 
 def update_workout_in_db(workout_id: int, exercise: str, sets: int, reps: int, weight: float) -> bool:
-    """Перезаписывает существующую строку (ID уникален, привязка сохраняется автоматически)."""
-    try:
-        with sqlite3.connect(DB_NAME) as conn:
-            cursor = conn.cursor()
-            query = """
-                UPDATE workouts 
-                SET exercise_name = ?, sets = ?, reps = ?, weight = ?
-                WHERE id = ?
-            """
-            cursor.execute(query, (exercise.strip(), sets, reps, weight, workout_id))
-            print(f"[БЭКЕНД]: Запись с ID {workout_id} успешно модифицирована в базе.")
-            return True
-    except sqlite3.Error as e:
-        print(f"[БЭКЕНД ОШИБКА]: Не удалось обновить запись в SQLite: {e}")
-        return False
-
-
-def get_max_records(user_id: int):
-    """Вытаскивает максимальный вес по каждому упражнению строго для текущего пользователя."""
-    with sqlite3.connect(DB_NAME) as conn:
-        cursor = conn.cursor()
+    """Перезаписывает существующую строку в PostgreSQL по ID."""
+    with SessionLocal() as db:
         try:
-            cursor.execute("""
-                SELECT exercise_name, MAX(weight)
-                FROM workouts
-                WHERE user_id = ? AND weight IS NOT NULL AND weight > 0
-                GROUP BY exercise_name
-                ORDER BY MAX(weight) DESC 
-            """, (user_id,))
-            return cursor.fetchall()
-        except sqlite3.OperationalError:
+            record = db.query(Workout).filter(Workout.id == workout_id).first()
+            if not record:
+                return False
+            record.exercise_name = exercise.strip()
+            record.sets = sets
+            record.reps = reps
+            record.weight = weight
+            db.commit()
+            print(f"[БЭКЕНД PG]: Запись с ID {workout_id} обновлена в PostgreSQL.")
+            return True
+        except Exception as e:
+            db.rollback()
+            print(f"[БЭКЕНД ОШИБКА]: Не удалось обновить запись в PostgreSQL: {e}")
+            return False
+
+
+def get_max_records(user_id: int = 1):
+    """Вытаскивает максимальный вес по каждому упражнению строго для текущего пользователя."""
+    with SessionLocal() as db:
+        try:
+            rows = (
+                db.query(Workout.exercise_name, func.max(Workout.weight))
+                .filter(Workout.user_id == user_id, Workout.weight.isnot(None), Workout.weight > 0)
+                .group_by(Workout.exercise_name)
+                .order_by(func.max(Workout.weight).desc())
+                .all()
+            )
+            return [(row[0], row[1]) for row in rows]
+        except Exception as e:
+            print(f"[БЭКЕНД ОШИБКА]: Не удалось получить рекорды: {e}")
             return []
 
 
 # ==============================================================================================
-# БЛОК ЛОГИКИ И ВАЛИДАЦИИ
+# БЛОК ЛОГИКИ И ВАЛИДАЦИИ (БЕЗ ИЗМЕНЕНИЙ)
 # ==============================================================================================
 
 class WorkoutRecord:
