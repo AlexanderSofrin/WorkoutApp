@@ -2,6 +2,7 @@ from datetime import datetime
 from sqlalchemy import func, cast, Date
 from database import SessionLocal, engine
 from db_models import Base, User, Workout
+from sqlalchemy import func, cast, Date, text
 
 # ==============================================================================================
 # БЛОК РАБОТЫ С БАЗОЙ ДАННЫХ (PostgreSQL 17 + SQLAlchemy)
@@ -25,7 +26,7 @@ def get_today_workouts_from_db(user_id: int) -> list:
         return [(w.id, _format_dt(w.created_at), w.exercise_name, w.sets, w.reps, w.weight) for w in rows]
 
 
-def get_unique_exercises(user_id: int) -> list:
+def get_unique_exercises(user_id: int = 1) -> list:
     """Извлекает список уникальных названий упражнений конкретного пользователя."""
     with SessionLocal() as db:
         rows = (
@@ -38,8 +39,9 @@ def get_unique_exercises(user_id: int) -> list:
         return [row[0] for row in rows]
 
 
-def get_workouts_by_date_from_db(search_string: str, user_id: int) -> list:
-    """Поиск по архиву (по дате ДД-ММ-ГГГГ или тексту) в контуре пользователя."""
+def get_workouts_by_date_from_db(search_string: str, user_id: int = 1) -> list:
+    """Поиск по архиву (понимает и точки 12.11.2026, и дефисы 12-11-2026)."""
+    clean_search = search_string.replace(".", "-").strip()
     with SessionLocal() as db:
         rows = (
             db.query(Workout)
@@ -50,13 +52,13 @@ def get_workouts_by_date_from_db(search_string: str, user_id: int) -> list:
         result = []
         for w in rows:
             dt_str = _format_dt(w.created_at)
-            if dt_str.startswith(search_string):
+            if dt_str.startswith(clean_search):
                 result.append((w.id, dt_str, w.exercise_name, w.sets, w.reps, w.weight))
         return result
 
 
 def init_db():
-    """Инициализация таблиц PostgreSQL и базовых профилей кластера."""
+    """Инициализация таблиц PostgreSQL, базовых профилей и синхронизация счётчиков ID."""
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
         if not db.query(User).filter(User.id == 1).first():
@@ -64,6 +66,12 @@ def init_db():
         if not db.query(User).filter(User.id == 2).first():
             db.add(User(id=2, username="Супруга", password_hash="default_hash"))
         db.commit()
+
+        # Выравниваем счётчики автоинкремента PostgreSQL после миграции данных
+        db.execute(text("SELECT setval('users_id_seq', COALESCE((SELECT MAX(id) FROM users), 1), true);"))
+        db.execute(text("SELECT setval('workouts_id_seq', COALESCE((SELECT MAX(id) FROM workouts), 1), true);"))
+        db.commit()
+
 
 
 def save_workout_to_db(workout, user_id: int) -> bool:
@@ -93,13 +101,13 @@ def save_workout_to_db(workout, user_id: int) -> bool:
             return False
 
 
-def get_all_record_from_last_day(user_id: int):
-    """Достает тренировки за самый последний активный день конкретного пользователя."""
+def get_all_record_from_last_day(user_id: int = 1):
+    """Достает тренировки за самый последний активный день по самой свежей записи (ID)."""
     with SessionLocal() as db:
         last_workout = (
             db.query(Workout)
             .filter(Workout.user_id == user_id)
-            .order_by(Workout.created_at.desc(), Workout.id.desc())
+            .order_by(Workout.id.desc())
             .first()
         )
         if not last_workout:

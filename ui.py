@@ -206,32 +206,7 @@ class WorkoutApp(tk.Tk):
         except Exception as e:
             messagebox.showerror("Ошибка интерфейса", f"Не удалось обновить экран: {e}")
 
-    def show_today_workouts(self):
-        try:
-            # 1. Запрашиваем данные за самый последний активный день
-            last_day_data = models.get_all_record_from_last_day(self.active_user_id)
-
-            if last_day_data:
-                # ХИРУРГИЧЕСКИЙ ФИКС: берем первую запись, поле даты и отсекаем первые 10 символов
-                self.current_search_date = last_day_data[0][1][:10]
-            else:
-                self.current_search_date = datetime.datetime.now().strftime("%d-%m-%Y")
-
-            # 2. Берём данные из бэкенда с жесткой фильтрацией по нашему user_id
-            records = models.get_workouts_by_date_from_db(self.current_search_date, self.active_user_id)
-
-            if not records:
-                for row in self.tree.get_children():
-                    self.tree.delete(row)
-                if hasattr(self, 'btn_edit_hub'):
-                    self.btn_edit_hub.destroy()
-                return
-
-            # 3. Бесшовно выводим в нашу новую красивую таблицу Treeview!
-            self.populate_tree_table(records)
-
-        except Exception as e:
-            messagebox.showerror("Ошибка интерфейса", f"Не удалось обновить экран: {e}")
+    
 
     def open_search_window(self):
         """Двухпанельный Центр Аналитики архива"""
@@ -552,7 +527,8 @@ class WorkoutApp(tk.Tk):
                 return
 
             # Вычисляем активную дату: приоритет у target_date, затем у глобальной сессии
-            active_date = target_date if target_date else self.current_search_date
+            active_date = target_date if target_date else datetime.datetime.now().strftime("%d-%m-%Y")
+
 
             success, result = models.validate_workout_data(raw_ex, raw_sets, raw_reps, raw_weight,
                                                            custom_date=active_date)
