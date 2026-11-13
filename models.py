@@ -3,7 +3,7 @@ from sqlalchemy import func, cast, Date
 from database import SessionLocal, engine
 from db_models import Base, User, Workout
 from sqlalchemy import func, cast, Date, text
-
+from auth import hash_password
 # ==============================================================================================
 # БЛОК РАБОТЫ С БАЗОЙ ДАННЫХ (PostgreSQL 17 + SQLAlchemy)
 # ==============================================================================================
@@ -61,16 +61,43 @@ def init_db():
     """Инициализация таблиц PostgreSQL, базовых профилей и синхронизация счётчиков ID."""
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
-        if not db.query(User).filter(User.id == 1).first():
-            db.add(User(id=1, username="Александр", password_hash="default_hash"))
-        if not db.query(User).filter(User.id == 2).first():
-            db.add(User(id=2, username="Супруга", password_hash="default_hash"))
+        # 1. Сначала добавляем новые колонки анкеты в существующую таблицу users
+        alter_queries = [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name VARCHAR(100);",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(10);",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS age INTEGER;",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS height_cm FLOAT;",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS weight_kg FLOAT;",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS goal VARCHAR(30) DEFAULT 'recomp';",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS work_schedule VARCHAR(20) DEFAULT '2/2';",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS injury_notes VARCHAR(255);",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_onboarded BOOLEAN DEFAULT FALSE;"
+        ]
+        for q in alter_queries:
+            db.execute(text(q))
         db.commit()
 
-        # Выравниваем счётчики автоинкремента PostgreSQL после миграции данных
-        db.execute(text("SELECT setval('users_id_seq', COALESCE((SELECT MAX(id) FROM users), 1), true);"))
-        db.execute(text("SELECT setval('workouts_id_seq', COALESCE((SELECT MAX(id) FROM workouts), 1), true);"))
+        # 2. Настраиваем реальные bcrypt-пароли для основных аккаунтов (id=1 и id=2)
+        alex = db.query(User).filter(User.id == 1).first()
+        if not alex:
+            db.add(User(id=1, username="Александр", password_hash=hash_password("alex2026")))
+        elif alex.password_hash == "default_hash":
+            alex.password_hash = hash_password("alex2026")
+
+        wife = db.query(User).filter(User.id == 2).first()
+        if not wife:
+            db.add(User(id=2, username="Супруга", password_hash=hash_password("wife2026")))
+        elif wife.password_hash == "default_hash":
+            wife.password_hash = hash_password("wife2026")
+
+        # Удаляем тестовый аккаунт, если он был создан при проверке Swagger
+        test_user = db.query(User).filter(User.username == "test_atlete").first()
+        if test_user:
+            db.delete(test_user)
+
         db.commit()
+
+
 
 
 
