@@ -42,6 +42,23 @@ class Workout(Base):
     # Связь: каждая тренировка принадлежит конкретному пользователю
     owner = relationship("User", back_populates="workouts")
 
+# Модель таблицы "Умная корзина упражнений" (Exercises)
+class Exercise(Base):
+    __tablename__ = "exercises"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), unique=True, nullable=False, index=True)
+    muscle_group = Column(String(30), nullable=False, index=True)  # chest, back, legs, shoulders, arms, core
+    equipment = Column(String(50), default="Гантели")
+    technique_tips = Column(String(500), nullable=False)
+    common_mistakes = Column(String(500), nullable=True)
+
+    # Флаги травмобезопасности для суставов и позвоночника
+    safe_for_lower_back = Column(Boolean, default=True)
+    safe_for_knees = Column(Boolean, default=True)
+    safe_for_elbows = Column(Boolean, default=True)
+
+
 
 if __name__ == "__main__":
     print("Создаем таблицы в PostgreSQL...")

@@ -4,7 +4,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from db_models import User, Workout
+from db_models import User, Workout, Exercise
 from auth import get_db, hash_password, verify_password, create_access_token, get_current_user
 from models import init_db
 
@@ -51,6 +51,17 @@ class WorkoutCreate(BaseModel):
     sets: int = Field(gt=0, description="Количество подходов")
     reps: int = Field(gt=0, description="Количество повторений")
     weight: float | None = Field(default=None, ge=0, description="Вес в кг")
+
+class ExerciseCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=100, description="Название упражнения")
+    muscle_group: str = Field(pattern="^(chest|back|legs|shoulders|arms|core)$", description="Группа мышц")
+    equipment: str = Field(default="Гантели", max_length=50, description="Оборудование")
+    technique_tips: str = Field(min_length=5, max_length=500, description="Ключи правильной техники")
+    common_mistakes: str | None = Field(default=None, max_length=500, description="Частые ошибки")
+    safe_for_lower_back: bool = Field(default=True, description="Безопасно при чувствительной пояснице")
+    safe_for_knees: bool = Field(default=True, description="Безопасно при чувствительных коленях")
+    safe_for_elbows: bool = Field(default=True, description="Безопасно при чувствительных локтях")
+
 
 
 # ==============================================================================================
@@ -248,3 +259,73 @@ def delete_workout(
     db.delete(workout)
     db.commit()
     return {"status": "deleted", "deleted_id": workout_id}
+
+# ==============================================================================================
+# УМНАЯ КОРЗИНА УПРАЖНЕНИЙ (ЭНЦИКЛОПЕДИЯ ТЕХНИКИ И ТРАВМОБЕЗОПАСНОСТИ)
+# ==============================================================================================
+
+@app.get("/exercises/")
+def get_exercises(
+    muscle_group: str | None = None,
+    protect_lower_back: bool = False,
+    protect_knees: bool = False,
+    protect_elbows: bool = False,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Умный подбор упражнений с фильтрацией по группам мышц и защите суставов/поясницы."""
+    query = db.query(Exercise)
+
+    if muscle_group:
+        query = query.filter(Exercise.muscle_group == muscle_group.strip().lower())
+    if protect_lower_back:
+        query = query.filter(Exercise.safe_for_lower_back.is_(True))
+    if protect_knees:
+        query = query.filter(Exercise.safe_for_knees.is_(True))
+    if protect_elbows:
+        query = query.filter(Exercise.safe_for_elbows.is_(True))
+
+    items = query.order_by(Exercise.muscle_group, Exercise.name).all()
+    return {
+        "athlete": current_user.full_name or current_user.username,
+        "filters_applied": {
+            "muscle_group": muscle_group,
+            "protect_lower_back": protect_lower_back,
+            "protect_knees": protect_knees,
+            "protect_elbows": protect_elbows
+        },
+        "total_found": len(items),
+        "exercises": items
+    }
+
+
+@app.post("/exercises/", status_code=status.HTTP_201_CREATED)
+def add_exercise(
+    ex_data: ExerciseCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Добавление нового упражнения в базу знаний Workout Vault."""
+    existing = db.query(Exercise).filter(Exercise.name == ex_data.name.strip()).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Такое упражнение уже есть в справочнике")
+
+    new_ex = Exercise(
+        name=ex_data.name.strip(),
+        muscle_group=ex_data.muscle_group.strip().lower(),
+        equipment=ex_data.equipment.strip(),
+        technique_tips=ex_data.technique_tips.strip(),
+        common_mistakes=ex_data.common_mistakes.strip() if ex_data.common_mistakes else None,
+        safe_for_lower_back=ex_data.safe_for_lower_back,
+        safe_for_knees=ex_data.safe_for_knees,
+        safe_for_elbows=ex_data.safe_for_elbows
+    )
+    db.add(new_ex)
+    db.commit()
+    db.refresh(new_ex)
+
+    return {
+        "status": "success",
+        "message": f"Упражнение '{new_ex.name}' добавлено в Умную корзину!",
+        "exercise": new_ex
+    }

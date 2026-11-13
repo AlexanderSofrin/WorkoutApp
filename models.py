@@ -1,7 +1,7 @@
 from datetime import datetime
 from sqlalchemy import func, cast, Date
 from database import SessionLocal, engine
-from db_models import Base, User, Workout
+from db_models import Base, User, Workout, Exercise
 from sqlalchemy import func, cast, Date, text
 from auth import hash_password
 # ==============================================================================================
@@ -75,7 +75,84 @@ def init_db():
         ]
         for q in alter_queries:
             db.execute(text(q))
-        db.commit()
+        # 4. Наполняем "Умную корзину упражнений" стартовым золотым фондом (если таблица пуста)
+        if db.query(Exercise).count() == 0:
+            starter_exercises = [
+                Exercise(
+                    name="Гоблет-приседания с гантелью (Goblet Squat)",
+                    muscle_group="legs",
+                    equipment="Гантель",
+                    technique_tips="Держи гантель у груди, локти направлены вниз. Садись между пяток с ровной спиной, пятки не отрывай.",
+                    common_mistakes="Завал корпуса вперёд, сведение коленей внутрь, отрыв пяток от пола.",
+                    safe_for_lower_back=True,
+                    safe_for_knees=True,
+                    safe_for_elbows=True
+                ),
+                Exercise(
+                    name="Жим гантелей на наклонной скамье (30°)",
+                    muscle_group="chest",
+                    equipment="Гантели + скамья",
+                    technique_tips="Сведи лопатки, прижми таз к скамье. Опускай гантели до лёгкого растяжения грудных, локти под 45° к корпусу.",
+                    common_mistakes="Разведение локтей под 90° (перегружает плечи), сильный прогиб в пояснице.",
+                    safe_for_lower_back=True,
+                    safe_for_knees=True,
+                    safe_for_elbows=True
+                ),
+                Exercise(
+                    name="Тяга гантели одной рукой в упоре о скамью",
+                    muscle_group="back",
+                    equipment="Гантель + скамья",
+                    technique_tips="Спина параллельна полу, поясница зафиксирована. Тяни гантель к поясу за счёт отведения локтя назад, не скручивая корпус.",
+                    common_mistakes="Тяга бицепсом к груди вместо широчайшей, округление поясницы.",
+                    safe_for_lower_back=True,
+                    safe_for_knees=True,
+                    safe_for_elbows=True
+                ),
+                Exercise(
+                    name="Махи гантелями в стороны (средняя дельта)",
+                    muscle_group="shoulders",
+                    equipment="Гантели",
+                    technique_tips="Лёгкий наклон корпуса вперёд, локти слегка согнуты и смотрят в стороны-назад. Поднимай до уровня плеч без рывка.",
+                    common_mistakes="Подъём трапециями, задирание кистей выше локтей, читинг поясницей.",
+                    safe_for_lower_back=True,
+                    safe_for_knees=True,
+                    safe_for_elbows=True
+                ),
+                Exercise(
+                    name="Румынская тяга с гантелями (RDL)",
+                    muscle_group="legs",
+                    equipment="Гантели",
+                    technique_tips="Колени чуть согнуты и зафиксированы. Отводи таз назад с идеально прямой спиной до растяжения бицепса бедра.",
+                    common_mistakes="Округление поясницы в нижней точке, опускание гантелей слишком низко за счёт спины.",
+                    safe_for_lower_back=False,
+                    safe_for_knees=True,
+                    safe_for_elbows=True
+                ),
+                Exercise(
+                    name="Скручивания на полу с контролем поясницы",
+                    muscle_group="core",
+                    equipment="Собственный вес",
+                    technique_tips="Поясница плотно прижата к полу. Скручивай грудной отдел к тазу на выдохе без рывков шеей.",
+                    common_mistakes="Тяга головы руками, отрыв поясницы от пола.",
+                    safe_for_lower_back=True,
+                    safe_for_knees=True,
+                    safe_for_elbows=True
+                ),
+                Exercise(
+                    name="Французский жим с гантелями лёжа (нейтральный хват)",
+                    muscle_group="arms",
+                    equipment="Гантели + скамья",
+                    technique_tips="Локти зафиксированы и смотрят вверх, ладони друг к другу. Опускай гантели по бокам головы плавно без отбива.",
+                    common_mistakes="Разъезжание локтей в стороны, слишком большой вес (удар по локтевым связкам).",
+                    safe_for_lower_back=True,
+                    safe_for_knees=True,
+                    safe_for_elbows=False
+                ),
+            ]
+            db.add_all(starter_exercises)
+            db.commit()
+
+
 
         # 2. Настраиваем реальные bcrypt-пароли для основных аккаунтов (id=1 и id=2)
         alex = db.query(User).filter(User.id == 1).first()
