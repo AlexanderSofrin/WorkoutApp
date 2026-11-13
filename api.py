@@ -7,6 +7,7 @@ from sqlalchemy import func
 from db_models import User, Workout, Exercise
 from auth import get_db, hash_password, verify_password, create_access_token, get_current_user
 from models import init_db
+from datetime import datetime
 
 
 @asynccontextmanager
@@ -259,6 +260,174 @@ def delete_workout(
     db.delete(workout)
     db.commit()
     return {"status": "deleted", "deleted_id": workout_id}
+
+# ==============================================================================================
+# УМНЫЙ ТРЕНЕР (ГЕНЕРАТОР РЕКОМЕНДАЦИЙ НА ОСНОВЕ ВОССТАНОВЛЕНИЯ И ЗАЩИТЫ СУСТАВОВ)
+# ==============================================================================================
+
+MUSCLE_LABELS_RU = {
+    "chest": "Грудь",
+    "back": "Спина",
+    "legs": "Ноги",
+    "shoulders": "Дельты (Плечи)",
+    "arms": "Руки (Бицепс / Трицепс)",
+    "core": "Пресс и Кор",
+}
+
+# Словарь ключевых слов для автоматического определения группы мышц из архива тренировок
+MUSCLE_KEYWORDS = {
+    "shoulders": ["дельт", "мах", "протяжк", "армейск", "плеч"],
+    "legs": ["присед", "выпад", "гоблет", "ног", "румынск", "станов", "икр", "голен", "квадрицепс", "бедр"],
+    "back": ["подтягиван", "тяга", "спин", "широчайш", "шраг", "трапец", "гиперэкстенз"],
+    "chest": ["жим лежа", "жим гантелей на наклонной", "отжиман", "брусь", "груд", "сведен", "разводк"],
+    "arms": ["бицепс", "трицепс", "французск", "молотки", "подъем на бицепс", "разгибан"],
+    "core": ["пресс", "скручиван", "планк", "подъем ног", "вакуум", "кор"],
+}
+
+
+def _detect_muscle_group(exercise_name: str) -> str | None:
+    """Определяет мышечную группу по названию упражнения из журнала пользователя."""
+    name_lower = exercise_name.lower()
+    for group, keywords in MUSCLE_KEYWORDS.items():
+        if any(kw in name_lower for kw in keywords):
+            return group
+    return None
+
+
+@app.get("/workouts/recommend")
+def recommend_workout(
+    target_muscle: str | None = None,
+    protect_lower_back: bool = False,
+    protect_knees: bool = False,
+    protect_elbows: bool = False,
+    recovery_hours: int = 72,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Умный советник на сегодня:
+    1. Проверяет журнал тренировок и таймер восстановления (по умолчанию 72 часа).
+    2. Учитывает зоны контроля суставов из профиля (injury_notes) и параметров запроса.
+    3. Подбирает оптимальную группу мышц и безопасные упражнения из Умной корзины.
+    """
+    now = datetime.utcnow()
+
+    # 1. Автоматически подхватываем заметки о суставах из профиля атлета
+    notes = (current_user.injury_notes or "").lower()
+    safe_back = protect_lower_back or ("поясниц" in notes) or ("спин" in notes)
+    safe_knees = protect_knees or ("колен" in notes)
+    safe_elbows = protect_elbows or ("локт" in notes)
+
+    # 2. Анализируем историю тренировок пользователя для расчёта восстановления
+    user_workouts = (
+        db.query(Workout)
+        .filter(Workout.user_id == current_user.id)
+        .order_by(Workout.created_at.desc())
+        .limit(100)
+        .all()
+    )
+
+    last_trained: dict[str, datetime] = {}
+    for w in user_workouts:
+        group = _detect_muscle_group(w.exercise_name)
+        if group and group not in last_trained and w.created_at:
+            last_trained[group] = w.created_at
+
+    # Формируем статус готовности по каждой из 6 мышечных групп
+    recovery_status = {}
+    ready_groups = []
+    recovering_groups = []
+
+    for group, ru_name in MUSCLE_LABELS_RU.items():
+        if group not in last_trained:
+            recovery_status[group] = {
+                "muscle_group_ru": ru_name,
+                "status": "ready",
+                "hours_since_last": None,
+                "note": "Давно не тренировалась — полностью готова к работе"
+            }
+            ready_groups.append((group, 9999))
+        else:
+            hours_passed = int((now - last_trained[group]).total_seconds() // 3600)
+            is_ready = hours_passed >= recovery_hours
+            recovery_status[group] = {
+                "muscle_group_ru": ru_name,
+                "status": "ready" if is_ready else "recovering",
+                "hours_since_last": hours_passed,
+                "note": (
+                    f"Восстановлена (прошло {hours_passed} ч.)"
+                    if is_ready
+                    else f"На восстановлении (прошло {hours_passed} ч. из {recovery_hours} ч.)"
+                )
+            }
+            if is_ready:
+                ready_groups.append((group, hours_passed))
+            else:
+                recovering_groups.append(ru_name)
+
+    # 3. Определяем целевую группу мышц на сегодня (выбор атлета или совет системы)
+    chosen_group = None
+    coach_advice = ""
+
+    if target_muscle:
+        chosen_group = target_muscle.strip().lower()
+        if chosen_group not in MUSCLE_LABELS_RU:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Неизвестная группа мышц. Доступны: {', '.join(MUSCLE_LABELS_RU.keys())}"
+            )
+        status_info = recovery_status[chosen_group]
+        if status_info["status"] == "recovering":
+            coach_advice = (
+                f"Ты выбрал '{MUSCLE_LABELS_RU[chosen_group]}'. Учти, что эта группа ещё восстанавливается "
+                f"({status_info['note']}) — работай в умеренном объёме с запасом 2 повторения до отказа."
+            )
+        else:
+            coach_advice = (
+                f"Отличный выбор! Группа '{MUSCLE_LABELS_RU[chosen_group]}' полностью восстановлена и готова к работе."
+            )
+    else:
+        # Сортируем отдохнувшие группы: первыми идут те, что отдыхали дольше всех
+        ready_groups.sort(key=lambda item: item[1], reverse=True)
+        chosen_group = ready_groups[0][0] if ready_groups else "core"
+
+        recovering_text = (
+            f" Сейчас на восстановлении: {', '.join(recovering_groups)}."
+            if recovering_groups
+            else ""
+        )
+        coach_advice = (
+            f"Оптимальный выбор на сегодня — {MUSCLE_LABELS_RU[chosen_group]} "
+            f"({recovery_status[chosen_group]['note']}).{recovering_text} "
+            f"Если хочешь прокачать другую группу — просто укажи её в параметре target_muscle."
+        )
+
+    # 4. Достаём безопасные упражнения для выбранной группы из Умной корзины
+    ex_query = db.query(Exercise).filter(Exercise.muscle_group == chosen_group)
+    if safe_back:
+        ex_query = ex_query.filter(Exercise.safe_for_lower_back.is_(True))
+    if safe_knees:
+        ex_query = ex_query.filter(Exercise.safe_for_knees.is_(True))
+    if safe_elbows:
+        ex_query = ex_query.filter(Exercise.safe_for_elbows.is_(True))
+
+    recommended_exercises = ex_query.all()
+
+    return {
+        "athlete": current_user.full_name or current_user.username,
+        "recommended_muscle_group": chosen_group,
+        "recommended_muscle_group_ru": MUSCLE_LABELS_RU[chosen_group],
+        "coach_advice": coach_advice,
+        "joint_protection_active": {
+            "lower_back": safe_back,
+            "knees": safe_knees,
+            "elbows": safe_elbows
+        },
+        "recovery_dashboard": recovery_status,
+        "suggested_exercises_count": len(recommended_exercises),
+        "suggested_exercises": recommended_exercises
+    }
+
 
 # ==============================================================================================
 # УМНАЯ КОРЗИНА УПРАЖНЕНИЙ (ЭНЦИКЛОПЕДИЯ ТЕХНИКИ И ТРАВМОБЕЗОПАСНОСТИ)
