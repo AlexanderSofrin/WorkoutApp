@@ -58,6 +58,13 @@ class Exercise(Base):
     safe_for_knees = Column(Boolean, default=True)
     safe_for_elbows = Column(Boolean, default=True)
 
+    
+    sub_group = Column(String(50), nullable=True)              # Детализация: бицепс, трицепс, голень, трапеция и т.д.
+    image_url = Column(String(500), nullable=True)            # Фото 1: стартовая позиция
+    image_secondary_url = Column(String(500), nullable=True)  # Фото 2: пиковая точка движения
+    video_url = Column(String(500), nullable=True)            # Ссылка на видео техники (для этапа витрины)
+
+
 
 
 if __name__ == "__main__":

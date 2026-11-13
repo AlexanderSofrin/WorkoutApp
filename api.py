@@ -432,6 +432,52 @@ def recommend_workout(
 # ==============================================================================================
 # УМНАЯ КОРЗИНА УПРАЖНЕНИЙ (ЭНЦИКЛОПЕДИЯ ТЕХНИКИ И ТРАВМОБЕЗОПАСНОСТИ)
 # ==============================================================================================
+SUB_GROUP_LABELS_RU = {
+    "delts": "Дельты (Плечи)",
+    "traps": "Трапеция",
+    "lats": "Широчайшие (Спина)",
+    "middle_back": "Середина спины",
+    "lower_back": "Поясница",
+    "pectorals": "Грудные",
+    "quadriceps": "Квадрицепсы (Ноги)",
+    "hamstrings": "Бицепс бедра",
+    "glutes": "Ягодицы",
+    "calves": "Голень (Икры)",
+    "biceps": "Бицепс",
+    "triceps": "Трицепс",
+    "abs": "Пресс и Кор",
+}
+
+
+@app.get("/exercises/categories")
+def get_exercise_categories(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Возвращает плитки по основным и детальным группам мышц (плечи, трапеция, бицепс, трицепс, голень и др.) со счётчиками."""
+    all_ex = db.query(Exercise).all()
+    groups = {}
+    sub_groups = {}
+
+    for ex in all_ex:
+        g = ex.muscle_group or "other"
+        groups[g] = groups.get(g, 0) + 1
+        if ex.sub_group:
+            sg = ex.sub_group
+            sub_groups[sg] = sub_groups.get(sg, 0) + 1
+
+    return {
+        "total_exercises": len(all_ex),
+        "main_tiles": [
+            {"id": key, "title_ru": MUSCLE_LABELS_RU.get(key, key), "count": count}
+            for key, count in groups.items()
+        ],
+        "detailed_sub_tiles": [
+            {"id": key, "title_ru": SUB_GROUP_LABELS_RU.get(key, key), "count": count}
+            for key, count in sub_groups.items()
+        ]
+    }
+
 
 @app.get("/exercises/")
 def get_exercises(
