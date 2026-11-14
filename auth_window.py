@@ -15,7 +15,6 @@ class AuthWindow(tk.Toplevel):
         self.on_success_callback = on_success_callback
 
         self.title("Шлюз авторизации / Welcome")
-        self.geometry("400x320")
         self.configure(bg="#0f172a")  # Благородный глубокий синий фон
 
         # Фиксируем, что окно поверх всех и фокус строго на нем
@@ -30,6 +29,20 @@ class AuthWindow(tk.Toplevel):
 
         # Разворачиваем графические элементы
         self.build_ui()
+
+        # Позиционируем окно строго по центру экрана
+        self._center_window(400, 320)
+
+    def _center_window(self, width: int, height: int) -> None:
+        """Вычисляет координаты и позиционирует окно авторизации строго по центру экрана."""
+        self.update_idletasks()
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+
+        x = (screen_width // 2) - (width // 2)
+        y = (screen_height // 2) - (height // 2)
+
+        self.geometry(f"{width}x{height}+{x}+{y}")
 
     def build_ui(self):
         # Очищаем старые элементы, если меняется язык на лету
@@ -89,17 +102,10 @@ class AuthWindow(tk.Toplevel):
         self.build_ui()  # Каскадная перерисовка интерфейса стартового окна
 
     def login_success(self):
-        """Считывает параметры сессии и определяет числовой ID пользователя для базы данных."""
+        """Считывает параметры сессии и швыряет их в главный контур программы"""
         user_name = self.combo_user.get()
-
-        # Интеллектуальный маппинг профиля в ID СУБД (подготовка под регистрацию)
-        if user_name == "Александр":
-            user_id = 1
-        else:
-            user_id = 2  # Супруга
-
-        # Вызываем callback-функцию в главном WorkoutApp и передаем имя, язык и числовой ID
-        self.on_success_callback(user_name, self.current_lang, user_id)
+        # Вызываем callback-функцию в главном ui.py и передаем туда данные
+        self.on_success_callback(user_name, self.current_lang)
         self.grab_release()
         self.destroy()  # Бесшовное уничтожение стартового шлюза
 
