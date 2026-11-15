@@ -105,7 +105,9 @@ class AuthWindow(tk.Toplevel):
         """Считывает параметры сессии и швыряет их в главный контур программы"""
         user_name = self.combo_user.get()
         # Вызываем callback-функцию в главном ui.py и передаем туда данные
-        self.on_success_callback(user_name, self.current_lang)
+        user_id = 1 if user_name == "Александр" else 2
+        self.on_success_callback(user_name, self.current_lang, user_id)
+
         self.grab_release()
         self.destroy()  # Бесшовное уничтожение стартового шлюза
 
