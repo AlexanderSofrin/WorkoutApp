@@ -36,7 +36,7 @@ async function showDashboard() {
     document.getElementById("dashboardSection").classList.remove("hidden");
     document.getElementById("userBadge").classList.remove("hidden");
     await fetch("/workouts/claim-legacy", { method: "POST", headers: authHeaders() });
-    await Promise.all([loadSupport(), loadNutrition(), loadRecommendation()]);
+    await Promise.all([loadSupport(), loadNutrition(), loadRecommendation(), loadAnalytics()]);
 }
 
 function setLocation(loc) {
@@ -244,3 +244,57 @@ function startVoice() {
     recog.start();
 }
 
+async function loadAnalytics() {
+    const [recRes, histRes] = await Promise.all([
+        fetch("/workouts/records", { headers: authHeaders() }),
+        fetch("/workouts/", { headers: authHeaders() })
+    ]);
+
+    if (recRes.ok) {
+        const recData = await recRes.json();
+        const recBody = document.getElementById("recordsTableBody");
+        if (recBody) {
+            recBody.innerHTML = "";
+            const sorted = (recData.records || []).sort((a, b) => (b.max_weight_kg - a.max_weight_kg) || (b.max_reps - a.max_reps));
+            if (sorted.length === 0) {
+                recBody.innerHTML = '<tr><td colspan="4" style="color:#64748b;">Пока нет записей</td></tr>';
+            } else {
+                sorted.forEach(r => {
+                    recBody.innerHTML +=
+                        `<tr>` +
+                        `<td><strong>${r.exercise_name}</strong></td>` +
+                        `<td class="num-accent">${r.max_weight_kg} кг</td>` +
+                        `<td class="num-green">${r.max_reps}</td>` +
+                        `<td>${r.total_sessions}</td>` +
+                        `</tr>`;
+                });
+            }
+        }
+    }
+
+    if (histRes.ok) {
+        const histData = await histRes.json();
+        const histBody = document.getElementById("historyTableBody");
+        if (histBody) {
+            histBody.innerHTML = "";
+            const recent = (histData.workouts || []).slice(0, 15);
+            if (recent.length === 0) {
+                histBody.innerHTML = '<tr><td colspan="5" style="color:#64748b;">Журнал пуст</td></tr>';
+            } else {
+                recent.forEach(w => {
+                    const dt = w.created_at ? new Date(w.created_at).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" }) : "—";
+                    const wt = w.weight || 0;
+                    const ton = Math.round(w.sets * w.reps * wt * 10) / 10;
+                    histBody.innerHTML +=
+                        `<tr>` +
+                        `<td style="color:#94a3b8;">${dt}</td>` +
+                        `<td>${w.exercise_name}</td>` +
+                        `<td>${w.sets} × ${w.reps}</td>` +
+                        `<td class="num-accent">${wt} кг</td>` +
+                        `<td class="num-green">${ton} кг</td>` +
+                        `</tr>`;
+                });
+            }
+        }
+    }
+}

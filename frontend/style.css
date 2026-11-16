@@ -43,3 +43,10 @@ input:focus { outline: none; border-color: #38bdf8; }
 .ex-tag { background: #1e293b; color: #38bdf8; font-size: 11px; padding: 3px 8px; border-radius: 6px; }
 .tip-box { background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); color: #6ee7b7; padding: 12px; border-radius: 10px; font-size: 13px; margin: 12px 0; }
 .row-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.table-wrap { overflow-x: auto; margin-top: 10px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
+th { color: #94a3b8; font-size: 11px; text-transform: uppercase; padding: 10px 8px; border-bottom: 1px solid #1e293b; }
+td { padding: 10px 8px; border-bottom: 1px solid #0f172a; color: #e2e8f0; }
+tr:hover td { background: rgba(56, 189, 248, 0.05); }
+.num-accent { color: #38bdf8; font-weight: 700; }
+.num-green { color: #34d399; font-weight: 700; }
