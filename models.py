@@ -72,6 +72,16 @@ def init_db():
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS work_schedule VARCHAR(20) DEFAULT '2/2';",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS injury_notes VARCHAR(255);",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_onboarded BOOLEAN DEFAULT FALSE;"
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS birth_date VARCHAR(20);",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS target_weight_kg FLOAT;",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS work_type VARCHAR(20) DEFAULT 'mixed';",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS workouts_per_week INTEGER DEFAULT 3;",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(500);",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS support_style VARCHAR(30) DEFAULT 'engineering';",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS protect_lower_back BOOLEAN DEFAULT TRUE;",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS protect_knees BOOLEAN DEFAULT TRUE;",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS protect_elbows BOOLEAN DEFAULT TRUE;",
+
         ]
         for q in alter_queries:
             db.execute(text(q))

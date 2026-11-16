@@ -40,11 +40,21 @@ class OnboardingRequest(BaseModel):
     full_name: str = Field(min_length=1, max_length=100, description="Имя атлета")
     gender: str = Field(pattern="^(male|female)$", description="Пол: male или female")
     age: int = Field(ge=14, le=100, description="Возраст")
+    birth_date: str | None = Field(default=None, max_length=20, description="Дата рождения ДД.ММ.ГГГГ")
     height_cm: float = Field(gt=100, lt=250, description="Рост в см")
     weight_kg: float = Field(gt=30, lt=300, description="Текущий вес в кг")
+    target_weight_kg: float | None = Field(default=None, gt=30, lt=300, description="Целевой вес (центр Зелёного коридора)")
     goal: str = Field(default="recomp", pattern="^(cut|recomp|bulk)$", description="Цель: cut / recomp / bulk")
+    work_type: str = Field(default="mixed", pattern="^(sedentary|mixed|physical)$", description="Характер работы")
     work_schedule: str = Field(default="2/2", description="График работы: 2/2, 5/2 или free")
-    injury_notes: str | None = Field(default=None, max_length=255, description="Зоны контроля суставов/спины")
+    workouts_per_week: int = Field(default=3, ge=0, le=14, description="Тренировок в неделю")
+    avatar_url: str | None = Field(default=None, max_length=500, description="Ссылка или путь к фото профиля")
+    support_style: str = Field(default="engineering", pattern="^(engineering|gentle|zodiac)$", description="Стиль поддержки")
+    protect_lower_back: bool = Field(default=True, description="Беречь поясницу")
+    protect_knees: bool = Field(default=True, description="Беречь колени")
+    protect_elbows: bool = Field(default=True, description="Беречь локти")
+    injury_notes: str | None = Field(default=None, max_length=255, description="Дополнительные заметки по суставам")
+
 
 
 class WorkoutCreate(BaseModel):
@@ -121,57 +131,92 @@ def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = D
     return TokenResponse(access_token=token, is_onboarded=bool(user.is_onboarded), welcome_message=msg)
 
 
+
+def _serialize_user_profile(user: User) -> dict:
+    return {
+        "id": user.id,
+        "username": user.username,
+        "full_name": user.full_name,
+        "gender": user.gender,
+        "age": user.age,
+        "birth_date": user.birth_date,
+        "height_cm": user.height_cm,
+        "weight_kg": user.weight_kg,
+        "target_weight_kg": user.target_weight_kg,
+        "goal": user.goal,
+        "work_type": user.work_type,
+        "work_schedule": user.work_schedule,
+        "workouts_per_week": user.workouts_per_week,
+        "avatar_url": user.avatar_url,
+        "support_style": user.support_style,
+        "protect_lower_back": bool(user.protect_lower_back),
+        "protect_knees": bool(user.protect_knees),
+        "protect_elbows": bool(user.protect_elbows),
+        "injury_notes": user.injury_notes,
+        "is_onboarded": bool(user.is_onboarded),
+    }
+
+
+def _apply_profile_data(user: User, data: OnboardingRequest) -> None:
+    user.full_name = data.full_name.strip()
+    user.gender = data.gender
+    user.age = data.age
+    user.birth_date = data.birth_date.strip() if data.birth_date else None
+    user.height_cm = data.height_cm
+    user.weight_kg = data.weight_kg
+    user.target_weight_kg = data.target_weight_kg if data.target_weight_kg is not None else data.weight_kg
+    user.goal = data.goal
+    user.work_type = data.work_type
+    user.work_schedule = data.work_schedule.strip()
+    user.workouts_per_week = data.workouts_per_week
+    user.avatar_url = data.avatar_url.strip() if data.avatar_url else None
+    user.support_style = data.support_style
+    user.protect_lower_back = data.protect_lower_back
+    user.protect_knees = data.protect_knees
+    user.protect_elbows = data.protect_elbows
+    user.injury_notes = data.injury_notes.strip() if data.injury_notes else None
+    user.is_onboarded = True
+
+
 @app.post("/auth/onboarding")
 def complete_onboarding(
     data: OnboardingRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    current_user.full_name = data.full_name.strip()
-    current_user.gender = data.gender
-    current_user.age = data.age
-    current_user.height_cm = data.height_cm
-    current_user.weight_kg = data.weight_kg
-    current_user.goal = data.goal
-    current_user.work_schedule = data.work_schedule.strip()
-    current_user.injury_notes = data.injury_notes.strip() if data.injury_notes else None
-    current_user.is_onboarded = True
-
+    _apply_profile_data(current_user, data)
     db.commit()
     db.refresh(current_user)
 
     return {
         "status": "success",
-        "message": f"Отлично, {current_user.full_name}! Твой профиль атлета настроен под график {current_user.work_schedule}.",
-        "profile": {
-            "id": current_user.id,
-            "username": current_user.username,
-            "full_name": current_user.full_name,
-            "age": current_user.age,
-            "height_cm": current_user.height_cm,
-            "weight_kg": current_user.weight_kg,
-            "goal": current_user.goal,
-            "work_schedule": current_user.work_schedule,
-            "injury_notes": current_user.injury_notes
-        }
+        "message": f"Отлично, {current_user.full_name}! Паспорт атлета настроен под график {current_user.work_schedule}.",
+        "profile": _serialize_user_profile(current_user)
+    }
+
+
+@app.put("/auth/profile")
+def update_my_profile(
+    data: OnboardingRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Обновление настроек личного кабинета (вес, цель, график, защита суставов, аватар)."""
+    _apply_profile_data(current_user, data)
+    db.commit()
+    db.refresh(current_user)
+
+    return {
+        "status": "updated",
+        "message": "Настройки личного кабинета успешно сохранены!",
+        "profile": _serialize_user_profile(current_user)
     }
 
 
 @app.get("/auth/me")
 def get_my_profile(current_user: User = Depends(get_current_user)):
-    return {
-        "id": current_user.id,
-        "username": current_user.username,
-        "full_name": current_user.full_name,
-        "gender": current_user.gender,
-        "age": current_user.age,
-        "height_cm": current_user.height_cm,
-        "weight_kg": current_user.weight_kg,
-        "goal": current_user.goal,
-        "work_schedule": current_user.work_schedule,
-        "injury_notes": current_user.injury_notes,
-        "is_onboarded": current_user.is_onboarded
-    }
+    return _serialize_user_profile(current_user)
+
 
 
 # ==============================================================================================
@@ -314,9 +359,9 @@ def recommend_workout(
 
     # 1. Автоматически подхватываем заметки о суставах из профиля атлета
     notes = (current_user.injury_notes or "").lower()
-    safe_back = protect_lower_back or ("поясниц" in notes) or ("спин" in notes)
-    safe_knees = protect_knees or ("колен" in notes)
-    safe_elbows = protect_elbows or ("локт" in notes)
+    safe_back = protect_lower_back or bool(current_user.protect_lower_back) or ("поясниц" in notes) or ("спин" in notes)
+    safe_knees = protect_knees or bool(current_user.protect_knees) or ("колен" in notes)
+    safe_elbows = protect_elbows or bool(current_user.protect_elbows) or ("локт" in notes)
 
     # 2. Анализируем историю тренировок пользователя для расчёта восстановления
     user_workouts = (
@@ -543,4 +588,119 @@ def add_exercise(
         "status": "success",
         "message": f"Упражнение '{new_ex.name}' добавлено в Умную корзину!",
         "exercise": new_ex
+    }
+
+# ==============================================================================================
+# МОДУЛЬ ПИТАНИЯ, КБЖУ И «ЗЕЛЁНОГО КОРИДОРА» ВЕСА (ЭТАП 6)
+# ==============================================================================================
+
+@app.get("/nutrition/plan")
+def get_nutrition_plan(current_user: User = Depends(get_current_user)):
+    """
+    Интеллектуальный расчёт КБЖУ по формуле Миффлина — Сан-Жеора с учётом:
+    - антропометрии (пол, возраст, рост, текущий и целевой вес);
+    - характера работы (sedentary / mixed / physical) и сменного графика (2/2, 5/2);
+    - цели атлета (cut — сушка, recomp — рекомпозиция, bulk — плавный набор);
+    - границ «Зелёного коридора» веса и водно-солевого баланса.
+    """
+    if not current_user.weight_kg or not current_user.height_cm or not current_user.age or not current_user.gender:
+        raise HTTPException(
+            status_code=400,
+            detail="Для расчёта КБЖУ сначала заполните рост, вес, возраст и пол в профиле (/auth/onboarding)."
+        )
+
+    weight = current_user.weight_kg
+    height = current_user.height_cm
+    age = current_user.age
+    target_weight = current_user.target_weight_kg or weight
+
+    # 1. Базовый обмен веществ (BMR) по формуле Миффлина — Сан-Жеора
+    if current_user.gender == "male":
+        bmr = (10 * weight) + (6.25 * height) - (5 * age) + 5
+    else:
+        bmr = (10 * weight) + (6.25 * height) - (5 * age) - 161
+
+    # 2. Коэффициент дневной активности (характер работы + тренировки)
+    work_factors = {
+        "sedentary": 1.25,
+        "mixed": 1.40,
+        "physical": 1.55,
+    }
+    base_factor = work_factors.get(current_user.work_type or "mixed", 1.40)
+    workout_bonus = min((current_user.workouts_per_week or 3) * 0.04, 0.25)
+    tdee = bmr * (base_factor + workout_bonus)
+
+    # 3. Корректировка под цель (бережный режим без резких скачков)
+    goal = current_user.goal or "recomp"
+    goal_multipliers = {
+        "cut": 0.85,      # Мягкий дефицит -15% для сохранения мышц
+        "recomp": 1.00,   # Поддержание и рекомпозиция
+        "bulk": 1.08,     # Плавный чистый профицит +8% (как прибавка +100 г риса)
+    }
+    goal_labels_ru = {
+        "cut": "Снижение жировой прослойки (бережный дефицит)",
+        "recomp": "Рекомпозиция и рельеф (поддержание веса)",
+        "bulk": "Плавный качественный набор массы",
+    }
+
+    target_calories = round(tdee * goal_multipliers.get(goal, 1.0))
+
+    # 4. Расчёт белков, жиров и углеводов (в граммах)
+    protein_per_kg = 2.0 if goal in ("cut", "recomp") else 1.8
+    fat_per_kg = 0.9 if goal == "cut" else 1.0
+
+    protein_g = round(weight * protein_per_kg)
+    fat_g = round(weight * fat_per_kg)
+    remaining_kcal = max(target_calories - (protein_g * 4 + fat_g * 9), 200)
+    carbs_g = round(remaining_kcal / 4)
+
+    # 5. Распределение под сменный график (для 2/2: больше углеводов днём в смену, легче вечером)
+    schedule = current_user.work_schedule or "2/2"
+    if schedule == "2/2":
+        shift_day_calories = round(target_calories * 1.05)
+        rest_day_calories = round(target_calories * 0.95)
+        schedule_tip = (
+            "График 2/2: в рабочие смены делай упор на сложные углеводы в дневной приём пищи, "
+            "а вечерний приём после смены оставляй лёгким (белок + небольшая порция крупы) для глубокого сна."
+        )
+    else:
+        shift_day_calories = target_calories
+        rest_day_calories = target_calories
+        schedule_tip = "Стандартный график: распределяй углеводы равномерно на первую половину дня и до/после тренировки."
+
+    # 6. «Зелёный коридор» веса и электролиты
+    corridor_min = round(target_weight - 1.5, 1)
+    corridor_max = round(target_weight + 1.5, 1)
+    water_ml = round(weight * 32)
+    salt_g = 5.0 if (current_user.workouts_per_week or 0) >= 3 else 4.0
+
+    return {
+        "athlete": current_user.full_name or current_user.username,
+        "goal": goal,
+        "goal_ru": goal_labels_ru.get(goal, goal),
+        "bmr_kcal": round(bmr),
+        "tdee_maintenance_kcal": round(tdee),
+        "daily_target": {
+            "calories_kcal": target_calories,
+            "protein_g": protein_g,
+            "fats_g": fat_g,
+            "carbs_g": carbs_g,
+        },
+        "schedule_adaptation": {
+            "work_schedule": schedule,
+            "work_day_kcal": shift_day_calories,
+            "rest_day_kcal": rest_day_calories,
+            "coach_tip": schedule_tip,
+        },
+        "green_corridor": {
+            "current_weight_kg": weight,
+            "target_weight_kg": target_weight,
+            "safe_range_kg": f"{corridor_min} – {corridor_max} кг",
+            "in_corridor": corridor_min <= weight <= corridor_max,
+        },
+        "hydration_and_electrolytes": {
+            "water_ml_per_day": water_ml,
+            "salt_g_per_day": salt_g,
+            "note": "Соль распределяй на утренний и дневной приёмы пищи, вечером — минимум для защиты от задержки жидкости."
+        }
     }

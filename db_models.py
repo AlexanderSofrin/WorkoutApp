@@ -22,6 +22,16 @@ class User(Base):
     work_schedule = Column(String(20), default="2/2")       # График работы: "2/2", "5/2", "free"
     injury_notes = Column(String(255), nullable=True)       # Зоны контроля (например: "поясница, колени, локти")
     is_onboarded = Column(Boolean, default=False)           # Пройдена ли стартовая анкета
+    # Расширение профиля: антропометрия, активность, защита суставов, аватар и психология
+    birth_date = Column(String(20), nullable=True)              # Дата рождения ДД.ММ.ГГГГ
+    target_weight_kg = Column(Float, nullable=True)             # Целевой вес ("Зелёный коридор")
+    work_type = Column(String(20), default="mixed")             # "sedentary", "mixed", "physical"
+    workouts_per_week = Column(Integer, default=3)              # Тренировок в неделю
+    avatar_url = Column(String(500), nullable=True)             # Фото профиля
+    support_style = Column(String(30), default="engineering")   # "engineering", "gentle", "zodiac"
+    protect_lower_back = Column(Boolean, default=True)          # Беречь поясницу
+    protect_knees = Column(Boolean, default=True)               # Беречь колени
+    protect_elbows = Column(Boolean, default=True)              # Беречь локти
 
     # Связь: у одного пользователя может быть много тренировок
     workouts = relationship("Workout", back_populates="owner")
