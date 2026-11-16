@@ -206,42 +206,109 @@ function cancelTx() {
 }
 
 function startVoice() {
+    _runSpeechToText("chatInput", "button[onclick='startVoice()']", appendChat, sendChat);
+}
+
+function startAiVoice() {
+    _runSpeechToText("aiCoachInput", "button[onclick='startAiVoice()']", appendAiChat, askAiCoach);
+}
+
+function _runSpeechToText(inputId, btnSelector, logFn, submitFn) {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-        appendChat("Система", "Голосовой ввод не поддерживается этим браузером — используй клавиатуру или микрофон на клавиатуре телефона.", "#fbbf24");
+        logFn("Система", "Браузер не поддерживает голосовой ввод — используй клавиатуру или микрофон на телефоне.", "#fbbf24");
         return;
     }
-    const btn = document.querySelector("button[onclick='startVoice()']");
+    const btn = document.querySelector(btnSelector);
+    const input = document.getElementById(inputId);
+    const oldPlaceholder = input.placeholder;
+
+    if (btn) {
+        btn.style.borderColor = "#fb7185";
+        btn.style.background = "rgba(251,113,133,0.25)";
+        btn.textContent = "〰️🔴";
+    }
+    input.placeholder = "〰️〰️ Слушаю голос... Говори...";
+
     const recog = new SpeechRecognition();
     recog.lang = "ru-RU";
-    recog.interimResults = false;
-
-    recog.onstart = () => {
-        if (btn) { btn.style.borderColor = "#fb7185"; btn.textContent = "🔴"; }
-        appendChat("Микрофон", "Слушаю... Говори фразу целиком (например: «Гоблет-приседания 25 кг 4 по 15»).", "#fbbf24");
-    };
+    recog.interimResults = true;
 
     recog.onresult = (e) => {
-        const transcript = e.results[0][0].transcript;
-        document.getElementById("chatInput").value = transcript;
-        sendChat();
+        let liveText = "";
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+            liveText += e.results[i][0].transcript;
+        }
+        input.value = liveText;
+        if (e.results[e.results.length - 1].isFinal) {
+            submitFn();
+        }
     };
 
     recog.onerror = (e) => {
         if (e.error === "not-allowed") {
-            appendChat("Микрофон", "Доступ к микрофону запрещён браузером. Нажми на значок слева от localhost:8000 в адресной строке и разреши микрофон.", "#fb7185");
-        } else if (e.error === "no-speech") {
-            appendChat("Микрофон", "Речь не распознана — попробуй сказать чуть громче или проверь, подключён ли микрофон к ПК.", "#fbbf24");
+            logFn("Микрофон", "Доступ к микрофону запрещён в настройках браузера (нажми значок замка слева от localhost:8000).", "#fb7185");
+        } else if (e.error === "audio-capture") {
+            logFn("Микрофон", "Микрофон не найден! К системному блоку ПК не подключён микрофон или гарнитура.", "#fbbf24");
+        } else if (e.error === "network") {
+            logFn("Микрофон", "Служба распознавания речи Edge недоступна локально — на ПК пиши текстом, а голос заработает на смартфоне.", "#fbbf24");
         } else {
-            appendChat("Микрофон", "Ошибка распознавания (" + e.error + "). На стационарном ПК без гарнитуры удобнее вводить текстом.", "#fbbf24");
+            logFn("Микрофон", "Статус записи: " + e.error, "#fbbf24");
         }
     };
 
     recog.onend = () => {
-        if (btn) { btn.style.borderColor = "#334155"; btn.textContent = "🎤"; }
+        if (btn) {
+            btn.style.borderColor = "#334155";
+            btn.style.background = "";
+            btn.textContent = "🎙️";
+        }
+        input.placeholder = oldPlaceholder;
     };
 
-    recog.start();
+    try {
+        recog.start();
+    } catch (err) {
+        logFn("Микрофон", "Не удалось запустить запись: " + err.message, "#fb7185");
+    }
+}
+function appendAiChat(sender, text, color = "#e2e8f0") {
+    const box = document.getElementById("aiCoachBox");
+    const div = document.createElement("div");
+    div.style.marginTop = "8px";
+    div.style.color = color;
+    div.innerHTML = "<strong>" + sender + ":</strong> " + text;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+}
+
+function speakText(text) {
+    if (!document.getElementById("ttsToggle")?.checked) return;
+    if (!("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = "ru-RU";
+    utter.rate = 1.03;
+    window.speechSynthesis.speak(utter);
+}
+
+async function askAiCoach() {
+    const inp = document.getElementById("aiCoachInput");
+    const text = inp.value.trim();
+    if (!text) return;
+    inp.value = "";
+    appendAiChat("Ты", text, "#c084fc");
+
+    const res = await fetch("/coach/ask", {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ message: text })
+    });
+    if (res.ok) {
+        const d = await res.json();
+        appendAiChat("ИИ-тренер", d.reply, "#e2e8f0");
+        speakText(d.reply);
+    }
 }
 
 async function loadAnalytics() {
@@ -298,3 +365,5 @@ async function loadAnalytics() {
         }
     }
 }
+
+
