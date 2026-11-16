@@ -219,6 +219,23 @@
                 </div>
             </div>
         </div>
+                        <div class="card" style="margin-bottom:0; border-left: 4px solid #a855f7;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
+                        <h2 style="font-size:18px; color:#c084fc;">Персональный ИИ-тренер</h2>
+                        <label style="display:flex; align-items:center; gap:5px; font-size:11px; color:#94a3b8; margin:0; cursor:pointer;">
+                            <input id="ttsToggle" type="checkbox" checked>
+                            <span>🔊 Озвучивать</span>
+                        </label>
+                    </div>
+                    <div id="aiCoachBox" style="background:#0f172a; border:1px solid #1e293b; border-radius:12px; padding:12px; max-height:220px; overflow-y:auto; font-size:13px; margin-bottom:10px;">
+                        <div style="color:#cbd5e1;">Спроси меня о чём угодно: <em>«Что сегодня качать?»</em>, <em>«Хватает ли мне калорий и риса?»</em> или <em>«Устал после смены»</em>.</div>
+                    </div>
+                    <div style="display:flex; gap:6px;">
+                        <input id="aiCoachInput" type="text" placeholder="Задай вопрос тренеру..." style="margin-bottom:0;" onkeydown="if(event.key==='Enter') askAiCoach()">
+                        <button onclick="startAiVoice()" title="Спросить голосом" class="tile-btn" style="padding:0 12px;">🎙️</button>
+                        <button onclick="askAiCoach()" class="btn-primary" style="width:auto; padding:0 16px; background:#a855f7; color:#fff;">Спросить</button>
+                    </div>
+                </div>
 
     </main>
 </div>

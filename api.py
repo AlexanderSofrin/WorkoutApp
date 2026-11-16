@@ -9,7 +9,7 @@ from db_models import User, Workout, Exercise
 from auth import get_db, hash_password, verify_password, create_access_token, get_current_user
 from models import init_db
 from coach_parser import parse_weight_update, parse_workout_command
-
+from ai_coach import generate_coach_reply
 from datetime import datetime
 
 
@@ -981,4 +981,18 @@ def commit_chat_workout(
     return {
         "status": "committed",
         "reply": f"Записано в базу ({saved_count} поз.): {tx.exercise_name}! Общий тоннаж обновлён."
+    }
+
+@app.post("/coach/ask")
+def ask_personal_ai_coach(
+    req: ChatMessageRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Персональный ИИ-тренер: анализирует досье атлета из PostgreSQL 17 и даёт рекомендации."""
+    result = generate_coach_reply(req.message, current_user, db, _detect_muscle_group)
+    return {
+        "athlete": current_user.full_name or current_user.username,
+        "mode": result["mode"],
+        "reply": result["reply"]
     }
