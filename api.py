@@ -8,6 +8,8 @@ from sqlalchemy import func
 from db_models import User, Workout, Exercise
 from auth import get_db, hash_password, verify_password, create_access_token, get_current_user
 from models import init_db
+from coach_parser import parse_weight_update, parse_workout_command
+
 from datetime import datetime
 
 
@@ -875,3 +877,108 @@ def claim_legacy_workouts(
             moved += 1
     db.commit()
     return {"status": "ok", "attached_workouts": moved}
+
+class ChatMessageRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=1000)
+
+
+class WorkoutCommitRequest(BaseModel):
+    exercise_name: str
+    entries: list[dict]
+
+
+@app.post("/coach/chat")
+def coach_chat(
+    req: ChatMessageRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Умный чат-помощник: распознаёт вес, тренировку (создаёт чек-транзакцию) или отмену/исправление."""
+    text = req.message.strip()
+    lower = text.lower()
+
+    if any(cmd in lower for cmd in ("удали последн", "отмени последн", "ошибка", "убери последн")):
+        last_w = (
+            db.query(Workout)
+            .filter(Workout.user_id == current_user.id)
+            .order_by(Workout.created_at.desc(), Workout.id.desc())
+            .first()
+        )
+        if not last_w:
+            return {"action": "info", "reply": "В журнале пока нет записей для удаления."}
+        deleted_info = f"{last_w.exercise_name} ({last_w.sets}×{last_w.reps}, {last_w.weight or 0} кг)"
+        db.delete(last_w)
+        db.commit()
+        return {
+            "action": "deleted",
+            "reply": f"Готово! Удалил последнюю запись: {deleted_info}. Счётчики пересчитаны."
+        }
+
+    if lower.startswith(("исправь", "поправь", "измени")):
+        parsed_fix = parse_workout_command("запиши " + text.split(":", 1)[-1])
+        if parsed_fix:
+            last_w = (
+                db.query(Workout)
+                .filter(Workout.user_id == current_user.id)
+                .order_by(Workout.created_at.desc(), Workout.id.desc())
+                .first()
+            )
+            if last_w:
+                db.delete(last_w)
+                db.commit()
+            return {
+                "action": "confirm_workout",
+                "reply": "Старую запись убрал. Проверь обновлённый чек перед сохранением:",
+                "transaction": parsed_fix
+            }
+
+    new_weight = parse_weight_update(text)
+    if new_weight is not None and 30 <= new_weight <= 300:
+        current_user.weight_kg = new_weight
+        db.commit()
+        return {
+            "action": "weight_updated",
+            "reply": f"Принято! Обновил твой текущий вес до {new_weight} кг и пересчитал норму КБЖУ."
+        }
+
+    parsed = parse_workout_command(text)
+    if parsed:
+        return {
+            "action": "confirm_workout",
+            "reply": "Сформировал чек тренировки. Всё верно, записываю?",
+            "transaction": parsed
+        }
+
+    return {
+        "action": "info",
+        "reply": (
+            f"{current_user.full_name or current_user.username}, я на связи! Напиши или надиктуй тренировку "
+            "(например: «Гоблет-приседания 25 кг: два по 15, третий 16, четвёртый 20»), обнови вес («Мой вес 67.5») "
+            "или скажи «Удали последнюю», если нужно поправить запись."
+        )
+    }
+
+
+@app.post("/coach/chat/commit")
+def commit_chat_workout(
+    tx: WorkoutCommitRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Сохраняет подтверждённую транзакцию тренировки в PostgreSQL 17."""
+    saved_count = 0
+    for item in tx.entries:
+        w = Workout(
+            user_id=current_user.id,
+            exercise_name=tx.exercise_name,
+            sets=int(item["sets"]),
+            reps=int(item["reps"]),
+            weight=float(item.get("weight", 0) or 0)
+        )
+        db.add(w)
+        saved_count += 1
+    db.commit()
+    return {
+        "status": "committed",
+        "reply": f"Записано в базу ({saved_count} поз.): {tx.exercise_name}! Общий тоннаж обновлён."
+    }

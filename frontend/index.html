@@ -128,17 +128,49 @@
                 <div id="exercisesList"></div>
             </div>
 
-            <div class="card" style="height:fit-content;">
-                <h2 style="font-size:18px; color:#34d399; margin-bottom:14px;">Записать подход</h2>
-                <label>Упражнение (нажми на карточку слева)</label>
-                <input id="exName" type="text" placeholder="Например: Гоблет-приседания">
-                <div class="row-3">
-                    <div><label>Подходы</label><input id="exSets" type="number" value="4"></div>
-                    <div><label>Повторы</label><input id="exReps" type="number" value="15"></div>
-                    <div><label>Вес (кг)</label><input id="exWeight" type="number" step="0.5" placeholder="0"></div>
+                        <div style="display:flex; flex-direction:column; gap:20px;">
+                <div class="card" style="margin-bottom:0; border-left: 4px solid #38bdf8;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
+                        <h2 style="font-size:18px; color:#38bdf8;">Быстрый чат-дневник</h2>
+                        <label style="display:flex; align-items:center; gap:5px; font-size:11px; color:#94a3b8; margin:0; cursor:pointer;">
+                            <input id="autoCommitToggle" type="checkbox" onchange="toggleAutoCommit()">
+                            <span>Записывать сразу</span>
+                        </label>
+                    </div>
+                    <div id="chatBox" style="background:#0f172a; border:1px solid #1e293b; border-radius:12px; padding:12px; max-height:240px; overflow-y:auto; font-size:13px; margin-bottom:10px;">
+                        <div style="color:#94a3b8;">Напиши или надиктуй тренировку, например: <em>«Гоблет-приседания 25 кг: два по 15, третий 16, четвёртый 20»</em> или <em>«Удали последнюю»</em>.</div>
+                    </div>
+                    <div id="txCard" class="hidden" style="background:#0b1324; border:1px solid #34d399; border-radius:12px; padding:12px; margin-bottom:10px; font-size:12px;">
+                        <div style="font-weight:700; color:#34d399; margin-bottom:6px;">Чек тренировки перед записью:</div>
+                        <div id="txDetails" style="color:#e2e8f0; margin-bottom:8px;"></div>
+                        <label style="display:flex; align-items:center; gap:6px; font-size:11px; color:#94a3b8; margin-bottom:8px; cursor:pointer;">
+                            <input id="dontAskAgain" type="checkbox">
+                            <span>Больше не спрашивать (записывать сразу)</span>
+                        </label>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                            <button onclick="confirmTx()" class="btn-primary btn-green" style="padding:8px;">Да, записать</button>
+                            <button onclick="cancelTx()" class="tile-btn" style="padding:8px; color:#fb7185; border-color:#fb7185;">Отмена</button>
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:6px;">
+                        <input id="chatInput" type="text" placeholder="Гоблет 25 кг: 2 по 15, 3-й 16..." style="margin-bottom:0;" onkeydown="if(event.key==='Enter') sendChat()">
+                        <button onclick="startVoice()" title="Голосовой ввод" class="tile-btn" style="padding:0 12px;">🎤</button>
+                        <button onclick="sendChat()" class="btn-primary" style="width:auto; padding:0 16px;">OK</button>
+                    </div>
                 </div>
-                <button onclick="saveWorkout()" class="btn-primary btn-green">Сохранить в базу</button>
-                <p id="saveStatus" class="hidden" style="color:#34d399; font-size:12px; text-align:center; margin-top:10px;"></p>
+
+                <div class="card" style="height:fit-content; margin-bottom:0;">
+                    <h2 style="font-size:18px; color:#34d399; margin-bottom:14px;">Ручная запись подхода</h2>
+                    <label>Упражнение (нажми на карточку слева)</label>
+                    <input id="exName" type="text" placeholder="Например: Гоблет-приседания">
+                    <div class="row-3">
+                        <div><label>Подходы</label><input id="exSets" type="number" value="4"></div>
+                        <div><label>Повторы</label><input id="exReps" type="number" value="15"></div>
+                        <div><label>Вес (кг)</label><input id="exWeight" type="number" step="0.5" placeholder="0"></div>
+                    </div>
+                    <button onclick="saveWorkout()" class="btn-primary btn-green">Сохранить в базу</button>
+                    <p id="saveStatus" class="hidden" style="color:#34d399; font-size:12px; text-align:center; margin-top:10px;"></p>
+                </div>
             </div>
         </div>
     </main>

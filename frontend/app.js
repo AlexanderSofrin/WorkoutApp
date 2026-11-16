@@ -118,3 +118,129 @@ async function saveWorkout() {
         loadSupport();
     }
 }
+
+let pendingTx = null;
+let autoCommit = localStorage.getItem("wv_autocommit") === "true";
+document.getElementById("autoCommitToggle").checked = autoCommit;
+
+function toggleAutoCommit() {
+    autoCommit = document.getElementById("autoCommitToggle").checked;
+    localStorage.setItem("wv_autocommit", autoCommit);
+}
+
+function appendChat(sender, text, color = "#e2e8f0") {
+    const box = document.getElementById("chatBox");
+    const div = document.createElement("div");
+    div.style.marginTop = "8px";
+    div.style.color = color;
+    div.innerHTML = "<strong>" + sender + ":</strong> " + text;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+}
+
+async function sendChat() {
+    const inp = document.getElementById("chatInput");
+    const text = inp.value.trim();
+    if (!text) return;
+    inp.value = "";
+    appendChat("Ты", text, "#38bdf8");
+
+    if (pendingTx && ["да", "ок", "записывай", "верно", "всё отлично", "все отлично"].includes(text.toLowerCase())) {
+        return confirmTx();
+    }
+    if (pendingTx && ["нет", "отмена", "отмени"].includes(text.toLowerCase())) {
+        return cancelTx();
+    }
+
+    const res = await fetch("/coach/chat", {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ message: text })
+    });
+    const d = await res.json();
+
+    if (d.action === "confirm_workout" && d.transaction) {
+        pendingTx = d.transaction;
+        if (autoCommit) {
+            return confirmTx();
+        }
+        const rows = d.transaction.entries.map(e => `${e.sets} подх. × ${e.reps} повт. (${e.weight} кг)`).join("<br>");
+        document.getElementById("txDetails").innerHTML =
+            `<strong>${d.transaction.exercise_name}</strong><br>${rows}<br>` +
+            `<span style="color:#fbbf24;">Итого: ${d.transaction.summary.total_sets} подх., ${d.transaction.summary.total_reps} повт., тоннаж ${d.transaction.summary.tonnage_kg} кг</span>`;
+        document.getElementById("txCard").classList.remove("hidden");
+        appendChat("Наставник", d.reply, "#34d399");
+    } else {
+        appendChat("Наставник", d.reply, "#e2e8f0");
+        if (d.action === "deleted" || d.action === "weight_updated") {
+            await Promise.all([loadSupport(), loadNutrition()]);
+        }
+    }
+}
+
+async function confirmTx() {
+    if (!pendingTx) return;
+    if (document.getElementById("dontAskAgain").checked) {
+        autoCommit = true;
+        localStorage.setItem("wv_autocommit", "true");
+        document.getElementById("autoCommitToggle").checked = true;
+    }
+    const txToSend = pendingTx;
+    pendingTx = null;
+    document.getElementById("txCard").classList.add("hidden");
+
+    const res = await fetch("/coach/chat/commit", {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ exercise_name: txToSend.exercise_name, entries: txToSend.entries })
+    });
+    const d = await res.json();
+    appendChat("Наставник", d.reply, "#34d399");
+    await loadSupport();
+}
+
+function cancelTx() {
+    pendingTx = null;
+    document.getElementById("txCard").classList.add("hidden");
+    appendChat("Наставник", "Запись отменена. Можешь продиктовать заново!", "#fb7185");
+}
+
+function startVoice() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+        appendChat("Система", "Голосовой ввод не поддерживается этим браузером — используй клавиатуру или микрофон на клавиатуре телефона.", "#fbbf24");
+        return;
+    }
+    const btn = document.querySelector("button[onclick='startVoice()']");
+    const recog = new SpeechRecognition();
+    recog.lang = "ru-RU";
+    recog.interimResults = false;
+
+    recog.onstart = () => {
+        if (btn) { btn.style.borderColor = "#fb7185"; btn.textContent = "🔴"; }
+        appendChat("Микрофон", "Слушаю... Говори фразу целиком (например: «Гоблет-приседания 25 кг 4 по 15»).", "#fbbf24");
+    };
+
+    recog.onresult = (e) => {
+        const transcript = e.results[0][0].transcript;
+        document.getElementById("chatInput").value = transcript;
+        sendChat();
+    };
+
+    recog.onerror = (e) => {
+        if (e.error === "not-allowed") {
+            appendChat("Микрофон", "Доступ к микрофону запрещён браузером. Нажми на значок слева от localhost:8000 в адресной строке и разреши микрофон.", "#fb7185");
+        } else if (e.error === "no-speech") {
+            appendChat("Микрофон", "Речь не распознана — попробуй сказать чуть громче или проверь, подключён ли микрофон к ПК.", "#fbbf24");
+        } else {
+            appendChat("Микрофон", "Ошибка распознавания (" + e.error + "). На стационарном ПК без гарнитуры удобнее вводить текстом.", "#fbbf24");
+        }
+    };
+
+    recog.onend = () => {
+        if (btn) { btn.style.borderColor = "#334155"; btn.textContent = "🎤"; }
+    };
+
+    recog.start();
+}
+
