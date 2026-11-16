@@ -344,6 +344,7 @@ def _detect_muscle_group(exercise_name: str) -> str | None:
 @app.get("/workouts/recommend")
 def recommend_workout(
     target_muscle: str | None = None,
+    location: str | None = None,
     protect_lower_back: bool = False,
     protect_knees: bool = False,
     protect_elbows: bool = False,
@@ -355,7 +356,7 @@ def recommend_workout(
     Умный советник на сегодня:
     1. Проверяет журнал тренировок и таймер восстановления (по умолчанию 72 часа).
     2. Учитывает зоны контроля суставов из профиля (injury_notes) и параметров запроса.
-    3. Подбирает оптимальную группу мышц и безопасные упражнения из Умной корзины.
+    3. Подбирает оптимальную группу мышц, площадку и безопасные упражнения из Умной корзины.
     """
     now = datetime.utcnow()
 
@@ -363,7 +364,7 @@ def recommend_workout(
     notes = (current_user.injury_notes or "").lower()
     safe_back = protect_lower_back or bool(current_user.protect_lower_back) or ("поясниц" in notes) or ("спин" in notes)
     safe_knees = protect_knees or bool(current_user.protect_knees) or ("колен" in notes)
-    safe_elbows = protect_elbows or bool(current_user.protect_elbows) or ("локт" in notes)
+    safe_elbows = protect_elbows or bool(current_user.protect_elbows) or ("локт" in notes) or ("локот" in notes)
 
     # 2. Анализируем историю тренировок пользователя для расчёта восстановления
     user_workouts = (
@@ -434,7 +435,6 @@ def recommend_workout(
                 f"Отличный выбор! Группа '{MUSCLE_LABELS_RU[chosen_group]}' полностью восстановлена и готова к работе."
             )
     else:
-        # Сортируем отдохнувшие группы: первыми идут те, что отдыхали дольше всех
         ready_groups.sort(key=lambda item: item[1], reverse=True)
         chosen_group = ready_groups[0][0] if ready_groups else "core"
 
@@ -449,7 +449,7 @@ def recommend_workout(
             f"Если хочешь прокачать другую группу — просто укажи её в параметре target_muscle."
         )
 
-    # 4. Достаём безопасные упражнения для выбранной группы из Умной корзины
+    # 4. Достаём безопасные упражнения для выбранной группы и площадки из Умной корзины
     ex_query = db.query(Exercise).filter(Exercise.muscle_group == chosen_group)
     if safe_back:
         ex_query = ex_query.filter(Exercise.safe_for_lower_back.is_(True))
@@ -457,6 +457,29 @@ def recommend_workout(
         ex_query = ex_query.filter(Exercise.safe_for_knees.is_(True))
     if safe_elbows:
         ex_query = ex_query.filter(Exercise.safe_for_elbows.is_(True))
+
+    if location == "home":
+        ex_query = ex_query.filter(
+            (Exercise.equipment.ilike("%гантел%")) |
+            (Exercise.equipment.ilike("%свой вес%")) |
+            (Exercise.equipment.ilike("%коврик%")) |
+            (Exercise.equipment.ilike("%резин%"))
+        )
+    elif location == "street":
+        ex_query = ex_query.filter(
+            (Exercise.equipment.ilike("%турник%")) |
+            (Exercise.equipment.ilike("%брусь%")) |
+            (Exercise.equipment.ilike("%перекладин%")) |
+            (Exercise.equipment.ilike("%свой вес%"))
+        )
+    elif location == "gym":
+        ex_query = ex_query.filter(
+            (Exercise.equipment.ilike("%тренаж%")) |
+            (Exercise.equipment.ilike("%блок%")) |
+            (Exercise.equipment.ilike("%штанг%")) |
+            (Exercise.equipment.ilike("%скамь%")) |
+            (Exercise.equipment.ilike("%гантел%"))
+        )
 
     recommended_exercises = ex_query.all()
 
@@ -474,6 +497,9 @@ def recommend_workout(
         "suggested_exercises_count": len(recommended_exercises),
         "suggested_exercises": recommended_exercises
     }
+
+
+
 
 
 # ==============================================================================================
@@ -824,7 +850,7 @@ def get_psychological_support(
         "mentor_message": core_message,
         "personalized_tone": tone_note,
         "today_micro_step": micro_action,
-        "irreversible_capital": {
+        "training_progress": {
             "total_workout_records": total_entries,
             "total_tonnage_kg": total_tonnage,
             "total_reps_completed": total_reps,
@@ -832,3 +858,20 @@ def get_psychological_support(
             "note": "Этот капитал уже наработан тобой — он никуда не исчезнет ни при каких паузах."
         }
     }
+
+@app.post("/workouts/claim-legacy")
+def claim_legacy_workouts(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Привязывает старые записи тренировок без владельца или с user_id=1 к текущему пользователю."""
+    orphan_workouts = db.query(Workout).filter(
+        (Workout.user_id == None) | (Workout.user_id != current_user.id)
+    ).all()
+    moved = 0
+    for w in orphan_workouts:
+        if w.user_id is None or w.user_id == 1:
+            w.user_id = current_user.id
+            moved += 1
+    db.commit()
+    return {"status": "ok", "attached_workouts": moved}

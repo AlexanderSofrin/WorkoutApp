@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Workout Vault — Умный дневник и Наставник</title>
+    <meta name="theme-color" content="#0b0f19">
+    <link rel="manifest" href="manifest.json">
+    <title>Workout Vault — Персональный дневник тренировок</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -11,7 +13,7 @@
     <header>
         <div>
             <h1>WORKOUT VAULT</h1>
-            <div class="subtitle">Инженерный дневник тренировок, КБЖУ и Психологический щит</div>
+            <div class="subtitle">Персональный дневник тренировок, питания и восстановления</div>
         </div>
         <div id="userBadge" class="hidden">
             <span id="athleteName" class="badge"></span>
@@ -34,7 +36,7 @@
         <div class="card card-shield">
             <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px;">
                 <div>
-                    <div style="font-size:11px; color:#34d399; font-weight:700; text-transform:uppercase;">Психологический щит</div>
+                    <div style="font-size:11px; color:#34d399; font-weight:700; text-transform:uppercase;">Совет наставника на сегодня</div>
                     <h2 id="protocolTitle" style="font-size:20px; margin-top:2px;">Загрузка...</h2>
                 </div>
                 <label style="display:flex; align-items:center; gap:8px; background:#0f172a; padding:8px 12px; border-radius:10px; cursor:pointer; color:#e2e8f0; margin:0;">
@@ -106,6 +108,14 @@
                         <label><input id="safeElbows" type="checkbox" checked onchange="loadRecommendation()"> Локти</label>
                     </div>
                 </div>
+
+                <div class="tiles" style="margin-bottom:6px;">
+                    <button onclick="setLocation('')" class="tile-btn" style="border-color:#38bdf8;">Все площадки</button>
+                    <button onclick="setLocation('home')" class="tile-btn">Дома / Гантели</button>
+                    <button onclick="setLocation('street')" class="tile-btn">Турник / Брусья</button>
+                    <button onclick="setLocation('gym')" class="tile-btn">Тренажёрный зал</button>
+                </div>
+
                 <div class="tiles">
                     <button onclick="loadRecommendation('legs')" class="tile-btn">Ноги</button>
                     <button onclick="loadRecommendation('core')" class="tile-btn">Пресс</button>

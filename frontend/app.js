@@ -1,4 +1,7 @@
 let token = localStorage.getItem("wv_token") || "";
+let currentMuscle = "";
+let currentLocation = "";
+
 if (token) { showDashboard(); }
 
 async function login() {
@@ -32,7 +35,13 @@ async function showDashboard() {
     document.getElementById("loginSection").classList.add("hidden");
     document.getElementById("dashboardSection").classList.remove("hidden");
     document.getElementById("userBadge").classList.remove("hidden");
+    await fetch("/workouts/claim-legacy", { method: "POST", headers: authHeaders() });
     await Promise.all([loadSupport(), loadNutrition(), loadRecommendation()]);
+}
+
+function setLocation(loc) {
+    currentLocation = loc;
+    loadRecommendation(currentMuscle);
 }
 
 async function loadSupport() {
@@ -66,11 +75,13 @@ async function loadNutrition() {
 }
 
 async function loadRecommendation(muscle) {
+    if (muscle !== undefined) currentMuscle = muscle;
     const back = document.getElementById("safeBack").checked;
     const knees = document.getElementById("safeKnees").checked;
     const elbows = document.getElementById("safeElbows").checked;
     let url = "/workouts/recommend?protect_lower_back=" + back + "&protect_knees=" + knees + "&protect_elbows=" + elbows;
-    if (muscle) url += "&target_muscle=" + muscle;
+    if (currentMuscle) url += "&target_muscle=" + currentMuscle;
+    if (currentLocation) url += "&location=" + currentLocation;
 
     const res = await fetch(url, { headers: authHeaders() });
     if (!res.ok) return;
