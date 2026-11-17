@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 from sqlalchemy import func, cast, Date
 from database import SessionLocal, engine
@@ -164,20 +165,21 @@ def init_db():
             db.add_all(starter_exercises)
             db.commit()
 
-
-
         # 2. Настраиваем реальные bcrypt-пароли для основных аккаунтов (id=1 и id=2)
+        alex_pass = os.getenv("ALEX_PASSWORD", "alex2026")
+        wife_pass = os.getenv("WIFE_PASSWORD", "wife2026")
+
         alex = db.query(User).filter(User.id == 1).first()
         if not alex:
-            db.add(User(id=1, username="Александр", password_hash=hash_password("alex2026")))
-        elif alex.password_hash == "default_hash":
-            alex.password_hash = hash_password("alex2026")
+            db.add(User(id=1, username="Александр", password_hash=hash_password(alex_pass)))
+        elif os.getenv("ALEX_PASSWORD"):
+            alex.password_hash = hash_password(alex_pass)
 
         wife = db.query(User).filter(User.id == 2).first()
         if not wife:
-            db.add(User(id=2, username="Супруга", password_hash=hash_password("wife2026")))
-        elif wife.password_hash == "default_hash":
-            wife.password_hash = hash_password("wife2026")
+            db.add(User(id=2, username="Супруга", password_hash=hash_password(wife_pass)))
+        elif os.getenv("WIFE_PASSWORD"):
+            wife.password_hash = hash_password(wife_pass)
 
         # Удаляем тестовый аккаунт, если он был создан при проверке Swagger
         test_user = db.query(User).filter(User.username == "test_atlete").first()

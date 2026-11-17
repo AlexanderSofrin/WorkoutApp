@@ -25,9 +25,10 @@
         <h2 style="margin-bottom: 6px;">Вход в личный кабинет</h2>
         <p class="subtitle" style="margin-bottom: 18px;">Авторизация в системе Workout Vault</p>
         <label>Логин атлета</label>
-        <input id="loginUser" type="text" value="Александр">
+        <input id="loginUser" type="text" placeholder="Введите логин" autocomplete="username">
         <label>Пароль</label>
-        <input id="loginPass" type="password" value="alex2026">
+        <input id="loginPass" type="password" placeholder="Введите пароль" autocomplete="current-password">
+
         <button onclick="login()" class="btn-primary">Войти в систему</button>
         <p id="loginError" class="hidden" style="color:#fb7185; font-size:12px; margin-top:10px; text-align:center;"></p>
     </section>

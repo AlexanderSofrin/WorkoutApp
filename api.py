@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.staticfiles import StaticFiles
@@ -31,6 +32,7 @@ app.mount("/app", StaticFiles(directory="frontend", html=True), name="frontend")
 class UserRegister(BaseModel):
     username: str = Field(min_length=2, max_length=50, description="Логин пользователя")
     password: str = Field(min_length=4, max_length=100, description="Пароль")
+    invite_code: str = Field(default="", description="Секретный код приглашения")
 
 
 class TokenResponse(BaseModel):
@@ -97,6 +99,10 @@ def health_check():
 
 @app.post("/auth/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 def register_user(user_data: UserRegister, db: Session = Depends(get_db)):
+    required_invite = os.getenv("INVITE_CODE", "EMPIRE2026")
+    if user_data.invite_code.strip() != required_invite:
+        raise HTTPException(status_code=403, detail="Регистрация закрыта: неверный код приглашения")
+
     existing = db.query(User).filter(User.username == user_data.username.strip()).first()
     if existing:
         raise HTTPException(status_code=400, detail="Пользователь с таким логином уже существует")
