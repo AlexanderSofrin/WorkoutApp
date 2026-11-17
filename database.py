@@ -9,6 +9,9 @@ load_dotenv()
 
 # 1. Если задан готовый DATABASE_URL (например, внутри Docker-контейнера) — берём его
 DATABASE_URL = os.getenv("DATABASE_URL")
+if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
 
 # 2. Иначе собираем строку подключения из локальных настроек PostgreSQL 17
 if not DATABASE_URL:
