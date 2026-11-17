@@ -11,6 +11,7 @@ from auth import get_db, hash_password, verify_password, create_access_token, ge
 from models import init_db
 from coach_parser import parse_weight_update, parse_workout_command
 from ai_coach import generate_coach_reply
+from fastapi.responses import RedirectResponse
 
 from datetime import datetime, timedelta
 
@@ -88,9 +89,10 @@ class ExerciseCreate(BaseModel):
 # СИСТЕМНЫЙ ЭНДПОИНТ
 # ==============================================================================================
 
-@app.get("/")
-def health_check():
-    return {"status": "online", "database": "PostgreSQL 17", "version": "2.2.0", "auth": "JWT Enabled"}
+@app.get("/", include_in_schema=False)
+async def root():
+    return RedirectResponse(url="/app")
+
 
 
 # ==============================================================================================
@@ -1073,3 +1075,4 @@ def ask_personal_ai_coach(
         "mode": result["mode"],
         "reply": result["reply"]
     }
+

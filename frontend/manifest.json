@@ -2,8 +2,18 @@
   "name": "Workout Vault — Дневник и Наставник",
   "short_name": "Workout Vault",
   "start_url": "/app/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0b0f19",
   "theme_color": "#0b0f19",
-  "orientation": "portrait"
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/app/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
 }
+
