@@ -32,6 +32,8 @@ class User(Base):
     protect_lower_back = Column(Boolean, default=True)          # Беречь поясницу
     protect_knees = Column(Boolean, default=True)               # Беречь колени
     protect_elbows = Column(Boolean, default=True)              # Беречь локти
+    experience_years = Column(Float, default=1.0)               # Тренировочный стаж в годах
+    manual_daily_burn = Column(Integer, nullable=True)          # Ручной средний расход ккал (для опытных атлетов)
 
     # Связь: у одного пользователя может быть много тренировок
     workouts = relationship("Workout", back_populates="owner")

@@ -81,6 +81,8 @@ def init_db():
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS protect_lower_back BOOLEAN DEFAULT TRUE;",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS protect_knees BOOLEAN DEFAULT TRUE;",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS protect_elbows BOOLEAN DEFAULT TRUE;",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS experience_years FLOAT DEFAULT 1.0;",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS manual_daily_burn INTEGER;",
 
         ]
         for q in alter_queries:

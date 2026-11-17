@@ -10,8 +10,8 @@ from auth import get_db, hash_password, verify_password, create_access_token, ge
 from models import init_db
 from coach_parser import parse_weight_update, parse_workout_command
 from ai_coach import generate_coach_reply
-from datetime import datetime
 
+from datetime import datetime, timedelta
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -52,6 +52,9 @@ class OnboardingRequest(BaseModel):
     work_type: str = Field(default="mixed", pattern="^(sedentary|mixed|physical)$", description="Характер работы")
     work_schedule: str = Field(default="2/2", description="График работы: 2/2, 5/2 или free")
     workouts_per_week: int = Field(default=3, ge=0, le=14, description="Тренировок в неделю")
+    experience_years: float = Field(default=1.0, ge=0, le=50, description="Тренировочный стаж в годах")
+    manual_daily_burn: int | None = Field(default=None, ge=1000, le=8000, description="Ручной средний расход ккал/день")
+
     avatar_url: str | None = Field(default=None, max_length=500, description="Ссылка или путь к фото профиля")
     support_style: str = Field(default="engineering", pattern="^(engineering|gentle|zodiac)$", description="Стиль поддержки")
     protect_lower_back: bool = Field(default=True, description="Беречь поясницу")
@@ -158,6 +161,9 @@ def _serialize_user_profile(user: User) -> dict:
         "protect_elbows": bool(user.protect_elbows),
         "injury_notes": user.injury_notes,
         "is_onboarded": bool(user.is_onboarded),
+        "experience_years": user.experience_years if user.experience_years is not None else 1.0,
+        "manual_daily_burn": user.manual_daily_burn,
+
     }
 
 
@@ -179,6 +185,9 @@ def _apply_profile_data(user: User, data: OnboardingRequest) -> None:
     user.protect_knees = data.protect_knees
     user.protect_elbows = data.protect_elbows
     user.injury_notes = data.injury_notes.strip() if data.injury_notes else None
+    user.experience_years = data.experience_years
+    user.manual_daily_burn = data.manual_daily_burn
+
     user.is_onboarded = True
 
 
@@ -624,14 +633,18 @@ def add_exercise(
 # МОДУЛЬ ПИТАНИЯ, КБЖУ И «ЗЕЛЁНОГО КОРИДОРА» ВЕСА (ЭТАП 6)
 # ==============================================================================================
 
+
+
 @app.get("/nutrition/plan")
-def get_nutrition_plan(current_user: User = Depends(get_current_user)):
+def get_nutrition_plan(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """
-    Интеллектуальный расчёт КБЖУ по формуле Миффлина — Сан-Жеора с учётом:
-    - антропометрии (пол, возраст, рост, текущий и целевой вес);
-    - характера работы (sedentary / mixed / physical) и сменного графика (2/2, 5/2);
-    - цели атлета (cut — сушка, recomp — рекомпозиция, bulk — плавный набор);
-    - границ «Зелёного коридора» веса и водно-солевого баланса.
+    Интеллектуальный расчёт КБЖУ и примерного меню на день:
+    - учитывает формулу Миффлина — Сан-Жеора, график работы и фактические тренировки за 7 дней;
+    - для опытных атлетов поддерживает ручной средний расход (manual_daily_burn);
+    - формирует готовый шаблон меню под целевую калорийность без принуждения взвешивать каждый грамм.
     """
     if not current_user.weight_kg or not current_user.height_cm or not current_user.age or not current_user.gender:
         raise HTTPException(
@@ -643,6 +656,7 @@ def get_nutrition_plan(current_user: User = Depends(get_current_user)):
     height = current_user.height_cm
     age = current_user.age
     target_weight = current_user.target_weight_kg or weight
+    exp_years = current_user.experience_years if current_user.experience_years is not None else 1.0
 
     # 1. Базовый обмен веществ (BMR) по формуле Миффлина — Сан-Жеора
     if current_user.gender == "male":
@@ -650,22 +664,40 @@ def get_nutrition_plan(current_user: User = Depends(get_current_user)):
     else:
         bmr = (10 * weight) + (6.25 * height) - (5 * age) - 161
 
-    # 2. Коэффициент дневной активности (характер работы + тренировки)
+    # 2. Коэффициент бытовой активности + фактические тренировки из базы за последние 7 дней
     work_factors = {
         "sedentary": 1.25,
         "mixed": 1.40,
         "physical": 1.55,
     }
     base_factor = work_factors.get(current_user.work_type or "mixed", 1.40)
-    workout_bonus = min((current_user.workouts_per_week or 3) * 0.04, 0.25)
-    tdee = bmr * (base_factor + workout_bonus)
 
-    # 3. Корректировка под цель (бережный режим без резких скачков)
+    week_ago = datetime.utcnow() - timedelta(days=7)
+    recent_workouts = (
+        db.query(Workout)
+        .filter(Workout.user_id == current_user.id, Workout.created_at >= week_ago)
+        .all()
+    )
+    # Считаем средний бонус от реальных тренировок за неделю (или плановый, если записей ещё нет)
+    if recent_workouts:
+        weekly_sets = sum(w.sets for w in recent_workouts)
+        weekly_tonnage = sum((w.sets * w.reps * (w.weight or 0)) for w in recent_workouts)
+        daily_workout_kcal = round((weekly_sets * 18 + weekly_tonnage * 0.04) / 7)
+    else:
+        daily_workout_kcal = round(bmr * min((current_user.workouts_per_week or 3) * 0.04, 0.25))
+
+    auto_tdee = round(bmr * base_factor + daily_workout_kcal)
+
+    # Если опытный атлет задал свой расход вручную — опираемся на него
+    is_manual_burn = bool(current_user.manual_daily_burn and current_user.manual_daily_burn > 0)
+    tdee = current_user.manual_daily_burn if is_manual_burn else auto_tdee
+
+    # 3. Корректировка под цель (щадящий здоровый коридор)
     goal = current_user.goal or "recomp"
     goal_multipliers = {
-        "cut": 0.85,      # Мягкий дефицит -15% для сохранения мышц
+        "cut": 0.85,      # Бережный дефицит -15% для сохранения мышц
         "recomp": 1.00,   # Поддержание и рекомпозиция
-        "bulk": 1.08,     # Плавный чистый профицит +8% (как прибавка +100 г риса)
+        "bulk": 1.08,     # Плавный чистый профицит +8%
     }
     goal_labels_ru = {
         "cut": "Снижение жировой прослойки (бережный дефицит)",
@@ -673,7 +705,8 @@ def get_nutrition_plan(current_user: User = Depends(get_current_user)):
         "bulk": "Плавный качественный набор массы",
     }
 
-    target_calories = round(tdee * goal_multipliers.get(goal, 1.0))
+    min_safe_kcal = 1350 if current_user.gender == "female" else 1650
+    target_calories = max(round(tdee * goal_multipliers.get(goal, 1.0)), min_safe_kcal)
 
     # 4. Расчёт белков, жиров и углеводов (в граммах)
     protein_per_kg = 2.0 if goal in ("cut", "recomp") else 1.8
@@ -684,21 +717,54 @@ def get_nutrition_plan(current_user: User = Depends(get_current_user)):
     remaining_kcal = max(target_calories - (protein_g * 4 + fat_g * 9), 200)
     carbs_g = round(remaining_kcal / 4)
 
-    # 5. Распределение под сменный график (для 2/2: больше углеводов днём в смену, легче вечером)
+    # 5. Примерное меню на день под целевой калораж и БЖУ пользователя
+    ratio = target_calories / 2000.0
+    oats_g = max(round((60 * ratio) / 5) * 5, 35)
+    rice_g = max(round((80 * ratio) / 5) * 5, 45)
+    meat_g = max(round((170 * ratio) / 10) * 10, 120)
+    curd_g = max(round((180 * ratio) / 10) * 10, 120)
+
+    sample_daily_menu = [
+        {
+            "meal": "Завтрак",
+            "kcal": round(target_calories * 0.27),
+            "protein_g": round(protein_g * 0.25),
+            "items": f"Каша на воде ({oats_g} г сухой крупы) + 3 варёных яйца (или 1 порция протеина)",
+        },
+        {
+            "meal": "Обед",
+            "kcal": round(target_calories * 0.35),
+            "protein_g": round(protein_g * 0.35),
+            "items": f"Рис или гречка ({rice_g} г сухой крупы) + куриная грудка / индейка ({meat_g} г) + свежие овощи",
+        },
+        {
+            "meal": "Полдник",
+            "kcal": round(target_calories * 0.16),
+            "protein_g": round(protein_g * 0.18),
+            "items": f"Творог 5% ({curd_g} г) или протеиновый коктейль + банан / яблоко",
+        },
+        {
+            "meal": "Ужин",
+            "kcal": round(target_calories * 0.22),
+            "protein_g": round(protein_g * 0.22),
+            "items": f"Рыба или нежирное мясо ({max(meat_g - 20, 100)} г) + тушёные овощи или лёгкий салат",
+        },
+    ]
+
+    # 6. Адаптация под сменный график и «Зелёный коридор» веса
     schedule = current_user.work_schedule or "2/2"
     if schedule == "2/2":
         shift_day_calories = round(target_calories * 1.05)
         rest_day_calories = round(target_calories * 0.95)
         schedule_tip = (
             "График 2/2: в рабочие смены делай упор на сложные углеводы в дневной приём пищи, "
-            "а вечерний приём после смены оставляй лёгким (белок + небольшая порция крупы) для глубокого сна."
+            "а вечерний приём после смены оставляй лёгким (белок + овощи) для глубокого сна."
         )
     else:
         shift_day_calories = target_calories
         rest_day_calories = target_calories
-        schedule_tip = "Стандартный график: распределяй углеводы равномерно на первую половину дня и до/после тренировки."
+        schedule_tip = "Стандартный график: распределяй сложные углеводы на первую половину дня и до/после тренировки."
 
-    # 6. «Зелёный коридор» веса и электролиты
     corridor_min = round(target_weight - 1.5, 1)
     corridor_max = round(target_weight + 1.5, 1)
     water_ml = round(weight * 32)
@@ -706,16 +772,20 @@ def get_nutrition_plan(current_user: User = Depends(get_current_user)):
 
     return {
         "athlete": current_user.full_name or current_user.username,
+        "experience_years": exp_years,
         "goal": goal,
         "goal_ru": goal_labels_ru.get(goal, goal),
         "bmr_kcal": round(bmr),
-        "tdee_maintenance_kcal": round(tdee),
+        "tdee_maintenance_kcal": tdee,
+        "is_manual_burn": is_manual_burn,
+        "daily_workout_bonus_kcal": daily_workout_kcal,
         "daily_target": {
             "calories_kcal": target_calories,
             "protein_g": protein_g,
             "fats_g": fat_g,
             "carbs_g": carbs_g,
         },
+        "sample_daily_menu": sample_daily_menu,
         "schedule_adaptation": {
             "work_schedule": schedule,
             "work_day_kcal": shift_day_calories,
@@ -734,6 +804,7 @@ def get_nutrition_plan(current_user: User = Depends(get_current_user)):
             "note": "Соль распределяй на утренний и дневной приёмы пищи, вечером — минимум для защиты от задержки жидкости."
         }
     }
+
 
 # ==============================================================================================
 # МОДУЛЬ «ПСИХОЛОГИЧЕСКИЙ ЩИТ» И ЖИВОЙ ГОЛОС НАСТАВНИКА (ЭТАП 7)
