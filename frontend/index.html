@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0b0f19">
     <link rel="manifest" href="manifest.json">
     <title>Workout Vault — Персональный дневник тренировок</title>
-    <link rel="stylesheet" href="style.css?v=13">
+    <link rel="stylesheet" href="style.css?v=14">
 </head>
 <body>
 <div class="container">
@@ -178,6 +178,11 @@
                 </div>
 
                 <div id="workoutPlanList"></div>
+                                <div id="savePlanBtnBox" class="hidden" style="margin-top:12px;">
+                    <button onclick="saveWholePlan()" class="btn-primary btn-green">Записать всю тренировку в БД</button>
+                    <p id="planSaveStatus" class="hidden" style="color:#34d399; font-size:12px; text-align:center; margin-top:8px;"></p>
+                </div>
+
             </div>
 
             <div class="grid-main">
@@ -294,7 +299,7 @@
         </section>
     </main>
 </div>
-<script src="app.js?v=13"></script>
+<script src="app.js?v=14"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/app/sw.js');

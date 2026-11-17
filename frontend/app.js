@@ -53,8 +53,19 @@ async function showDashboard() {
 
 function setLocation(loc) {
     currentLocation = loc;
+    document.querySelectorAll("#tab-workout .tiles:nth-of-type(1) .tile-btn").forEach(btn => {
+        const isMatch = btn.getAttribute("onclick") === `setLocation('${loc}')`;
+        btn.style.borderColor = isMatch ? "#38bdf8" : "";
+        btn.style.background = isMatch ? "rgba(56,189,248,0.18)" : "";
+    });
     loadRecommendation(currentMuscle);
 }
+
+function openVideoTech(name) {
+    const query = encodeURIComponent(name + " правильная техника выполнения упражнение");
+    window.open("https://youtube.com" + query, "_blank", "noopener");
+}
+
 
 async function loadSupport() {
     const tired = document.getElementById("tiredCheckbox").checked;
@@ -71,47 +82,16 @@ async function loadSupport() {
     document.getElementById("totalReps").textContent = d.training_progress.total_reps_completed;
 }
 
-async function loadNutrition() {
-    const res = await fetch("/nutrition/plan", { headers: authHeaders() });
-    if (!res.ok) return;
-    const d = await res.json();
-
-    document.getElementById("goalLabel").textContent = d.goal_ru;
-    document.getElementById("dailyBurnVal").textContent = d.tdee_maintenance_kcal + " ккал";
-    document.getElementById("kcalTargetSub").textContent =
-        "Целевое значение: " + d.daily_target.calories_kcal + " ккал" +
-        (d.is_manual_burn ? " (ручной ввод)" : " (тренировки: +" + (d.daily_workout_bonus_kcal || 0) + " ккал)");
-
-    document.getElementById("macrosInfo").textContent =
-        d.daily_target.protein_g + "Б / " + d.daily_target.fats_g + "Ж / " + d.daily_target.carbs_g + "У";
-    document.getElementById("kcalShiftInfo").textContent =
-        "Смена: " + d.schedule_adaptation.work_day_kcal + " | Вых: " + d.schedule_adaptation.rest_day_kcal;
-
-    document.getElementById("corridorRange").textContent = d.green_corridor.safe_range_kg;
-    document.getElementById("currentWeightInfo").textContent = "Сейчас: " + d.green_corridor.current_weight_kg + " кг";
-    document.getElementById("waterInfo").textContent = d.hydration_and_electrolytes.water_ml_per_day + " мл";
-    document.getElementById("saltInfo").textContent = "Соль: " + d.hydration_and_electrolytes.salt_g_per_day + " г/сут";
-    document.getElementById("scheduleCoachTip").textContent = d.schedule_adaptation.coach_tip;
-
-    const menuBox = document.getElementById("sampleMenuList");
-    if (menuBox && d.sample_daily_menu) {
-        menuBox.innerHTML = "";
-        d.sample_daily_menu.forEach(m => {
-            const row = document.createElement("div");
-            row.className = "meal-row";
-            row.innerHTML =
-                `<label style="display:flex; align-items:flex-start; gap:10px; margin:0; cursor:pointer; flex:1; color:#e2e8f0;">` +
-                `<input type="checkbox" style="margin-top:4px; width:18px; height:18px;" onchange="this.closest('.meal-row').classList.toggle('done', this.checked)">` +
-                `<div><strong style="color:#fbbf24;">${m.meal}</strong> <span style="color:#38bdf8; font-size:12px;">(~${m.kcal} ккал • ${m.protein_g} г белка)</span>` +
-                `<div style="font-size:12px; color:#cbd5e1; margin-top:2px;">${m.items}</div></div>` +
-                `</label>`;
-            menuBox.appendChild(row);
-        });
-    }
-}
-
 async function loadRecommendation(muscle) {
-    if (muscle !== undefined) currentMuscle = muscle;
+    if (muscle !== undefined) {
+        currentMuscle = (currentMuscle === muscle && muscle !== "") ? "" : muscle;
+    }
+    document.querySelectorAll("#tab-workout .tiles:nth-of-type(2) .tile-btn").forEach(btn => {
+        const isMatch = currentMuscle && btn.getAttribute("onclick") === `loadRecommendation('${currentMuscle}')`;
+        btn.style.borderColor = isMatch ? "#38bdf8" : "";
+        btn.style.background = isMatch ? "rgba(56,189,248,0.18)" : "";
+    });
+
     const back = document.getElementById("safeBack").checked;
     const knees = document.getElementById("safeKnees").checked;
     const elbows = document.getElementById("safeElbows").checked;
@@ -127,14 +107,16 @@ async function loadRecommendation(muscle) {
     const list = document.getElementById("exercisesList");
     list.innerHTML = "";
     d.suggested_exercises.forEach(ex => {
+        const safeName = ex.name.replace(/'/g, "\\'");
         const div = document.createElement("div");
         div.className = "ex-item";
         div.innerHTML =
             `<div class="ex-head">` +
-            `<strong style="font-size:14px; cursor:pointer;" onclick="selectExerciseForForm('${ex.name.replace(/'/g, "\\'")}')">${ex.name}</strong>` +
-            `<div style="display:flex; gap:6px; align-items:center;">` +
+            `<strong style="font-size:14px; cursor:pointer;" onclick="selectExerciseForForm('${safeName}')">${ex.name}</strong>` +
+            `<div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">` +
             `<span class="ex-tag">${ex.equipment}</span>` +
-            `<button class="icon-btn" title="Добавить в план тренировки" onclick="addToPlan('${ex.name.replace(/'/g, "\\'")}')">＋</button>` +
+            `<button class="icon-btn" style="width:auto; padding:0 8px; font-size:11px; color:#38bdf8;" title="Смотреть технику" onclick="openVideoTech('${safeName}')">▶ Видео</button>` +
+            `<button class="icon-btn" style="background:rgba(52,211,153,0.15); border-color:#34d399; color:#34d399;" title="Добавить в тренировку" onclick="addToPlan('${safeName}')">＋</button>` +
             `</div></div>` +
             `<p style="font-size:12px; color:#cbd5e1; margin-top:6px;"><span style="color:#34d399; font-weight:600;">Техника:</span> ${ex.technique_tips}</p>` +
             (ex.common_mistakes ? `<p style="font-size:12px; color:#94a3b8; margin-top:4px;"><span style="color:#fb7185; font-weight:600;">Ошибки:</span> ${ex.common_mistakes}</p>` : "");
@@ -145,15 +127,21 @@ async function loadRecommendation(muscle) {
 function selectExerciseForForm(name) {
     document.getElementById("exName").value = name;
 }
-/* Конструктор тренировки на сегодня: галочки, перестановка, выбор */
+
 function savePlanStorage() {
     localStorage.setItem("wv_plan", JSON.stringify(workoutPlan));
 }
 
 function addToPlan(name) {
-    workoutPlan.push({ name: name, done: false });
+    workoutPlan.push({ name: name, done: false, sets: 3, reps: 15, weight: 0 });
     savePlanStorage();
     renderPlan();
+    if (navigator.vibrate) navigator.vibrate(30);
+}
+
+function updatePlanField(idx, field, val) {
+    workoutPlan[idx][field] = field === "weight" ? (parseFloat(val) || 0) : (parseInt(val) || 0);
+    savePlanStorage();
 }
 
 function togglePlanDone(idx) {
@@ -187,28 +175,66 @@ function clearPlan() {
 
 function renderPlan() {
     const box = document.getElementById("workoutPlanList");
+    const saveBox = document.getElementById("savePlanBtnBox");
     if (!box) return;
     if (workoutPlan.length === 0) {
-        box.innerHTML = `<div style="font-size:12px; color:#94a3b8;">План пуст. Нажми <strong>«＋»</strong> на любом упражнении ниже, чтобы собрать тренировку и отмечать подходы галочками.</div>`;
+        box.innerHTML = `<div style="font-size:12px; color:#94a3b8;">Корзина пуста. Выбери группу мышц ниже и нажми <strong>«＋»</strong>, чтобы собрать тренировку.</div>`;
+        if (saveBox) saveBox.classList.add("hidden");
         return;
     }
+    if (saveBox) saveBox.classList.remove("hidden");
     box.innerHTML = "";
     workoutPlan.forEach((item, idx) => {
+        const safeName = item.name.replace(/'/g, "\\'");
+        const sets = item.sets || 3;
+        const reps = item.reps || 15;
+        const weight = item.weight ?? 0;
         const row = document.createElement("div");
         row.className = "plan-row" + (item.done ? " done" : "");
+        row.style.flexDirection = "column";
+        row.style.alignItems = "stretch";
+        row.style.gap = "8px";
         row.innerHTML =
+            `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">` +
             `<label style="display:flex; align-items:center; gap:10px; margin:0; cursor:pointer; flex:1; color:#e2e8f0; font-size:14px;">` +
             `<input type="checkbox" ${item.done ? "checked" : ""} style="width:20px; height:20px;" onchange="togglePlanDone(${idx})">` +
-            `<span onclick="selectExerciseForForm('${item.name.replace(/'/g, "\\'")}')">${idx + 1}. ${item.name}</span>` +
+            `<strong onclick="selectExerciseForForm('${safeName}')">${idx + 1}. ${item.name}</strong>` +
             `</label>` +
             `<div style="display:flex; gap:4px;">` +
+            `<button class="icon-btn" style="width:auto; padding:0 6px; font-size:11px; color:#38bdf8;" onclick="openVideoTech('${safeName}')" title="Видео техники">▶</button>` +
             `<button class="icon-btn" onclick="movePlanItem(${idx}, -1)" title="Выше">↑</button>` +
             `<button class="icon-btn" onclick="movePlanItem(${idx}, 1)" title="Ниже">↓</button>` +
             `<button class="icon-btn" style="color:#fb7185;" onclick="removePlanItem(${idx})" title="Убрать">✕</button>` +
+            `</div></div>` +
+            `<div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; padding-left:30px;">` +
+            `<div><span style="font-size:10px; color:#94a3b8;">Подходы</span><input type="number" value="${sets}" min="1" style="margin:0; padding:6px; font-size:13px;" onchange="updatePlanField(${idx}, 'sets', this.value)"></div>` +
+            `<div><span style="font-size:10px; color:#94a3b8;">Повторы</span><input type="number" value="${reps}" min="1" style="margin:0; padding:6px; font-size:13px;" onchange="updatePlanField(${idx}, 'reps', this.value)"></div>` +
+            `<div><span style="font-size:10px; color:#94a3b8;">Вес (кг)</span><input type="number" step="0.5" value="${weight}" style="margin:0; padding:6px; font-size:13px;" onchange="updatePlanField(${idx}, 'weight', this.value)"></div>` +
             `</div>`;
         box.appendChild(row);
     });
 }
+
+async function saveWholePlan() {
+    if (workoutPlan.length === 0) return;
+    const st = document.getElementById("planSaveStatus");
+    for (const item of workoutPlan) {
+        const payload = {
+            exercise_name: item.name,
+            sets: parseInt(item.sets) || 3,
+            reps: parseInt(item.reps) || 15,
+            weight: parseFloat(item.weight) || 0
+        };
+        await fetch("/workouts/", { method: "POST", headers: authHeaders(), body: JSON.stringify(payload) });
+    }
+    if (st) {
+        st.textContent = `Вся тренировка (${workoutPlan.length} упр.) записана в базу!`;
+        st.classList.remove("hidden");
+        setTimeout(() => st.classList.add("hidden"), 3500);
+    }
+    await Promise.all([loadSupport(), loadNutrition(), loadAnalytics()]);
+}
+
 
 /* Таймер отдыха между подходами */
 function startRestTimer(seconds) {
