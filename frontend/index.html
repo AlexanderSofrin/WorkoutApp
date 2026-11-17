@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0b0f19">
     <link rel="manifest" href="manifest.json">
     <title>Workout Vault — Персональный дневник тренировок</title>
-    <link rel="stylesheet" href="style.css?v=12">
+    <link rel="stylesheet" href="style.css?v=13">
 </head>
 <body>
 <div class="container">
@@ -33,212 +33,266 @@
     </section>
 
     <main id="dashboardSection" class="hidden">
-        <div class="card card-shield">
-            <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px;">
-                <div>
-                    <div style="font-size:11px; color:#34d399; font-weight:700; text-transform:uppercase;">Совет наставника на сегодня</div>
-                    <h2 id="protocolTitle" style="font-size:20px; margin-top:2px;">Загрузка...</h2>
-                </div>
-                <label style="display:flex; align-items:center; gap:8px; background:#0f172a; padding:8px 12px; border-radius:10px; cursor:pointer; color:#e2e8f0; margin:0;">
-                    <input id="tiredCheckbox" type="checkbox" onchange="loadSupport()">
-                    <span>Устал после смены (снизить планку)</span>
-                </label>
-            </div>
-            <p id="mentorMessage" style="font-size:14px; color:#e2e8f0; margin-bottom:8px;"></p>
-            <p id="personalizedTone" style="font-size:12px; color:#38bdf8; margin-bottom:14px;"></p>
-            <div class="grid-4">
-                <div class="stat-box">
-                    <div class="stat-label">Микрошаг дня</div>
-                    <div id="microStep" style="font-size:12px; color:#6ee7b7; margin-top:4px; font-weight:600;"></div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-label">Тренировок в базе</div>
-                    <div id="totalRecords" class="stat-val">0</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-label">Накопленный тоннаж</div>
-                    <div id="totalTonnage" class="stat-val" style="color:#38bdf8;">0 кг</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-label">Всего повторений</div>
-                    <div id="totalReps" class="stat-val" style="color:#fbbf24;">0</div>
-                </div>
-            </div>
-        </div>
+        <!-- Навигация по 3 вкладкам -->
+        <nav class="nav-bar">
+            <button id="nav-home" class="nav-btn active" onclick="switchTab('home')">
+                <span class="nav-icon">🏠</span><span>Главная и Еда</span>
+            </button>
+            <button id="nav-workout" class="nav-btn" onclick="switchTab('workout')">
+                <span class="nav-icon">🏋️</span><span>Тренировка</span>
+            </button>
+            <button id="nav-analytics" class="nav-btn" onclick="switchTab('analytics')">
+                <span class="nav-icon">📊</span><span>Аналитика и ИИ</span>
+            </button>
+        </nav>
 
-        <div class="card">
-            <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px; margin-bottom:14px;">
-                <h2 style="font-size:18px; color:#fbbf24;">Питание, КБЖУ и «Зелёный коридор»</h2>
-                <span id="goalLabel" class="badge" style="background:rgba(251,191,36,0.15); color:#fcd34d;"></span>
+        <!-- ВКЛАДКА 1: ГЛАВНАЯ И ПИТАНИЕ -->
+        <section id="tab-home">
+            <div class="card card-shield">
+                <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px;">
+                    <div>
+                        <div style="font-size:11px; color:#34d399; font-weight:700; text-transform:uppercase;">Совет наставника на сегодня</div>
+                        <h2 id="protocolTitle" style="font-size:19px; margin-top:2px;">Загрузка...</h2>
+                    </div>
+                    <label style="display:flex; align-items:center; gap:8px; background:#0f172a; padding:8px 12px; border-radius:10px; cursor:pointer; color:#e2e8f0; margin:0;">
+                        <input id="tiredCheckbox" type="checkbox" onchange="loadSupport()">
+                        <span>Устал после смены</span>
+                    </label>
+                </div>
+                <p id="mentorMessage" style="font-size:14px; color:#e2e8f0; margin-bottom:6px;"></p>
+                <p id="personalizedTone" style="font-size:12px; color:#38bdf8; margin-bottom:12px;"></p>
+                <div class="grid-4">
+                    <div class="stat-box">
+                        <div class="stat-label">Микрошаг дня</div>
+                        <div id="microStep" style="font-size:12px; color:#6ee7b7; margin-top:4px; font-weight:600;"></div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Накопленный тоннаж</div>
+                        <div id="totalTonnage" class="stat-val" style="color:#38bdf8;">0 кг</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Тренировок в базе</div>
+                        <div id="totalRecords" class="stat-val">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Всего повторений</div>
+                        <div id="totalReps" class="stat-val" style="color:#fbbf24;">0</div>
+                    </div>
+                </div>
             </div>
-            <div class="grid-5">
-                <div class="stat-box">
-                    <div class="stat-label">Цель (средняя)</div>
-                    <div id="kcalTarget" class="stat-val">—</div>
-                    <div id="kcalShiftInfo" class="stat-sub"></div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-label">Б / Ж / У (граммы)</div>
-                    <div id="macrosInfo" class="stat-val" style="color:#38bdf8; font-size:16px;">—</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-label">Зелёный коридор веса</div>
-                    <div id="corridorRange" class="stat-val" style="color:#34d399; font-size:16px;">—</div>
-                    <div id="currentWeightInfo" class="stat-sub"></div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-label">Вода в сутки</div>
-                    <div id="waterInfo" class="stat-val" style="color:#22d3ee;">—</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-label">Соль (утро / день)</div>
-                    <div id="saltInfo" class="stat-val">—</div>
-                </div>
-            </div>
-            <p id="scheduleCoachTip" style="font-size:12px; color:#cbd5e1; background:#0f172a; padding:10px 12px; border-radius:10px; margin-top:12px;"></p>
-        </div>
 
-        <div class="grid-main">
+            <!-- Карточка расхода и примерного меню -->
             <div class="card">
-                <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:10px;">
-                    <h2 style="font-size:18px; color:#38bdf8;">Мышечные плитки и Защита суставов</h2>
-                    <div class="checks">
-                        <label><input id="safeBack" type="checkbox" checked onchange="loadRecommendation()"> Поясница</label>
-                        <label><input id="safeKnees" type="checkbox" checked onchange="loadRecommendation()"> Колени</label>
-                        <label><input id="safeElbows" type="checkbox" checked onchange="loadRecommendation()"> Локти</label>
+                <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px; margin-bottom:12px;">
+                    <h2 style="font-size:18px; color:#fbbf24;">Энергия и Примерное меню на день</h2>
+                    <span id="goalLabel" class="badge" style="background:rgba(251,191,36,0.15); color:#fcd34d;"></span>
+                </div>
+
+                <div class="grid-5">
+                    <div class="stat-box" style="border-color:#38bdf8;">
+                        <div class="stat-label">Средний расход за день</div>
+                        <div id="dailyBurnVal" class="stat-val" style="color:#38bdf8;">—</div>
+                        <div id="kcalTargetSub" class="stat-sub">Целевое значение: —</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Б / Ж / У (ориентир)</div>
+                        <div id="macrosInfo" class="stat-val" style="color:#34d399; font-size:16px;">—</div>
+                        <div id="kcalShiftInfo" class="stat-sub"></div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Зелёный коридор веса</div>
+                        <div id="corridorRange" class="stat-val" style="font-size:16px;">—</div>
+                        <div id="currentWeightInfo" class="stat-sub"></div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Вода / Соль</div>
+                        <div id="waterInfo" class="stat-val" style="color:#22d3ee; font-size:16px;">—</div>
+                        <div id="saltInfo" class="stat-sub"></div>
                     </div>
                 </div>
 
-                <div class="tiles" style="margin-bottom:6px;">
-                    <button onclick="setLocation('')" class="tile-btn" style="border-color:#38bdf8;">Все площадки</button>
-                    <button onclick="setLocation('home')" class="tile-btn">Дома / Гантели</button>
-                    <button onclick="setLocation('street')" class="tile-btn">Турник / Брусья</button>
-                    <button onclick="setLocation('gym')" class="tile-btn">Тренажёрный зал</button>
+                <div style="margin-top:14px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                        <span style="font-size:12px; font-weight:700; color:#cbd5e1; text-transform:uppercase;">Примерное меню под твою цель (без взвешивания до грамма)</span>
+                    </div>
+                    <div id="sampleMenuList"></div>
                 </div>
-
-                <div class="tiles">
-                    <button onclick="loadRecommendation('legs')" class="tile-btn">Ноги</button>
-                    <button onclick="loadRecommendation('core')" class="tile-btn">Пресс</button>
-                    <button onclick="loadRecommendation('back')" class="tile-btn">Спина</button>
-                    <button onclick="loadRecommendation('shoulders')" class="tile-btn">Дельты</button>
-                    <button onclick="loadRecommendation('chest')" class="tile-btn">Грудь</button>
-                    <button onclick="loadRecommendation('arms')" class="tile-btn">Руки</button>
-                </div>
-                <div id="coachWorkoutAdvice" class="tip-box"></div>
-                <div id="exercisesList"></div>
+                <p id="scheduleCoachTip" style="font-size:12px; color:#cbd5e1; background:#0f172a; padding:10px 12px; border-radius:10px; margin-top:12px;"></p>
             </div>
 
-                        <div style="display:flex; flex-direction:column; gap:20px;">
-                <div class="card" style="margin-bottom:0; border-left: 4px solid #38bdf8;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
-                        <h2 style="font-size:18px; color:#38bdf8;">Быстрый чат-дневник</h2>
-                        <label style="display:flex; align-items:center; gap:5px; font-size:11px; color:#94a3b8; margin:0; cursor:pointer;">
-                            <input id="autoCommitToggle" type="checkbox" onchange="toggleAutoCommit()">
-                            <span>Записывать сразу</span>
-                        </label>
+            <!-- Быстрый чат-дневник -->
+            <div class="card" style="border-left: 4px solid #38bdf8;">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
+                    <h2 style="font-size:18px; color:#38bdf8;">Быстрый чат-дневник</h2>
+                    <label style="display:flex; align-items:center; gap:5px; font-size:11px; color:#94a3b8; margin:0; cursor:pointer;">
+                        <input id="autoCommitToggle" type="checkbox" onchange="toggleAutoCommit()">
+                        <span>Записывать сразу</span>
+                    </label>
+                </div>
+                <div id="chatBox" style="background:#0f172a; border:1px solid #1e293b; border-radius:12px; padding:12px; max-height:220px; overflow-y:auto; font-size:13px; margin-bottom:10px;">
+                    <div style="color:#94a3b8;">Напиши или надиктуй тренировку (<em>«Гоблет 25 кг: 2 по 15, 3-й 16»</em>) или обнови вес (<em>«Мой вес 68.5»</em>).</div>
+                </div>
+                <div id="txCard" class="hidden" style="background:#0b1324; border:1px solid #34d399; border-radius:12px; padding:12px; margin-bottom:10px; font-size:12px;">
+                    <div style="font-weight:700; color:#34d399; margin-bottom:6px;">Чек тренировки перед записью:</div>
+                    <div id="txDetails" style="color:#e2e8f0; margin-bottom:8px;"></div>
+                    <label style="display:flex; align-items:center; gap:6px; font-size:11px; color:#94a3b8; margin-bottom:8px; cursor:pointer;">
+                        <input id="dontAskAgain" type="checkbox">
+                        <span>Больше не спрашивать (записывать сразу)</span>
+                    </label>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                        <button onclick="confirmTx()" class="btn-primary btn-green" style="padding:8px;">Да, записать</button>
+                        <button onclick="cancelTx()" class="tile-btn" style="padding:8px; color:#fb7185; border-color:#fb7185;">Отмена</button>
                     </div>
-                    <div id="chatBox" style="background:#0f172a; border:1px solid #1e293b; border-radius:12px; padding:12px; max-height:240px; overflow-y:auto; font-size:13px; margin-bottom:10px;">
-                        <div style="color:#94a3b8;">Напиши или надиктуй тренировку, например: <em>«Гоблет-приседания 25 кг: два по 15, третий 16, четвёртый 20»</em> или <em>«Удали последнюю»</em>.</div>
+                </div>
+                <div style="display:flex; gap:6px;">
+                    <input id="chatInput" type="text" placeholder="Гоблет 25 кг: 2 по 15, 3-й 16..." style="margin-bottom:0;" onkeydown="if(event.key==='Enter') sendChat()">
+                    <button onclick="startVoice()" title="Голосовой ввод" class="tile-btn" style="padding:0 12px;">🎤</button>
+                    <button onclick="sendChat()" class="btn-primary" style="width:auto; padding:0 16px;">OK</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ВКЛАДКА 2: ТРЕНИРОВКА И ПЛАНЕР -->
+        <section id="tab-workout" class="hidden">
+            <!-- Конструктор тренировки на сегодня + Таймер отдыха -->
+            <div class="card" style="border-left: 4px solid #34d399;">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
+                    <h2 style="font-size:18px; color:#34d399;">План тренировки на сегодня</h2>
+                    <button onclick="clearPlan()" class="btn-link">Очистить план</button>
+                </div>
+
+                <div class="timer-strip">
+                    <div>
+                        <span style="font-size:11px; color:#94a3b8; text-transform:uppercase;">Таймер отдыха:</span>
+                        <strong id="restTimerDisplay" style="font-size:20px; color:#38bdf8; margin-left:8px;">00:00</strong>
                     </div>
-                    <div id="txCard" class="hidden" style="background:#0b1324; border:1px solid #34d399; border-radius:12px; padding:12px; margin-bottom:10px; font-size:12px;">
-                        <div style="font-weight:700; color:#34d399; margin-bottom:6px;">Чек тренировки перед записью:</div>
-                        <div id="txDetails" style="color:#e2e8f0; margin-bottom:8px;"></div>
-                        <label style="display:flex; align-items:center; gap:6px; font-size:11px; color:#94a3b8; margin-bottom:8px; cursor:pointer;">
-                            <input id="dontAskAgain" type="checkbox">
-                            <span>Больше не спрашивать (записывать сразу)</span>
-                        </label>
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                            <button onclick="confirmTx()" class="btn-primary btn-green" style="padding:8px;">Да, записать</button>
-                            <button onclick="cancelTx()" class="tile-btn" style="padding:8px; color:#fb7185; border-color:#fb7185;">Отмена</button>
+                    <div class="timer-btns">
+                        <button class="t-btn" onclick="startRestTimer(30)">30с</button>
+                        <button class="t-btn" onclick="startRestTimer(45)">45с</button>
+                        <button class="t-btn" onclick="startRestTimer(60)">1:00</button>
+                        <button class="t-btn" onclick="startRestTimer(90)">1:30</button>
+                        <button class="t-btn" onclick="startRestTimer(120)">2:00</button>
+                        <button class="t-btn" style="color:#fb7185;" onclick="stopRestTimer()">Стоп</button>
+                    </div>
+                </div>
+
+                <div id="workoutPlanList"></div>
+            </div>
+
+            <div class="grid-main">
+                <div class="card">
+                    <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:10px;">
+                        <h2 style="font-size:18px; color:#38bdf8;">Умная корзина и Защита суставов</h2>
+                        <div class="checks">
+                            <label><input id="safeBack" type="checkbox" checked onchange="loadRecommendation()"> Поясница</label>
+                            <label><input id="safeKnees" type="checkbox" checked onchange="loadRecommendation()"> Колени</label>
+                            <label><input id="safeElbows" type="checkbox" checked onchange="loadRecommendation()"> Локти</label>
                         </div>
                     </div>
-                    <div style="display:flex; gap:6px;">
-                        <input id="chatInput" type="text" placeholder="Гоблет 25 кг: 2 по 15, 3-й 16..." style="margin-bottom:0;" onkeydown="if(event.key==='Enter') sendChat()">
-                        <button onclick="startVoice()" title="Голосовой ввод" class="tile-btn" style="padding:0 12px;">🎤</button>
-                        <button onclick="sendChat()" class="btn-primary" style="width:auto; padding:0 16px;">OK</button>
+
+                    <div class="tiles" style="margin-bottom:6px;">
+                        <button onclick="setLocation('')" class="tile-btn" style="border-color:#38bdf8;">Все площадки</button>
+                        <button onclick="setLocation('home')" class="tile-btn">Дома / Гантели</button>
+                        <button onclick="setLocation('street')" class="tile-btn">Турник / Брусья</button>
+                        <button onclick="setLocation('gym')" class="tile-btn">Зал</button>
                     </div>
+
+                    <div class="tiles">
+                        <button onclick="loadRecommendation('legs')" class="tile-btn">Ноги</button>
+                        <button onclick="loadRecommendation('core')" class="tile-btn">Пресс</button>
+                        <button onclick="loadRecommendation('back')" class="tile-btn">Спина</button>
+                        <button onclick="loadRecommendation('shoulders')" class="tile-btn">Дельты</button>
+                        <button onclick="loadRecommendation('chest')" class="tile-btn">Грудь</button>
+                        <button onclick="loadRecommendation('arms')" class="tile-btn">Руки</button>
+                    </div>
+                    <div id="coachWorkoutAdvice" class="tip-box"></div>
+                    <div id="exercisesList"></div>
                 </div>
 
-                <div class="card" style="height:fit-content; margin-bottom:0;">
-                    <h2 style="font-size:18px; color:#34d399; margin-bottom:14px;">Ручная запись подхода</h2>
-                    <label>Упражнение (нажми на карточку слева)</label>
+                <div class="card" style="height:fit-content;">
+                    <h2 style="font-size:18px; color:#34d399; margin-bottom:14px;">Запись подхода в базу</h2>
+                    <label>Упражнение</label>
                     <input id="exName" type="text" placeholder="Например: Гоблет-приседания">
                     <div class="row-3">
                         <div><label>Подходы</label><input id="exSets" type="number" value="4"></div>
                         <div><label>Повторы</label><input id="exReps" type="number" value="15"></div>
                         <div><label>Вес (кг)</label><input id="exWeight" type="number" step="0.5" placeholder="0"></div>
                     </div>
-                    <button onclick="saveWorkout()" class="btn-primary btn-green">Сохранить в базу</button>
+                    <button onclick="saveWorkout()" class="btn-primary btn-green">Сохранить подход в БД</button>
                     <p id="saveStatus" class="hidden" style="color:#34d399; font-size:12px; text-align:center; margin-top:10px;"></p>
                 </div>
             </div>
-        </div>
-                <div class="grid-main" style="margin-top: 20px;">
-            <div class="card" style="margin-bottom: 0;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                    <h2 style="font-size:18px; color:#fbbf24;">Аналитический центр: Личные рекорды</h2>
-                    <span class="stat-sub">Топ показателей из базы</span>
+        </section>
+
+        <!-- ВКЛАДКА 3: АНАЛИТИКА И ИИ-ТРЕНЕР -->
+        <section id="tab-analytics" class="hidden">
+            <div class="card" style="border-left: 4px solid #a855f7;">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
+                    <h2 style="font-size:18px; color:#c084fc;">Персональный ИИ-тренер</h2>
+                    <label style="display:flex; align-items:center; gap:5px; font-size:11px; color:#94a3b8; margin:0; cursor:pointer;">
+                        <input id="ttsToggle" type="checkbox" checked>
+                        <span>🔊 Озвучивать</span>
+                    </label>
                 </div>
-                <div class="table-wrap" style="max-height: 300px; overflow-y: auto;">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Упражнение</th>
-                                <th>Макс. вес</th>
-                                <th>Макс. повторы</th>
-                                <th>Сессий</th>
-                            </tr>
-                        </thead>
-                        <tbody id="recordsTableBody">
-                            <tr><td colspan="4" style="color:#64748b;">Загрузка рекордов...</td></tr>
-                        </tbody>
-                    </table>
+                <div id="aiCoachBox" style="background:#0f172a; border:1px solid #1e293b; border-radius:12px; padding:12px; max-height:220px; overflow-y:auto; font-size:13px; margin-bottom:10px;">
+                    <div style="color:#cbd5e1;">Спроси меня о чём угодно: <em>«Что сегодня качать?»</em>, <em>«Хватает ли мне калорий и риса?»</em> или <em>«Устал после смены»</em>.</div>
+                </div>
+                <div style="display:flex; gap:6px;">
+                    <input id="aiCoachInput" type="text" placeholder="Задай вопрос тренеру..." style="margin-bottom:0;" onkeydown="if(event.key==='Enter') askAiCoach()">
+                    <button onclick="startAiVoice()" title="Спросить голосом" class="tile-btn" style="padding:0 12px;">🎙️</button>
+                    <button onclick="askAiCoach()" class="btn-primary" style="width:auto; padding:0 16px; background:#a855f7; color:#fff;">Спросить</button>
                 </div>
             </div>
 
-            <div class="card" style="margin-bottom: 0;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                    <h2 style="font-size:18px; color:#38bdf8;">Журнал тренировок</h2>
-                    <span class="stat-sub">Последние 15 записей</span>
-                </div>
-                <div class="table-wrap" style="max-height: 300px; overflow-y: auto;">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Дата</th>
-                                <th>Упражнение</th>
-                                <th>Подх × Повт</th>
-                                <th>Вес</th>
-                                <th>Тоннаж</th>
-                            </tr>
-                        </thead>
-                        <tbody id="historyTableBody">
-                            <tr><td colspan="5" style="color:#64748b;">Загрузка истории...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-                        <div class="card" style="margin-bottom:0; border-left: 4px solid #a855f7;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
-                        <h2 style="font-size:18px; color:#c084fc;">Персональный ИИ-тренер</h2>
-                        <label style="display:flex; align-items:center; gap:5px; font-size:11px; color:#94a3b8; margin:0; cursor:pointer;">
-                            <input id="ttsToggle" type="checkbox" checked>
-                            <span>🔊 Озвучивать</span>
-                        </label>
+            <div class="grid-main">
+                <div class="card" style="margin-bottom: 0;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                        <h2 style="font-size:18px; color:#fbbf24;">Личные рекорды</h2>
+                        <span class="stat-sub">Топ показателей из базы</span>
                     </div>
-                    <div id="aiCoachBox" style="background:#0f172a; border:1px solid #1e293b; border-radius:12px; padding:12px; max-height:220px; overflow-y:auto; font-size:13px; margin-bottom:10px;">
-                        <div style="color:#cbd5e1;">Спроси меня о чём угодно: <em>«Что сегодня качать?»</em>, <em>«Хватает ли мне калорий и риса?»</em> или <em>«Устал после смены»</em>.</div>
-                    </div>
-                    <div style="display:flex; gap:6px;">
-                        <input id="aiCoachInput" type="text" placeholder="Задай вопрос тренеру..." style="margin-bottom:0;" onkeydown="if(event.key==='Enter') askAiCoach()">
-                        <button onclick="startAiVoice()" title="Спросить голосом" class="tile-btn" style="padding:0 12px;">🎙️</button>
-                        <button onclick="askAiCoach()" class="btn-primary" style="width:auto; padding:0 16px; background:#a855f7; color:#fff;">Спросить</button>
+                    <div class="table-wrap" style="max-height: 320px; overflow-y: auto;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Упражнение</th>
+                                    <th>Макс. вес</th>
+                                    <th>Макс. повторы</th>
+                                    <th>Сессий</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recordsTableBody">
+                                <tr><td colspan="4" style="color:#64748b;">Загрузка рекордов...</td></tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
 
+                <div class="card" style="margin-bottom: 0;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                        <h2 style="font-size:18px; color:#38bdf8;">Журнал тренировок</h2>
+                        <span class="stat-sub">Последние 15 записей</span>
+                    </div>
+                    <div class="table-wrap" style="max-height: 320px; overflow-y: auto;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Дата</th>
+                                    <th>Упражнение</th>
+                                    <th>Подх × Повт</th>
+                                    <th>Вес</th>
+                                    <th>Тоннаж</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historyTableBody">
+                                <tr><td colspan="5" style="color:#64748b;">Загрузка истории...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
     </main>
 </div>
-<script src="app.js?v=12"></script>
+<script src="app.js?v=13"></script>
 </body>
 </html>
