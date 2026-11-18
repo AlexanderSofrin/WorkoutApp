@@ -230,8 +230,34 @@
             </div>
         </section>
 
-        <!-- ВКЛАДКА 3: АНАЛИТИКА И ИИ-ТРЕНЕР -->
+                <!-- ВКЛАДКА 3: АНАЛИТИКА И ИИ-ТРЕНЕР -->
         <section id="tab-analytics" class="hidden">
+            <!-- Интерактивный календарь тренировок и отдыха -->
+            <div class="card" style="border-left: 4px solid #38bdf8;">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:12px;">
+                    <h2 style="font-size:18px; color:#38bdf8;">Календарь тренировок</h2>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <button onclick="changeCalMonth(-1)" class="icon-btn" title="Предыдущий месяц">◀</button>
+                        <strong id="calMonthTitle" style="font-size:14px; color:#e2e8f0; min-width:120px; text-align:center;">Ноябрь 2026</strong>
+                        <button onclick="changeCalMonth(1)" class="icon-btn" title="Следующий месяц">▶</button>
+                    </div>
+                </div>
+
+                <!-- Дни недели -->
+                <div style="display:grid; grid-template-columns:repeat(7, 1fr); gap:4px; text-align:center; font-size:11px; color:#94a3b8; font-weight:700; margin-bottom:6px;">
+                    <div>ПН</div><div>ВТ</div><div>СР</div><div>ЧТ</div><div>ПТ</div><div style="color:#fbbf24;">СБ</div><div style="color:#fbbf24;">ВС</div>
+                </div>
+
+                <!-- Сетка чисел месяца -->
+                <div id="calendarGrid" style="display:grid; grid-template-columns:repeat(7, 1fr); gap:6px;"></div>
+
+                <!-- Карточка выбранного дня -->
+                <div id="calDayDetails" style="margin-top:12px; background:#0f172a; border:1px solid #1e293b; border-radius:12px; padding:12px; font-size:13px;">
+                    <div style="color:#94a3b8;">Нажми на любой день в календаре, чтобы посмотреть тренировку или статус отдыха.</div>
+                </div>
+            </div>
+
+            <!-- Персональный ИИ-тренер -->
             <div class="card" style="border-left: 4px solid #a855f7;">
                 <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
                     <h2 style="font-size:18px; color:#c084fc;">Персональный ИИ-тренер</h2>
@@ -250,6 +276,7 @@
                 </div>
             </div>
 
+            <!-- Личные рекорды и Журнал ниже -->
             <div class="grid-main">
                 <div class="card" style="margin-bottom: 0;">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
@@ -299,7 +326,7 @@
         </section>
     </main>
 </div>
-<script src="app.js?v=14"></script>
+<script src="app.js?v=15"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/app/sw.js');
@@ -308,3 +335,4 @@
 
 </body>
 </html>
+

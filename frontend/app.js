@@ -457,6 +457,122 @@ async function askAiCoach() {
         speakText(d.reply);
     }
 }
+let allWorkoutsCache = [];
+let calYear = new Date().getFullYear();
+let calMonth = new Date().getMonth();
+let selectedDateStr = new Date().toISOString().slice(0, 10);
+
+function changeCalMonth(delta) {
+    calMonth += delta;
+    if (calMonth < 0) {
+        calMonth = 11;
+        calYear--;
+    } else if (calMonth > 11) {
+        calMonth = 0;
+        calYear++;
+    }
+    renderCalendar();
+}
+
+function selectCalDay(dateStr) {
+    selectedDateStr = dateStr;
+    renderCalendar();
+    renderCalDayDetails(dateStr);
+}
+
+function renderCalendar() {
+    const grid = document.getElementById("calendarGrid");
+    const title = document.getElementById("calMonthTitle");
+    if (!grid || !title) return;
+
+    const monthsRu = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
+    title.textContent = `${monthsRu[calMonth]} ${calYear}`;
+
+    const workoutsByDate = {};
+    allWorkoutsCache.forEach(w => {
+        if (!w.created_at) return;
+        const dKey = new Date(w.created_at).toLocaleDateString("sv-SE");
+        if (!workoutsByDate[dKey]) workoutsByDate[dKey] = [];
+        workoutsByDate[dKey].push(w);
+    });
+
+    const firstDay = new Date(calYear, calMonth, 1).getDay();
+    const startOffset = firstDay === 0 ? 6 : firstDay - 1;
+    const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+    const todayStr = new Date().toLocaleDateString("sv-SE");
+
+    grid.innerHTML = "";
+    for (let i = 0; i < startOffset; i++) {
+        grid.innerHTML += `<div></div>`;
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dStr = `${calYear}-${String(calMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        const hasWorkout = Boolean(workoutsByDate[dStr]);
+        const isSelected = dStr === selectedDateStr;
+        const isToday = dStr === todayStr;
+
+        let bg = "#0f172a";
+        let border = isToday ? "1px solid #38bdf8" : "1px solid #1e293b";
+        let color = "#cbd5e1";
+
+        if (hasWorkout) {
+            bg = "rgba(52, 211, 153, 0.16)";
+            border = isSelected ? "2px solid #34d399" : "1px solid rgba(52, 211, 153, 0.5)";
+            color = "#34d399";
+        } else if (isSelected) {
+            bg = "rgba(56, 189, 248, 0.18)";
+            border = "2px solid #38bdf8";
+            color = "#fff";
+        }
+
+        const dot = hasWorkout ? `<div style="width:5px; height:5px; border-radius:50%; background:#34d399; margin:2px auto 0;"></div>` : `<div style="height:7px;"></div>`;
+
+        grid.innerHTML +=
+            `<button onclick="selectCalDay('${dStr}')" style="background:${bg}; border:${border}; border-radius:10px; padding:6px 2px; cursor:pointer; text-align:center; color:${color}; font-weight:${hasWorkout || isSelected ? '700' : '500'}; font-size:13px;">` +
+            `<div>${day}</div>${dot}` +
+            `</button>`;
+    }
+}
+
+function renderCalDayDetails(dateStr) {
+    const box = document.getElementById("calDayDetails");
+    if (!box) return;
+
+    const parts = dateStr.split("-");
+    const niceDate = `${parts[2]}.${parts[1]}.${parts[0]}`;
+    const dayItems = allWorkoutsCache.filter(w => w.created_at && new Date(w.created_at).toLocaleDateString("sv-SE") === dateStr);
+
+    if (dayItems.length === 0) {
+        box.innerHTML =
+            `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">` +
+            `<strong style="color:#38bdf8;">${niceDate}</strong>` +
+            `<span class="badge" style="background:rgba(148,163,184,0.15); color:#cbd5e1;">День отдыха и восстановления</span>` +
+            `</div>` +
+            `<div style="color:#94a3b8; font-size:12px;">В этот день силовых записей нет — организм восстанавливал мышцы, связки и ЦНС (протокол Zero-Shame).</div>`;
+        return;
+    }
+
+    let totalTon = 0;
+    let rowsHtml = "";
+    dayItems.forEach(w => {
+        const wt = w.weight || 0;
+        const ton = Math.round(w.sets * w.reps * wt * 10) / 10;
+        totalTon += ton;
+        rowsHtml +=
+            `<div style="display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid #1e293b; font-size:12px;">` +
+            `<span style="color:#e2e8f0;"><strong>${w.exercise_name}</strong></span>` +
+            `<span style="color:#34d399;">${w.sets}×${w.reps} • ${wt} кг (${ton} кг)</span>` +
+            `</div>`;
+    });
+
+    box.innerHTML =
+        `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">` +
+        `<strong style="color:#34d399;">Тренировка за ${niceDate}</strong>` +
+        `<span class="badge" style="background:rgba(52,211,153,0.18); color:#34d399;">Тоннаж: ${Math.round(totalTon * 10) / 10} кг</span>` +
+        `</div>` +
+        rowsHtml;
+}
 
 async function loadAnalytics() {
     const [recRes, histRes] = await Promise.all([
@@ -488,10 +604,14 @@ async function loadAnalytics() {
 
     if (histRes.ok) {
         const histData = await histRes.json();
+        allWorkoutsCache = histData.workouts || [];
+        renderCalendar();
+        renderCalDayDetails(selectedDateStr);
+
         const histBody = document.getElementById("historyTableBody");
         if (histBody) {
             histBody.innerHTML = "";
-            const recent = (histData.workouts || []).slice(0, 15);
+            const recent = allWorkoutsCache.slice(0, 15);
             if (recent.length === 0) {
                 histBody.innerHTML = '<tr><td colspan="5" style="color:#64748b;">Журнал пуст</td></tr>';
             } else {
