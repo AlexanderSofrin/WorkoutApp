@@ -480,6 +480,24 @@ function selectCalDay(dateStr) {
     renderCalDayDetails(dateStr);
 }
 
+function estimateWorkoutKcal(items) {
+    if (!items || items.length === 0) return 0;
+    let totalSets = 0;
+    let totalReps = 0;
+    let totalTonnage = 0;
+    items.forEach(w => {
+        const s = w.sets || 1;
+        const r = w.reps || 1;
+        const wt = w.weight || 0;
+        totalSets += s;
+        totalReps += s * r;
+        totalTonnage += s * r * wt;
+    });
+    // Физиологическая оценка для атлета ~67 кг: база разминки + работа по тоннажу + метаболическая работа повторов
+    const kcal = 45 + (totalTonnage * 0.045) + (totalReps * 0.55) + (totalSets * 3.5);
+    return Math.round(kcal);
+}
+
 function renderCalendar() {
     const grid = document.getElementById("calendarGrid");
     const title = document.getElementById("calMonthTitle");
@@ -501,6 +519,9 @@ function renderCalendar() {
     const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
     const todayStr = new Date().toLocaleDateString("sv-SE");
 
+    let monthWorkoutsCount = 0;
+    let monthTotalKcal = 0;
+
     grid.innerHTML = "";
     for (let i = 0; i < startOffset; i++) {
         grid.innerHTML += `<div></div>`;
@@ -508,9 +529,15 @@ function renderCalendar() {
 
     for (let day = 1; day <= daysInMonth; day++) {
         const dStr = `${calYear}-${String(calMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-        const hasWorkout = Boolean(workoutsByDate[dStr]);
+        const dayItems = workoutsByDate[dStr];
+        const hasWorkout = Boolean(dayItems);
         const isSelected = dStr === selectedDateStr;
         const isToday = dStr === todayStr;
+
+        if (hasWorkout) {
+            monthWorkoutsCount++;
+            monthTotalKcal += estimateWorkoutKcal(dayItems);
+        }
 
         let bg = "#0f172a";
         let border = isToday ? "1px solid #38bdf8" : "1px solid #1e293b";
@@ -533,6 +560,18 @@ function renderCalendar() {
             `<div>${day}</div>${dot}` +
             `</button>`;
     }
+
+    let summaryEl = document.getElementById("calMonthSummary");
+    if (!summaryEl) {
+        summaryEl = document.createElement("div");
+        summaryEl.id = "calMonthSummary";
+        summaryEl.style.cssText = "margin-bottom:10px; padding:8px 10px; background:#0f172a; border:1px solid #1e293b; border-radius:10px; font-size:12px; color:#cbd5e1; display:flex; flex-wrap:wrap; justify-content:space-between; gap:6px;";
+        grid.parentNode.insertBefore(summaryEl, grid.previousElementSibling);
+    }
+    const avgKcal = monthWorkoutsCount > 0 ? Math.round(monthTotalKcal / monthWorkoutsCount) : 0;
+    summaryEl.innerHTML =
+        `<span>Тренировок в месяце: <strong style="color:#34d399;">${monthWorkoutsCount}</strong></span>` +
+        `<span>Расход: <strong style="color:#fbbf24;">~${monthTotalKcal} ккал</strong> (ср. <strong>~${avgKcal} ккал</strong>/трен.)</span>`;
 }
 
 function renderCalDayDetails(dateStr) {
@@ -566,13 +605,19 @@ function renderCalDayDetails(dateStr) {
             `</div>`;
     });
 
+    const burnedKcal = estimateWorkoutKcal(dayItems);
+
     box.innerHTML =
-        `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">` +
+        `<div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:6px; margin-bottom:8px;">` +
         `<strong style="color:#34d399;">Тренировка за ${niceDate}</strong>` +
+        `<div style="display:flex; gap:6px; flex-wrap:wrap;">` +
+        `<span class="badge" style="background:rgba(251,191,36,0.16); color:#fbbf24;">🔥 ~${burnedKcal} ккал</span>` +
         `<span class="badge" style="background:rgba(52,211,153,0.18); color:#34d399;">Тоннаж: ${Math.round(totalTon * 10) / 10} кг</span>` +
+        `</div>` +
         `</div>` +
         rowsHtml;
 }
+
 
 async function loadAnalytics() {
     const [recRes, histRes] = await Promise.all([
