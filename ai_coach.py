@@ -117,6 +117,7 @@ def _get_gigachat_access_token(auth_key: str) -> str | None:
     body = urllib.parse.urlencode({"scope": scope}).encode("utf-8")
     req = urllib.request.Request(
         url="https://sberbank.ru",
+
         data=body,
         headers={
             "Content-Type": "application/x-www-form-urlencoded",
@@ -174,6 +175,7 @@ def _call_gigachat_llm(question: str, dossier: dict, window: list[dict], extra_i
 
     req = urllib.request.Request(
         url="https://sberbank.ru",
+
         data=payload,
         headers={
             "Content-Type": "application/json",
