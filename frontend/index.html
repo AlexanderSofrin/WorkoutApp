@@ -5,16 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#0b0f19">
     <link rel="manifest" href="manifest.json">
-    <title>Workout Vault — Персональный дневник тренировок</title>
-    <link rel="stylesheet" href="style.css?v=14">
+    <title>Workout Vault</title>
+    <link rel="stylesheet" href="style.css?v=17">
 </head>
 <body>
 <div class="container">
     <header>
-        <div>
-            <h1>WORKOUT VAULT</h1>
-            <div class="subtitle">Персональный дневник тренировок, питания и восстановления</div>
-        </div>
+        <h1>WORKOUT VAULT</h1>
         <div id="userBadge" class="hidden">
             <span id="athleteName" class="badge"></span>
             <button onclick="logout()" class="btn-link">Выйти</button>
@@ -28,7 +25,6 @@
         <input id="loginUser" type="text" placeholder="Введите логин" autocomplete="username">
         <label>Пароль</label>
         <input id="loginPass" type="password" placeholder="Введите пароль" autocomplete="current-password">
-
         <button onclick="login()" class="btn-primary">Войти в систему</button>
         <p id="loginError" class="hidden" style="color:#fb7185; font-size:12px; margin-top:10px; text-align:center;"></p>
     </section>
@@ -43,7 +39,7 @@
                 <span class="nav-icon">🏋️</span><span>Тренировка</span>
             </button>
             <button id="nav-analytics" class="nav-btn" onclick="switchTab('analytics')">
-                <span class="nav-icon">📊</span><span>Аналитика и ИИ</span>
+                <span class="nav-icon">📊</span><span>Аналитика</span>
             </button>
         </nav>
 
@@ -85,11 +81,11 @@
             <!-- Карточка расхода и примерного меню -->
             <div class="card">
                 <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px; margin-bottom:12px;">
-                    <h2 style="font-size:18px; color:#fbbf24;">Энергия и Примерное меню на день</h2>
+                    <h2 style="font-size:18px; color:#fbbf24;">Энергия и Питание (PostgreSQL)</h2>
                     <span id="goalLabel" class="badge" style="background:rgba(251,191,36,0.15); color:#fcd34d;"></span>
                 </div>
 
-                <div class="grid-5">
+                <div class="grid-4">
                     <div class="stat-box" style="border-color:#38bdf8;">
                         <div class="stat-label">Средний расход за день</div>
                         <div id="dailyBurnVal" class="stat-val" style="color:#38bdf8;">—</div>
@@ -114,109 +110,112 @@
 
                 <div style="margin-top:14px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                        <span style="font-size:12px; font-weight:700; color:#cbd5e1; text-transform:uppercase;">Примерное меню под твою цель (без взвешивания до грамма)</span>
+                        <span style="font-size:12px; font-weight:700; color:#cbd5e1; text-transform:uppercase;">Примерное меню на сегодня (отмечай приёмы пищи)</span>
+                        <span id="nutritionSyncBadge" style="font-size:11px; color:#34d399;"></span>
                     </div>
                     <div id="sampleMenuList"></div>
                 </div>
                 <p id="scheduleCoachTip" style="font-size:12px; color:#cbd5e1; background:#0f172a; padding:10px 12px; border-radius:10px; margin-top:12px;"></p>
             </div>
-
-            <!-- Быстрый чат-дневник -->
-            <div class="card" style="border-left: 4px solid #38bdf8;">
-                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
-                    <h2 style="font-size:18px; color:#38bdf8;">Быстрый чат-дневник</h2>
-                    <label style="display:flex; align-items:center; gap:5px; font-size:11px; color:#94a3b8; margin:0; cursor:pointer;">
-                        <input id="autoCommitToggle" type="checkbox" onchange="toggleAutoCommit()">
-                        <span>Записывать сразу</span>
-                    </label>
-                </div>
-                <div id="chatBox" style="background:#0f172a; border:1px solid #1e293b; border-radius:12px; padding:12px; max-height:220px; overflow-y:auto; font-size:13px; margin-bottom:10px;">
-                    <div style="color:#94a3b8;">Напиши или надиктуй тренировку (<em>«Гоблет 25 кг: 2 по 15, 3-й 16»</em>) или обнови вес (<em>«Мой вес 68.5»</em>).</div>
-                </div>
-                <div id="txCard" class="hidden" style="background:#0b1324; border:1px solid #34d399; border-radius:12px; padding:12px; margin-bottom:10px; font-size:12px;">
-                    <div style="font-weight:700; color:#34d399; margin-bottom:6px;">Чек тренировки перед записью:</div>
-                    <div id="txDetails" style="color:#e2e8f0; margin-bottom:8px;"></div>
-                    <label style="display:flex; align-items:center; gap:6px; font-size:11px; color:#94a3b8; margin-bottom:8px; cursor:pointer;">
-                        <input id="dontAskAgain" type="checkbox">
-                        <span>Больше не спрашивать (записывать сразу)</span>
-                    </label>
-                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                        <button onclick="confirmTx()" class="btn-primary btn-green" style="padding:8px;">Да, записать</button>
-                        <button onclick="cancelTx()" class="tile-btn" style="padding:8px; color:#fb7185; border-color:#fb7185;">Отмена</button>
-                    </div>
-                </div>
-                <div style="display:flex; gap:6px;">
-                    <input id="chatInput" type="text" placeholder="Гоблет 25 кг: 2 по 15, 3-й 16..." style="margin-bottom:0;" onkeydown="if(event.key==='Enter') sendChat()">
-                    <button onclick="startVoice()" title="Голосовой ввод" class="tile-btn" style="padding:0 12px;">🎤</button>
-                    <button onclick="sendChat()" class="btn-primary" style="width:auto; padding:0 16px;">OK</button>
-                </div>
-            </div>
         </section>
 
-        <!-- ВКЛАДКА 2: ТРЕНИРОВКА И ПЛАНЕР -->
+        <!-- ВКЛАДКА 2: ТРЕНЕРСКАЯ И ПЛАНЕР -->
         <section id="tab-workout" class="hidden">
-            <!-- Конструктор тренировки на сегодня + Таймер отдыха -->
-            <div class="card" style="border-left: 4px solid #34d399;">
-                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
-                    <h2 style="font-size:18px; color:#34d399;">План тренировки на сегодня</h2>
-                    <button onclick="clearPlan()" class="btn-link">Очистить план</button>
-                </div>
-
-                <div class="timer-strip">
-                    <div>
-                        <span style="font-size:11px; color:#94a3b8; text-transform:uppercase;">Таймер отдыха:</span>
-                        <strong id="restTimerDisplay" style="font-size:20px; color:#38bdf8; margin-left:8px;">00:00</strong>
+            <!-- 1. ЖИВОЙ ИИ-ТРЕНЕР НА САМОМ ВЕРХУ (С ПОЛНОЭКРАННЫМ РЕЖИМОМ И АВТОТАЙМЕРОМ) -->
+            <div id="coachCard" class="card" style="border-left: 4px solid #a855f7;">
+                <div class="coach-inner-wrap">
+                    <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <h2 style="font-size:18px; color:#c084fc;">ИИ-Тренерская</h2>
+                            <span id="coachMiniTimer" class="badge" style="background:rgba(56,189,248,0.16); color:#38bdf8;">⏱ 00:00</span>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <label style="display:flex; align-items:center; gap:4px; font-size:11px; color:#94a3b8; margin:0; cursor:pointer;">
+                                <input id="ttsToggle" type="checkbox" checked>
+                                <span>🔊 Голос</span>
+                            </label>
+                            <button id="fullscreenCoachBtn" onclick="toggleCoachFullscreen()" class="icon-btn" style="width:auto; padding:0 10px; font-size:12px; color:#c084fc;" title="Развернуть на весь экран">⤢ Весь экран</button>
+                        </div>
                     </div>
-                    <div class="timer-btns">
-                        <button class="t-btn" onclick="startRestTimer(30)">30с</button>
-                        <button class="t-btn" onclick="startRestTimer(45)">45с</button>
-                        <button class="t-btn" onclick="startRestTimer(60)">1:00</button>
-                        <button class="t-btn" onclick="startRestTimer(90)">1:30</button>
-                        <button class="t-btn" onclick="startRestTimer(120)">2:00</button>
-                        <button class="t-btn" style="color:#fb7185;" onclick="stopRestTimer()">Стоп</button>
+
+                    <!-- Быстрые кнопки таймера прямо в тренерской -->
+                    <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
+                        <button class="t-btn" style="padding:4px 9px; min-height:30px;" onclick="startRestTimer(45)">45с</button>
+                        <button class="t-btn" style="padding:4px 9px; min-height:30px;" onclick="startRestTimer(60)">1:00</button>
+                        <button class="t-btn" style="padding:4px 9px; min-height:30px;" onclick="startRestTimer(90)">1:30</button>
+                        <button class="t-btn" style="padding:4px 9px; min-height:30px; color:#fb7185;" onclick="stopRestTimer()">Стоп</button>
+                    </div>
+
+                    <div id="aiCoachBox" style="background:#0f172a; border:1px solid #1e293b; border-radius:12px; padding:12px; max-height:240px; overflow-y:auto; font-size:13px; margin-bottom:10px;">
+                        <div style="color:#cbd5e1;">Я на связи! Диктуй подходы в реальном времени (<em>«Сделал первый на дельты, махи 10 кг на 18»</em>), спрашивай про восстановление или вес.</div>
+                    </div>
+
+                    <div style="display:flex; gap:6px;">
+                        <input id="aiCoachInput" type="text" placeholder="Диктуй подход или задай вопрос..." style="margin-bottom:0;" onkeydown="if(event.key==='Enter') askAiCoach()">
+                        <button onclick="startAiVoice()" title="Голосовой ввод" class="tile-btn" style="padding:0 12px;">🎙️</button>
+                        <button onclick="askAiCoach()" class="btn-primary" style="width:auto; padding:0 16px; background:#a855f7; color:#fff;">OK</button>
+                    </div>
+                </div>
+                        </div>
+
+            <!-- 2. ПЛАН ТРЕНИРОВКИ НА СЕГОДНЯ -->
+            <div class="card" style="border-left: 4px solid #34d399;">
+                <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
+                    <h2 style="font-size:18px; color:#34d399;">План тренировки</h2>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <input id="workoutDateInput" type="date" style="background:#0f172a; border:1px solid #334155; color:#e2e8f0; padding:5px 8px; border-radius:8px; font-size:12px;">
+                        <button onclick="clearPlan()" class="btn-link">Очистить</button>
                     </div>
                 </div>
 
                 <div id="workoutPlanList"></div>
-                                <div id="savePlanBtnBox" class="hidden" style="margin-top:12px;">
+                <div id="savePlanBtnBox" class="hidden" style="margin-top:12px;">
                     <button onclick="saveWholePlan()" class="btn-primary btn-green">Записать всю тренировку в БД</button>
                     <p id="planSaveStatus" class="hidden" style="color:#34d399; font-size:12px; text-align:center; margin-top:8px;"></p>
                 </div>
-
             </div>
 
+            <!-- 3. БЫСТРЫЙ ПОИСК УПРАЖНЕНИЙ С АВТОКОМПЛИТОМ И РУЧНОЙ ВВОД -->
             <div class="grid-main">
                 <div class="card">
-                    <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:10px;">
-                        <h2 style="font-size:18px; color:#38bdf8;">Умная корзина и Защита суставов</h2>
-                        <div class="checks">
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
+                        <h2 style="font-size:18px; color:#38bdf8;">Быстрый подбор упражнений</h2>
+                        <button id="toggleCatalogBtn" onclick="toggleCatalogPanel()" class="btn-link" style="color:#38bdf8;">📂 Каталог</button>
+                    </div>
+
+                    <input id="quickSearchInput" type="text" placeholder="Начни вводить: гоблет, махи, тяга, жим..." oninput="handleQuickSearch(this.value)">
+                    <div id="quickAutocompleteList" class="autocomplete-box hidden"></div>
+
+                    <div style="font-size:11px; color:#94a3b8; margin-bottom:6px;">Частые упражнения (нажми, чтобы добавить в план):</div>
+                    <div id="quickChipsRow" class="chip-row"></div>
+
+                    <div id="fullCatalogPanel" class="hidden" style="margin-top:12px; padding-top:12px; border-top:1px solid #1e293b;">
+                        <div class="checks" style="margin-bottom:8px;">
                             <label><input id="safeBack" type="checkbox" checked onchange="loadRecommendation()"> Поясница</label>
                             <label><input id="safeKnees" type="checkbox" checked onchange="loadRecommendation()"> Колени</label>
                             <label><input id="safeElbows" type="checkbox" checked onchange="loadRecommendation()"> Локти</label>
                         </div>
+                        <div class="tiles" style="margin-bottom:6px;">
+                            <button onclick="setLocation('')" class="tile-btn" style="border-color:#38bdf8;">Все</button>
+                            <button onclick="setLocation('home')" class="tile-btn">Дома</button>
+                            <button onclick="setLocation('street')" class="tile-btn">Турник</button>
+                            <button onclick="setLocation('gym')" class="tile-btn">Зал</button>
+                        </div>
+                        <div class="tiles">
+                            <button onclick="loadRecommendation('legs')" class="tile-btn">Ноги</button>
+                            <button onclick="loadRecommendation('core')" class="tile-btn">Пресс</button>
+                            <button onclick="loadRecommendation('back')" class="tile-btn">Спина</button>
+                            <button onclick="loadRecommendation('shoulders')" class="tile-btn">Дельты</button>
+                            <button onclick="loadRecommendation('chest')" class="tile-btn">Грудь</button>
+                            <button onclick="loadRecommendation('arms')" class="tile-btn">Руки</button>
+                        </div>
+                        <div id="coachWorkoutAdvice" class="tip-box"></div>
+                        <div id="exercisesList"></div>
                     </div>
-
-                    <div class="tiles" style="margin-bottom:6px;">
-                        <button onclick="setLocation('')" class="tile-btn" style="border-color:#38bdf8;">Все площадки</button>
-                        <button onclick="setLocation('home')" class="tile-btn">Дома / Гантели</button>
-                        <button onclick="setLocation('street')" class="tile-btn">Турник / Брусья</button>
-                        <button onclick="setLocation('gym')" class="tile-btn">Зал</button>
-                    </div>
-
-                    <div class="tiles">
-                        <button onclick="loadRecommendation('legs')" class="tile-btn">Ноги</button>
-                        <button onclick="loadRecommendation('core')" class="tile-btn">Пресс</button>
-                        <button onclick="loadRecommendation('back')" class="tile-btn">Спина</button>
-                        <button onclick="loadRecommendation('shoulders')" class="tile-btn">Дельты</button>
-                        <button onclick="loadRecommendation('chest')" class="tile-btn">Грудь</button>
-                        <button onclick="loadRecommendation('arms')" class="tile-btn">Руки</button>
-                    </div>
-                    <div id="coachWorkoutAdvice" class="tip-box"></div>
-                    <div id="exercisesList"></div>
                 </div>
 
                 <div class="card" style="height:fit-content;">
-                    <h2 style="font-size:18px; color:#34d399; margin-bottom:14px;">Запись подхода в базу</h2>
+                    <h2 style="font-size:18px; color:#34d399; margin-bottom:14px;">Быстрая запись подхода</h2>
                     <label>Упражнение</label>
                     <input id="exName" type="text" placeholder="Например: Гоблет-приседания">
                     <div class="row-3">
@@ -230,12 +229,11 @@
             </div>
         </section>
 
-                <!-- ВКЛАДКА 3: АНАЛИТИКА И ИИ-ТРЕНЕР -->
+        <!-- ВКЛАДКА 3: АНАЛИТИКА И КАЛЕНДАРЬ -->
         <section id="tab-analytics" class="hidden">
-            <!-- Интерактивный календарь тренировок и отдыха -->
             <div class="card" style="border-left: 4px solid #38bdf8;">
                 <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:12px;">
-                    <h2 style="font-size:18px; color:#38bdf8;">Календарь тренировок</h2>
+                    <h2 style="font-size:18px; color:#38bdf8;">Календарь тренировок и расхода</h2>
                     <div style="display:flex; align-items:center; gap:8px;">
                         <button onclick="changeCalMonth(-1)" class="icon-btn" title="Предыдущий месяц">◀</button>
                         <strong id="calMonthTitle" style="font-size:14px; color:#e2e8f0; min-width:120px; text-align:center;">Ноябрь 2026</strong>
@@ -243,40 +241,17 @@
                     </div>
                 </div>
 
-                <!-- Дни недели -->
                 <div style="display:grid; grid-template-columns:repeat(7, 1fr); gap:4px; text-align:center; font-size:11px; color:#94a3b8; font-weight:700; margin-bottom:6px;">
                     <div>ПН</div><div>ВТ</div><div>СР</div><div>ЧТ</div><div>ПТ</div><div style="color:#fbbf24;">СБ</div><div style="color:#fbbf24;">ВС</div>
                 </div>
 
-                <!-- Сетка чисел месяца -->
                 <div id="calendarGrid" style="display:grid; grid-template-columns:repeat(7, 1fr); gap:6px;"></div>
 
-                <!-- Карточка выбранного дня -->
                 <div id="calDayDetails" style="margin-top:12px; background:#0f172a; border:1px solid #1e293b; border-radius:12px; padding:12px; font-size:13px;">
                     <div style="color:#94a3b8;">Нажми на любой день в календаре, чтобы посмотреть тренировку или статус отдыха.</div>
                 </div>
             </div>
 
-            <!-- Персональный ИИ-тренер -->
-            <div class="card" style="border-left: 4px solid #a855f7;">
-                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
-                    <h2 style="font-size:18px; color:#c084fc;">Персональный ИИ-тренер</h2>
-                    <label style="display:flex; align-items:center; gap:5px; font-size:11px; color:#94a3b8; margin:0; cursor:pointer;">
-                        <input id="ttsToggle" type="checkbox" checked>
-                        <span>🔊 Озвучивать</span>
-                    </label>
-                </div>
-                <div id="aiCoachBox" style="background:#0f172a; border:1px solid #1e293b; border-radius:12px; padding:12px; max-height:220px; overflow-y:auto; font-size:13px; margin-bottom:10px;">
-                    <div style="color:#cbd5e1;">Спроси меня о чём угодно: <em>«Что сегодня качать?»</em>, <em>«Хватает ли мне калорий и риса?»</em> или <em>«Устал после смены»</em>.</div>
-                </div>
-                <div style="display:flex; gap:6px;">
-                    <input id="aiCoachInput" type="text" placeholder="Задай вопрос тренеру..." style="margin-bottom:0;" onkeydown="if(event.key==='Enter') askAiCoach()">
-                    <button onclick="startAiVoice()" title="Спросить голосом" class="tile-btn" style="padding:0 12px;">🎙️</button>
-                    <button onclick="askAiCoach()" class="btn-primary" style="width:auto; padding:0 16px; background:#a855f7; color:#fff;">Спросить</button>
-                </div>
-            </div>
-
-            <!-- Личные рекорды и Журнал ниже -->
             <div class="grid-main">
                 <div class="card" style="margin-bottom: 0;">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
@@ -326,13 +301,11 @@
         </section>
     </main>
 </div>
-<script src="app.js?v=16"></script>
+<script src="app.js?v=17"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/app/sw.js');
   }
 </script>
-
 </body>
 </html>
-

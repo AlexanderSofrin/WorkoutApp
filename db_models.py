@@ -76,10 +76,28 @@ class Exercise(Base):
     image_secondary_url = Column(String(500), nullable=True)  # Фото 2: пиковая точка движения
     video_url = Column(String(500), nullable=True)            # Ссылка на видео техники (для этапа витрины)
 
+# Модель таблицы дневника питания и состояния по датам (Этап 14)
+class DailyNutritionLog(Base):
+    __tablename__ = "daily_nutrition_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    log_date = Column(String(10), nullable=False, index=True)  # Формат YYYY-MM-DD
+    target_kcal = Column(Integer, default=0)
+    consumed_kcal = Column(Integer, default=0)
+    protein_g = Column(Integer, default=0)
+    fats_g = Column(Integer, default=0)
+    carbs_g = Column(Integer, default=0)
+    weight_kg = Column(Float, nullable=True)
+    checked_meals_json = Column(String(1000), default="[]")  # JSON-список отмеченных приёмов пищи
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 
 if __name__ == "__main__":
+
+
+
     print("Создаем таблицы в PostgreSQL...")
     Base.metadata.create_all(bind=engine)
     print("УСПЕХ: Таблицы 'users' и 'workouts' проверены в базе workout_vault!")

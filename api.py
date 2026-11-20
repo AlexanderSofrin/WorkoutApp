@@ -14,6 +14,7 @@ from ai_coach import generate_coach_reply
 from fastapi.responses import RedirectResponse
 
 from datetime import datetime, timedelta
+from db_models import User, Workout, Exercise, DailyNutritionLog
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -72,6 +73,8 @@ class WorkoutCreate(BaseModel):
     sets: int = Field(gt=0, description="Количество подходов")
     reps: int = Field(gt=0, description="Количество повторений")
     weight: float | None = Field(default=None, ge=0, description="Вес в кг")
+    workout_date: str | None = Field(default=None, description="Дата тренировки YYYY-MM-DD (по умолчанию сегодня)")
+
 
 class ExerciseCreate(BaseModel):
     name: str = Field(min_length=2, max_length=100, description="Название упражнения")
@@ -291,22 +294,22 @@ def create_workout(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    custom_dt = datetime.utcnow()
+    if workout.workout_date:
+        try:
+            parsed_d = datetime.strptime(workout.workout_date.strip(), "%Y-%m-%d")
+            custom_dt = parsed_d.replace(hour=12, minute=0, second=0)
+        except ValueError:
+            pass
+
     new_workout = Workout(
         user_id=current_user.id,
         exercise_name=workout.exercise_name,
         sets=workout.sets,
         reps=workout.reps,
-        weight=workout.weight
+        weight=workout.weight,
+        created_at=custom_dt
     )
-    db.add(new_workout)
-    db.commit()
-    db.refresh(new_workout)
-
-    return {
-        "status": "success",
-        "message": f"Упражнение '{new_workout.exercise_name}' сохранено в PostgreSQL!",
-        "workout_id": new_workout.id
-    }
 
 
 @app.delete("/workouts/{workout_id}")
@@ -1068,11 +1071,76 @@ def ask_personal_ai_coach(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Персональный ИИ-тренер: анализирует досье атлета из PostgreSQL 17 и даёт рекомендации."""
+    """Персональный ИИ-тренер: живое ведение тренировки, трёхуровневая память и аналитика из PostgreSQL 17."""
     result = generate_coach_reply(req.message, current_user, db, _detect_muscle_group)
     return {
         "athlete": current_user.full_name or current_user.username,
         "mode": result["mode"],
-        "reply": result["reply"]
+        "reply": result["reply"],
+        "workout_entry": result.get("workout_entry"),
+        "auto_timer_sec": result.get("auto_timer_sec"),
+        "weight_kg": result.get("weight_kg")
     }
+class NutritionLogUpsert(BaseModel):
+    log_date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    target_kcal: int = 0
+    consumed_kcal: int = 0
+    protein_g: int = 0
+    fats_g: int = 0
+    carbs_g: int = 0
+    weight_kg: float | None = None
+    checked_meals_json: str = "[]"
+
+
+@app.get("/nutrition/logs/{log_date}")
+def get_nutrition_log_by_date(
+    log_date: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Загружает сохранённый дневник питания и вес из PostgreSQL 17 по дате."""
+    row = db.query(DailyNutritionLog).filter(
+        DailyNutritionLog.user_id == current_user.id,
+        DailyNutritionLog.log_date == log_date
+    ).first()
+    if not row:
+        return {"exists": False, "log_date": log_date, "checked_meals_json": "[]", "consumed_kcal": 0}
+    return {
+        "exists": True,
+        "log_date": row.log_date,
+        "target_kcal": row.target_kcal,
+        "consumed_kcal": row.consumed_kcal,
+        "protein_g": row.protein_g,
+        "fats_g": row.fats_g,
+        "carbs_g": row.carbs_g,
+        "weight_kg": row.weight_kg,
+        "checked_meals_json": row.checked_meals_json or "[]"
+    }
+
+
+@app.post("/nutrition/logs")
+def save_nutrition_log(
+    data: NutritionLogUpsert,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Сохраняет или обновляет дневник питания за день в PostgreSQL 17."""
+    row = db.query(DailyNutritionLog).filter(
+        DailyNutritionLog.user_id == current_user.id,
+        DailyNutritionLog.log_date == data.log_date
+    ).first()
+    if not row:
+        row = DailyNutritionLog(user_id=current_user.id, log_date=data.log_date)
+        db.add(row)
+
+    row.target_kcal = data.target_kcal
+    row.consumed_kcal = data.consumed_kcal
+    row.protein_g = data.protein_g
+    row.fats_g = data.fats_g
+    row.carbs_g = data.carbs_g
+    row.weight_kg = data.weight_kg
+    row.checked_meals_json = data.checked_meals_json
+    db.commit()
+    return {"status": "saved", "log_date": data.log_date}
+
 
