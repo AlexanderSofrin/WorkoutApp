@@ -6,7 +6,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from db_models import User, Workout, Exercise
+
 from auth import get_db, hash_password, verify_password, create_access_token, get_current_user
 from models import init_db
 from coach_parser import parse_weight_update, parse_workout_command
@@ -310,6 +310,10 @@ def create_workout(
         weight=workout.weight,
         created_at=custom_dt
     )
+    db.add(new_workout)
+    db.commit()
+    db.refresh(new_workout)
+    return {"status": "saved", "workout": new_workout}
 
 
 @app.delete("/workouts/{workout_id}")
@@ -1081,6 +1085,7 @@ def ask_personal_ai_coach(
         "auto_timer_sec": result.get("auto_timer_sec"),
         "weight_kg": result.get("weight_kg")
     }
+
 class NutritionLogUpsert(BaseModel):
     log_date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
     target_kcal: int = 0
