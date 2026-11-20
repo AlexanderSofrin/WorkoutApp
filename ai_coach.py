@@ -104,41 +104,6 @@ def _match_catalog_exercise(raw_name: str, db: Session) -> str:
     return raw_name
 
 
-def _get_gigachat_token(auth_key: str) -> str | None:
-    """Получает и кэширует на 25 минут временный OAuth-токен Сбер GigaChat API."""
-    now_ts = time.time()
-    if _GIGACHAT_TOKEN_CACHE["access_token"] and now_ts < float(_GIGACHAT_TOKEN_CACHE["expires_at"]):
-        return str(_GIGACHAT_TOKEN_CACHE["access_token"])
-
-    ssl_ctx = ssl.create_default_context()
-    ssl_ctx.check_hostname = False
-    ssl_ctx.verify_mode = ssl.CERT_NONE
-
-    scope = os.getenv("GIGACHAT_SCOPE", "GIGACHAT_API_PERS").strip()
-    body = urllib.parse.urlencode({"scope": scope}).encode("utf-8")
-    req = urllib.request.Request(
-        "https://sberbank.ru",
-        data=body,
-        headers={
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Accept": "application/json",
-            "RqUID": str(uuid.uuid4()),
-            "Authorization": f"Basic {auth_key}",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=10, context=ssl_ctx) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            token = data.get("access_token", "")
-            if token:
-                _GIGACHAT_TOKEN_CACHE["access_token"] = token
-                _GIGACHAT_TOKEN_CACHE["expires_at"] = now_ts + 1500
-                return token
-    except Exception:
-        return None
-    return None
-
 _GIGACHAT_TOKEN_CACHE: dict[str, object] = {"token": "", "expires_at": 0.0}
 
 
@@ -171,7 +136,8 @@ def _get_gigachat_access_token(auth_key: str) -> str | None:
                 _GIGACHAT_TOKEN_CACHE["token"] = token
                 _GIGACHAT_TOKEN_CACHE["expires_at"] = (expires_ms / 1000.0) if expires_ms else (now_ts + 1500)
                 return token
-    except Exception:
+    except Exception as e:
+        print("GigaChat OAuth error:", repr(e))
         return None
     return None
 
@@ -189,8 +155,10 @@ def _call_gigachat_llm(question: str, dossier: dict, window: list[dict], extra_i
     model_name = os.getenv("GIGACHAT_MODEL", "GigaChat-Max").strip()
     system_prompt = (
         "Ты — живой, душевный и умный персональный тренер-напарник в приложении Workout Vault. "
-        "Общайся с атлетом как настоящий близкий друг и опытный тренер в зале: тепло, естественно, с лёгким юмором, "
-        "без канцелярита, списков со звёздочками и нотаций (протокол Zero-Shame). Отвечай ёмко (2–4 живых предложения). "
+        "Общайся с атлетом как настоящий близкий друг и опытный наставник в зале: тепло, естественно, с лёгким юмором, "
+        "без канцелярита, списков со звёздочками и нотаций (протокол Zero-Shame). Когда к месту для настроя или "
+        "поддержки после тяжёлой смены — приводи короткие живые примеры или мысли легенд спорта (Арнольда Шварценеггера, "
+        "Мухаммеда Али, Майка Тайсона). Отвечай ёмко (2–4 живых предложения). "
         "Опирайся на актуальное досье атлета из базы (вес, суставы, усталость, недавние тренировки): "
         f"{json.dumps(dossier, ensure_ascii=False)}. "
         f"{extra_instruction}"
@@ -200,13 +168,12 @@ def _call_gigachat_llm(question: str, dossier: dict, window: list[dict], extra_i
     payload = json.dumps({
         "model": model_name,
         "messages": messages,
-        "temperature": 0.72,
-        "max_tokens": 350,
+        "temperature": 0.75,
+        "max_tokens": 400,
     }).encode("utf-8")
 
     req = urllib.request.Request(
         url="https://sberbank.ru",
-
         data=payload,
         headers={
             "Content-Type": "application/json",
@@ -220,12 +187,9 @@ def _call_gigachat_llm(question: str, dossier: dict, window: list[dict], extra_i
         with urllib.request.urlopen(req, timeout=12, context=ctx) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             return data["choices"][0]["message"]["content"].strip()
-    except Exception:
+    except Exception as e:
+        print("GigaChat Chat error:", repr(e))
         return None
-
-
-
-
 
 def generate_coach_reply(question: str, user: User, db: Session, muscle_detector) -> dict:
     """
