@@ -71,13 +71,18 @@ function toggleCoachFullscreen() {
     if (box) box.scrollTop = box.scrollHeight;
 }
 
+let isSendingCoach = false;
+let lastCoachText = "";
+let lastCoachTime = 0;
+
 function appendAiChat(sender, text, color = "#e2e8f0") {
     const box = document.getElementById("aiCoachBox");
     const div = document.createElement("div");
     div.style.marginTop = "8px";
     div.style.lineHeight = "1.45";
     div.style.color = color;
-    div.innerHTML = "<strong>" + sender + ":</strong> " + text;
+    const formatted = String(text || "").replace(/\n/g, "<br>");
+    div.innerHTML = "<strong>" + sender + ":</strong> " + formatted;
     box.appendChild(div);
     box.scrollTop = box.scrollHeight;
 }
@@ -96,36 +101,63 @@ async function askAiCoach() {
     const inp = document.getElementById("aiCoachInput");
     const text = inp.value.trim();
     if (!text) return;
+
+    const now = Date.now();
+    if (isSendingCoach || (text === lastCoachText && now - lastCoachTime < 1500)) {
+        return;
+    }
+
+    isSendingCoach = true;
+    lastCoachText = text;
+    lastCoachTime = now;
     inp.value = "";
     appendAiChat("Ты", text, "#c084fc");
 
-    const res = await fetch("/coach/ask", {
-        method: "POST",
-        headers: authHeaders(),
-        body: JSON.stringify({ message: text })
-    });
-    if (!res.ok) return;
-    const d = await res.json();
-
-    appendAiChat("ИИ-тренер", d.reply, "#e2e8f0");
-    speakText(d.reply);
-
-    if (d.mode === "live_set" && d.workout_entry) {
-        const entry = d.workout_entry;
-        entry.entries.forEach(item => {
-            workoutPlan.push({
-                name: entry.exercise_name,
-                done: true,
-                sets: item.sets || 1,
-                reps: item.reps || 1,
-                weight: item.weight || 0
-            });
+    try {
+        const res = await fetch("/coach/ask", {
+            method: "POST",
+            headers: authHeaders(),
+            body: JSON.stringify({ message: text })
         });
-        savePlanStorage();
-        renderPlan();
+        if (!res.ok) return;
+        const d = await res.json();
 
-    } else if (d.mode === "weight_updated") {
-        await Promise.all([loadSupport(), loadNutrition()]);
+        appendAiChat("ИИ-тренер", d.reply, "#e2e8f0");
+        speakText(d.reply);
+
+        if (d.mode === "plan_approved" && Array.isArray(d.suggested_plan)) {
+            d.suggested_plan.forEach(item => {
+                workoutPlan.push({
+                    name: item.exercise_name,
+                    done: false,
+                    sets: item.sets || 3,
+                    reps: item.reps || 12,
+                    weight: item.weight || 0
+                });
+            });
+            savePlanStorage();
+            renderPlan();
+            if (navigator.vibrate) navigator.vibrate([40, 40, 40]);
+
+        } else if (d.mode === "live_set" && d.workout_entry) {
+            const entry = d.workout_entry;
+            entry.entries.forEach(item => {
+                workoutPlan.push({
+                    name: entry.exercise_name,
+                    done: true,
+                    sets: item.sets || 1,
+                    reps: item.reps || 1,
+                    weight: item.weight || 0
+                });
+            });
+            savePlanStorage();
+            renderPlan();
+
+        } else if (d.mode === "weight_updated") {
+            await Promise.all([loadSupport(), loadNutrition()]);
+        }
+    } finally {
+        isSendingCoach = false;
     }
 }
 
@@ -149,14 +181,19 @@ function startAiVoice() {
     const recog = new SpeechRecognition();
     recog.lang = "ru-RU";
     recog.interimResults = true;
+    recog.continuous = false;
 
+    let finalSent = false;
     recog.onresult = (e) => {
         let liveText = "";
         for (let i = e.resultIndex; i < e.results.length; i++) {
             liveText += e.results[i][0].transcript;
         }
         input.value = liveText;
-        if (e.results[e.results.length - 1].isFinal) askAiCoach();
+        if (e.results[e.results.length - 1].isFinal && !finalSent) {
+            finalSent = true;
+            askAiCoach();
+        }
     };
     recog.onend = () => {
         if (btn) {
@@ -168,6 +205,7 @@ function startAiVoice() {
     };
     try { recog.start(); } catch (err) {}
 }
+
 
 function startRestTimer(seconds) {
     stopRestTimer();
