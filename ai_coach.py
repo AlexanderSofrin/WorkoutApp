@@ -151,7 +151,7 @@ def _get_gigachat_access_token(auth_key: str) -> str | None:
     scope = os.getenv("GIGACHAT_SCOPE", "GIGACHAT_API_PERS").strip()
     body = urllib.parse.urlencode({"scope": scope}).encode("utf-8")
     req = urllib.request.Request(
-        "https://sberbank.ru",
+        url="https://sberbank.ru",
         data=body,
         headers={
             "Content-Type": "application/x-www-form-urlencoded",
@@ -205,7 +205,8 @@ def _call_gigachat_llm(question: str, dossier: dict, window: list[dict], extra_i
     }).encode("utf-8")
 
     req = urllib.request.Request(
-        "https://sberbank.ru",
+        url="https://sberbank.ru",
+
         data=payload,
         headers={
             "Content-Type": "application/json",
@@ -221,6 +222,9 @@ def _call_gigachat_llm(question: str, dossier: dict, window: list[dict], extra_i
             return data["choices"][0]["message"]["content"].strip()
     except Exception:
         return None
+
+
+
 
 
 def generate_coach_reply(question: str, user: User, db: Session, muscle_detector) -> dict:
