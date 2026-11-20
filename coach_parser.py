@@ -83,8 +83,9 @@ def parse_workout_command(text: str) -> dict | None:
 
     # Вариант В: перечисление повторов через запятую после двоеточия (например: ': 14, 14, 14, 16')
     if not entries and ":" in normalized:
-        after_colon = normalized.split(":", 1)[1]
+        after_colon = normalized.split(":", 1)
         nums = [int(n) for n in re.findall(r"\b\d{1,3}\b", after_colon)]
+
         for r_val in nums:
             entries.append({"sets": 1, "reps": r_val, "weight": weight})
 

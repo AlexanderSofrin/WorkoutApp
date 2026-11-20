@@ -182,7 +182,8 @@ function startRestTimer(seconds) {
             stopRestTimer();
             const badge = document.getElementById("coachMiniTimer");
             if (badge) badge.textContent = "🔥 В ПОДХОД!";
-            if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+            if (navigator.vibrate) navigator.vibrate();
+
         }
     }, 1000);
 }
@@ -219,11 +220,12 @@ function renderQuickChips() {
     const topItems = allExercisesCatalog.slice(0, 6);
     row.innerHTML = "";
     topItems.forEach(ex => {
-        const shortName = ex.name.split("(")[0].trim();
+        const shortName = ex.name.split("(").trim();
         const safeName = ex.name.replace(/'/g, "\\'");
         row.innerHTML += `<button class="chip-btn" onclick="addToPlan('${safeName}')">＋ ${shortName}</button>`;
     });
 }
+
 
 function handleQuickSearch(query) {
     const box = document.getElementById("quickAutocompleteList");
@@ -656,8 +658,9 @@ function renderCalDayDetails(dateStr) {
        const box = document.getElementById("calDayDetails");
     if (!box) return;
 
-    const parts = dateStr.split("-");
-    const niceDate = `${parts[2]}.${parts[1]}.${parts[0]}`;
+        const parts = dateStr.split("-");
+    const niceDate = `${parts}.${parts}.${parts}`;
+
     const dayItems = allWorkoutsCache.filter(w => w.created_at && new Date(w.created_at).toLocaleDateString("sv-SE") === dateStr);
 
     if (dayItems.length === 0) {

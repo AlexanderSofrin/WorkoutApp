@@ -133,7 +133,7 @@ def _call_external_llm(question: str, dossier: dict, window: list[dict]) -> str 
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-            return data["choices"][0]["message"]["content"].strip()
+            return data["choices"]["message"]["content"].strip()
     except Exception:
         return None
 
