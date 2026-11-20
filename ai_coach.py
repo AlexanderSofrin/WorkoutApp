@@ -1,7 +1,11 @@
 import os
 import json
 import re
+import ssl
+import uuid
+import time
 import urllib.request
+import urllib.parse
 from datetime import datetime
 from sqlalchemy.orm import Session
 from db_models import User, Workout, Exercise
@@ -12,11 +16,13 @@ from coach_parser import parse_workout_command, parse_weight_update
 # ==============================================================================================
 _CHAT_WINDOWS: dict[int, list[dict]] = {}
 _COMPRESSED_CONTEXT: dict[int, str] = {}
-MAX_WINDOW_MESSAGES = 8
+MAX_WINDOW_MESSAGES = 10
+
+_GIGACHAT_TOKEN_CACHE: dict[str, str | float] = {"access_token": "", "expires_at": 0.0}
 
 
 def append_session_memory(user_id: int, role: str, content: str) -> None:
-    """Уровень 1: Скользящее окно последних 8 реплик для мгновенного отклика (1-2 сек)."""
+    """Уровень 1: Скользящее окно последних 10 реплик для живого непрерывного диалога."""
     history = _CHAT_WINDOWS.setdefault(user_id, [])
     history.append({"role": role, "content": content})
     if len(history) > MAX_WINDOW_MESSAGES:
@@ -98,52 +104,131 @@ def _match_catalog_exercise(raw_name: str, db: Session) -> str:
     return raw_name
 
 
-def _call_external_llm(question: str, dossier: dict, window: list[dict]) -> str | None:
-    """Вызов быстрой внешней LLM (OpenAI / OpenRouter / DeepSeek / Groq), если задан LLM_API_KEY."""
-    api_key = os.getenv("LLM_API_KEY", "").strip()
-    if not api_key:
+def _get_gigachat_token(auth_key: str) -> str | None:
+    """Получает и кэширует на 25 минут временный OAuth-токен Сбер GigaChat API."""
+    now_ts = time.time()
+    if _GIGACHAT_TOKEN_CACHE["access_token"] and now_ts < float(_GIGACHAT_TOKEN_CACHE["expires_at"]):
+        return str(_GIGACHAT_TOKEN_CACHE["access_token"])
+
+    ssl_ctx = ssl.create_default_context()
+    ssl_ctx.check_hostname = False
+    ssl_ctx.verify_mode = ssl.CERT_NONE
+
+    scope = os.getenv("GIGACHAT_SCOPE", "GIGACHAT_API_PERS").strip()
+    body = urllib.parse.urlencode({"scope": scope}).encode("utf-8")
+    req = urllib.request.Request(
+        "https://sberbank.ru",
+        data=body,
+        headers={
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json",
+            "RqUID": str(uuid.uuid4()),
+            "Authorization": f"Basic {auth_key}",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10, context=ssl_ctx) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            token = data.get("access_token", "")
+            if token:
+                _GIGACHAT_TOKEN_CACHE["access_token"] = token
+                _GIGACHAT_TOKEN_CACHE["expires_at"] = now_ts + 1500
+                return token
+    except Exception:
+        return None
+    return None
+
+_GIGACHAT_TOKEN_CACHE: dict[str, object] = {"token": "", "expires_at": 0.0}
+
+
+def _get_gigachat_access_token(auth_key: str) -> str | None:
+    """Получает и кэширует OAuth-токен GigaChat (действует 30 минут)."""
+    now_ts = time.time()
+    if _GIGACHAT_TOKEN_CACHE["token"] and now_ts < float(_GIGACHAT_TOKEN_CACHE["expires_at"]) - 60:
+        return str(_GIGACHAT_TOKEN_CACHE["token"])
+
+    scope = os.getenv("GIGACHAT_SCOPE", "GIGACHAT_API_PERS").strip()
+    body = urllib.parse.urlencode({"scope": scope}).encode("utf-8")
+    req = urllib.request.Request(
+        "https://sberbank.ru",
+        data=body,
+        headers={
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json",
+            "RqUID": str(uuid.uuid4()),
+            "Authorization": f"Basic {auth_key}",
+        },
+        method="POST",
+    )
+    ctx = ssl._create_unverified_context()
+    try:
+        with urllib.request.urlopen(req, timeout=8, context=ctx) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            token = data.get("access_token", "")
+            expires_ms = data.get("expires_at", 0)
+            if token:
+                _GIGACHAT_TOKEN_CACHE["token"] = token
+                _GIGACHAT_TOKEN_CACHE["expires_at"] = (expires_ms / 1000.0) if expires_ms else (now_ts + 1500)
+                return token
+    except Exception:
+        return None
+    return None
+
+
+def _call_gigachat_llm(question: str, dossier: dict, window: list[dict], extra_instruction: str = "") -> str | None:
+    """Живой человеческий разум на базе GigaChat API (отклик 1-2 сек из Москвы)."""
+    auth_key = os.getenv("GIGACHAT_AUTH_KEY", "").strip()
+    if not auth_key:
         return None
 
-    api_url = os.getenv("LLM_API_URL", "https://openai.com").strip()
-    model_name = os.getenv("LLM_MODEL", "gpt-4o-mini").strip()
+    access_token = _get_gigachat_access_token(auth_key)
+    if not access_token:
+        return None
 
+    model_name = os.getenv("GIGACHAT_MODEL", "GigaChat-Max").strip()
     system_prompt = (
-        "Ты — живой, чуткий персональный ИИ-тренер и напарник в приложении Workout Vault. "
-        "Общайся по-товарищески, энергично, коротко (2–4 предложения), без нотаций и чувства вины (Zero-Shame). "
-        "Когда атлет диктует подход в реальном времени — подбадривай за прогресс и памп, напоминай про технику "
-        "и контроль суставов (поясница, колени, локти) и учитывай восстановление мышц (48–72 ч). "
-        f"Актуальный срез из базы атлета: {json.dumps(dossier, ensure_ascii=False)}."
+        "Ты — живой, душевный и умный персональный тренер-напарник в приложении Workout Vault. "
+        "Общайся с атлетом как настоящий близкий друг и опытный тренер в зале: тепло, естественно, с лёгким юмором, "
+        "без канцелярита, списков со звёздочками и нотаций (протокол Zero-Shame). Отвечай ёмко (2–4 живых предложения). "
+        "Опирайся на актуальное досье атлета из базы (вес, суставы, усталость, недавние тренировки): "
+        f"{json.dumps(dossier, ensure_ascii=False)}. "
+        f"{extra_instruction}"
     )
 
     messages = [{"role": "system", "content": system_prompt}] + window + [{"role": "user", "content": question}]
-
     payload = json.dumps({
         "model": model_name,
         "messages": messages,
-        "temperature": 0.65,
-        "max_tokens": 350
+        "temperature": 0.72,
+        "max_tokens": 350,
     }).encode("utf-8")
 
     req = urllib.request.Request(
-        api_url,
+        "https://sberbank.ru",
         data=payload,
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
-        method="POST"
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Authorization": f"Bearer {access_token}",
+        },
+        method="POST",
     )
+    ctx = ssl._create_unverified_context()
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=12, context=ctx) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-            return data["choices"]["message"]["content"].strip()
+            return data["choices"][0]["message"]["content"].strip()
     except Exception:
         return None
 
 
 def generate_coach_reply(question: str, user: User, db: Session, muscle_detector) -> dict:
     """
-    Умный, быстрый ИИ-тренер:
-    - Поддерживает живую тренировку подход за подходом (автодобавление в план + автотаймер отдыха);
-    - Обновляет вес;
-    - Анализирует восстановление, суставы, питание и усталость после смены.
+    Живой ИИ-тренер Workout Vault:
+    - Общается по-человечески через GigaChat API с опорой на трёхуровневую память;
+    - Понимает живую диктовку подходов (1 подход или серию из 3-4 подходов) и добавляет их в план;
+    - Таймер отдыха НЕ запускает принудительно — атлет включает его сам, когда удобно.
     """
     text = question.strip()
     q = text.lower()
@@ -151,38 +236,43 @@ def generate_coach_reply(question: str, user: User, db: Session, muscle_detector
     dossier = build_athlete_dossier(user, db, muscle_detector)
     window = _CHAT_WINDOWS.get(user.id, [])
 
-    # 1. Обновление веса прямо в диалоге
+    # 1. Обновление веса в диалоге + живая реакция нейросети
     new_weight = parse_weight_update(text)
     if new_weight is not None and 30 <= new_weight <= 300:
         user.weight_kg = new_weight
         db.commit()
-        reply = f"Принято, {name}! Обновил вес в базе до {new_weight} кг и пересчитал ориентир по калориям."
+        dossier["weight_kg"] = new_weight
+        live_reply = _call_gigachat_llm(
+            text,
+            dossier,
+            window,
+            extra_instruction=f"Атлет только что обновил свой вес в базе до {new_weight} кг. По-дружески прокомментируй это относительно его Зелёного коридора."
+        )
+        reply = live_reply or f"Принято, {name}! Обновил вес в базе до {new_weight} кг и пересчитал ориентир по калориям."
         append_session_memory(user.id, "user", text)
         append_session_memory(user.id, "assistant", reply)
         return {"mode": "weight_updated", "reply": reply, "weight_kg": new_weight}
 
-    # 2. Живое распознавание подхода / тренировки («сделал первый на дельты 10 кг 18», «гоблет 25 кг 3 по 15» и т.д.)
+    # 2. Распознавание подхода или серии из 3-4 подходов + живая человеческая реакция тренера
     parsed = parse_workout_command(text)
     if parsed:
         matched_name = _match_catalog_exercise(parsed["exercise_name"], db)
         parsed["exercise_name"] = matched_name
 
-        # Определяем, нужно ли автоматически запустить таймер отдыха (60 или 90 сек)
-        max_reps = max((e["sets"] * e["reps"] if e["sets"] == 1 else e["reps"]) for e in parsed["entries"])
-        max_weight = max((e.get("weight") or 0) for e in parsed["entries"])
-        rest_sec = 90 if (max_weight >= 20 or "присед" in matched_name.lower() or "подтягив" in matched_name.lower()) else 60
-
-        # Живая реакция напарника на темп и памп
-        if max_reps >= 20:
-            hype = f"Ого, на {max_reps} повторений — мощно пошёл на памп! Мышцы горят, но держи технику чистой без рывков."
-        elif len(window) >= 2:
-            hype = "Отличный темп, подход за подходом идёшь чётко! Чувствуй целевую мышцу и береги связки."
-        else:
-            hype = "Отличное начало, разогрел целевую группу! Подход занёс в план тренировки ниже."
-
-        reply = (
-            f"{hype} ({matched_name}: {parsed['summary']['total_sets']} подх., {parsed['summary']['total_reps']} повт.). "
-            f"Запускаю таймер отдыха на {rest_sec} сек. — как будешь готов, диктуй следующий!"
+        summary_str = f"{matched_name}: {parsed['summary']['total_sets']} подх., {parsed['summary']['total_reps']} повт., тоннаж {parsed['summary']['tonnage_kg']} кг"
+        live_reply = _call_gigachat_llm(
+            text,
+            dossier,
+            window,
+            extra_instruction=(
+                f"Ты только что автоматически занёс в план тренировки атлета выполненную работу ({summary_str}). "
+                "Отреагируй как живой опытный напарник: похвали за конкретные цифры, памп или выносливость, "
+                "напомни про технику и бережное отношение к суставам. НЕ пиши про автозапуск таймера."
+            )
+        )
+        reply = live_reply or (
+            f"Красавчик, {name}! Записал в план: {summary_str}. "
+            "Отдышись спокойно и запускай таймер сам, когда будешь готов к следующему подходу!"
         )
         append_session_memory(user.id, "user", text)
         append_session_memory(user.id, "assistant", reply)
@@ -190,70 +280,22 @@ def generate_coach_reply(question: str, user: User, db: Session, muscle_detector
             "mode": "live_set",
             "reply": reply,
             "workout_entry": parsed,
-            "auto_timer_sec": rest_sec
+            "auto_timer_sec": None
         }
 
-    # 3. Если подключена внешняя LLM — даём живой свободный ответ с опорой на трёхуровневую память
-    llm_answer = _call_external_llm(text, dossier, window)
+    # 3. Свободный живой разговор с тренером на любую тему (приветствие, самочувствие, питание, план)
+    llm_answer = _call_gigachat_llm(text, dossier, window)
     if llm_answer:
         append_session_memory(user.id, "user", text)
         append_session_memory(user.id, "assistant", llm_answer)
         return {"mode": "llm_ai", "reply": llm_answer}
 
-    # 4. Встроенный быстрый аналитический движок (работает мгновенно даже без внешнего API-ключа)
-    hours_map = dossier["hours_since_muscle_trained"]
-    muscle_ru = {
-        "legs": "Ноги", "back": "Спина", "chest": "Грудь",
-        "shoulders": "Дельты", "arms": "Руки (бицепс/трицепс)", "core": "Пресс и кор"
-    }
-
-    if any(w in q for w in ("что качать", "трениров", "восстанов", "можно ли", "трицепс", "бицепс", "спин", "ног", "груд", "плеч", "дельт")):
-        tired = [f"{muscle_ru[g]} ({h} ч.)" for g, h in hours_map.items() if h < 48]
-        almost = [f"{muscle_ru[g]} ({h} ч.)" for g, h in hours_map.items() if 48 <= h < 72]
-        ready = [muscle_ru[g] for g in muscle_ru if hours_map.get(g, 999) >= 72]
-
-        joints = []
-        if dossier["protect_lower_back"]:
-            joints.append("поясницу")
-        if dossier["protect_knees"]:
-            joints.append("колени")
-        if dossier["protect_elbows"]:
-            joints.append("локти")
-
-        parts = []
-        if tired:
-            parts.append(f"строго на восстановлении (меньше 48 ч.): {', '.join(tired)}")
-        if almost:
-            parts.append(f"почти восстановились: {', '.join(almost)}")
-        if ready:
-            parts.append(f"полностью готовы к работе: {', '.join(ready)}")
-
-            joint_str = f" Контроль суставов активен — бережём {', '.join(joints)}." if joints else ""
-            reply = f"{name}, по базе картина такая: {'; '.join(parts)}.{joint_str} Если начинаешь работу — просто надиктуй первый подход!"
-        elif any(w in q for w in
-                 ("вес", "еда", "питан", "рис", "белок", "калор", "кбжу", "масс", "сушк", "коридор", "кардио",
-                  "ходьб")):
-            w_now = dossier["weight_kg"] or "—"
-            w_goal = dossier["target_weight_kg"] or w_now
-            reply = (
-                f"{name}, текущий вес {w_now} кг, цель — Зелёный коридор вокруг {w_goal} кг (график {dossier['work_schedule']}). "
-                "Если добавил кардио или долгую ходьбу в горку — накинь 150–200 ккал за счёт сложных углеводов (рис/овсянка) днём, "
-                "чтобы не уходить в лишний дефицит и беречь мышцы."
-            )
-        elif any(w in q for w in ("устал", "смен", "нет сил", "тяжело", "спин", "болит", "ноет")):
-            reply = (
-                f"{name}, услышал тебя! После тяжёлой смены или при скованности в мышцах никаких рекордов — включаем режим заботы о теле: "
-                "5 минут мягкой суставной разминки, разгрузка поясницы (ноги на возвышение 90/90) и спокойный сон. Твой тоннаж никуда не убежит!"
-            )
-        else:
-            recent_summary = "; ".join(dossier["recent_workouts"][:2]) if dossier[
-                "recent_workouts"] else "сегодня стартуем с чистого листа"
-            reply = (
-                f"{name}, я на связи и готов вести тренировку подход за подходом! "
-                f"Вес: {dossier['weight_kg']} кг, недавние записи: {recent_summary}. "
-                "Просто скажи, что сделал (например: «Махи на дельты 10 кг: 18 повторений»), или спроси, какие мышцы уже готовы к бою!"
-            )
-
-        append_session_memory(user.id, "user", text)
-        append_session_memory(user.id, "assistant", reply)
-        return {"mode": "smart_engine", "reply": reply}
+    # 4. Запасной локальный движок (сработает только если в Amvera не задан GIGACHAT_AUTH_KEY)
+    reply = (
+        f"Привет, {name}! Я на связи и готов вести тренировку подход за подходом. "
+        f"Сейчас в базе твой вес {dossier['weight_kg']} кг. Расскажи, как самочувствие после смены, "
+        "или просто продиктуй сделанные подходы!"
+    )
+    append_session_memory(user.id, "user", text)
+    append_session_memory(user.id, "assistant", reply)
+    return {"mode": "smart_engine", "reply": reply}

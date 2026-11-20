@@ -123,7 +123,7 @@ async function askAiCoach() {
         });
         savePlanStorage();
         renderPlan();
-        if (d.auto_timer_sec) startRestTimer(d.auto_timer_sec);
+
     } else if (d.mode === "weight_updated") {
         await Promise.all([loadSupport(), loadNutrition()]);
     }
