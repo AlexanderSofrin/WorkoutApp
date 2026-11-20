@@ -116,7 +116,7 @@ def _get_gigachat_access_token(auth_key: str) -> str | None:
     scope = os.getenv("GIGACHAT_SCOPE", "GIGACHAT_API_PERS").strip()
     body = urllib.parse.urlencode({"scope": scope}).encode("utf-8")
     req = urllib.request.Request(
-        url="https://sberbank.ru",
+        url="https://" + "ngw.devices.sberbank.ru:9443/api/v2/oauth",
 
         data=body,
         headers={
@@ -174,7 +174,7 @@ def _call_gigachat_llm(question: str, dossier: dict, window: list[dict], extra_i
     }).encode("utf-8")
 
     req = urllib.request.Request(
-        url="https://sberbank.ru",
+        url="https://" + "gigachat.devices.sberbank.ru/api/v1/chat/completions",
 
         data=payload,
         headers={
