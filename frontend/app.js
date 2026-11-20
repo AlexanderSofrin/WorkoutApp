@@ -62,7 +62,6 @@ async function showDashboard() {
     await Promise.all([loadSupport(), loadNutrition(), loadExercisesCatalog(), loadRecommendation(), loadAnalytics()]);
 }
 
-/* 1. ПОЛНОЭКРАННАЯ «ТРЕНЕРСКАЯ» И ЖИВОЙ ИИ-ТРЕНЕР С АВТОТАЙМЕРОМ */
 function toggleCoachFullscreen() {
     const card = document.getElementById("coachCard");
     const btn = document.getElementById("fullscreenCoachBtn");
@@ -154,7 +153,7 @@ function startAiVoice() {
     recog.onresult = (e) => {
         let liveText = "";
         for (let i = e.resultIndex; i < e.results.length; i++) {
-            liveText += e.results[i].transcript;
+            liveText += e.results[i][0].transcript;
         }
         input.value = liveText;
         if (e.results[e.results.length - 1].isFinal) askAiCoach();
@@ -170,7 +169,6 @@ function startAiVoice() {
     try { recog.start(); } catch (err) {}
 }
 
-/* 2. ТАЙМЕР ОТДЫХА */
 function startRestTimer(seconds) {
     stopRestTimer();
     restSecondsLeft = seconds;
@@ -182,8 +180,7 @@ function startRestTimer(seconds) {
             stopRestTimer();
             const badge = document.getElementById("coachMiniTimer");
             if (badge) badge.textContent = "🔥 В ПОДХОД!";
-            if (navigator.vibrate) navigator.vibrate();
-
+            if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
         }
     }, 1000);
 }
@@ -200,7 +197,6 @@ function updateRestDisplay() {
     const badge = document.getElementById("coachMiniTimer");
     if (badge) badge.textContent = "⏱ " + formatted;
 }
-/* 3. ЖИВОЙ АВТОКОМПЛИТ УПРАЖНЕНИЙ И КОМПАКТНЫЙ КАТАЛОГ */
 function isBaseExercise(name) {
     const low = name.toLowerCase();
     return ["присед", "тяга", "жим", "подтягив", "брусь", "отжиман", "выпад"].some(k => low.includes(k));
@@ -220,12 +216,11 @@ function renderQuickChips() {
     const topItems = allExercisesCatalog.slice(0, 6);
     row.innerHTML = "";
     topItems.forEach(ex => {
-        const shortName = ex.name.split("(").trim();
+        const shortName = ex.name.split("(")[0].trim();
         const safeName = ex.name.replace(/'/g, "\\'");
         row.innerHTML += `<button class="chip-btn" onclick="addToPlan('${safeName}')">＋ ${shortName}</button>`;
     });
 }
-
 
 function handleQuickSearch(query) {
     const box = document.getElementById("quickAutocompleteList");
@@ -324,7 +319,6 @@ function selectExerciseForForm(name) {
     document.getElementById("exName").value = name;
 }
 
-/* 4. ПЛАН ТРЕНИРОВКИ НА СЕГОДНЯ И СОХРАНЕНИЕ В POSTGRESQL */
 function savePlanStorage() {
     localStorage.setItem("wv_plan", JSON.stringify(workoutPlan));
 }
@@ -393,7 +387,6 @@ function renderPlan() {
         box.appendChild(row);
     });
 }
-
 async function saveWholePlan() {
     if (workoutPlan.length === 0) return;
     const st = document.getElementById("planSaveStatus");
@@ -431,11 +424,10 @@ async function saveWorkout() {
         st.textContent = "Подход сохранён в PostgreSQL 17!";
         st.classList.remove("hidden");
         setTimeout(() => st.classList.add("hidden"), 3000);
-                await Promise.all([loadSupport(), loadNutrition(), loadAnalytics()]);
+        await Promise.all([loadSupport(), loadNutrition(), loadAnalytics()]);
     }
 }
 
-/* 5. ПОДДЕРЖКА И ОБЛАЧНЫЙ ДНЕВНИК ПИТАНИЯ (PostgreSQL 17) */
 async function loadSupport() {
     const tired = document.getElementById("tiredCheckbox").checked;
     const res = await fetch("/coach/support?tired_after_shift=" + tired, { headers: authHeaders() });
@@ -540,7 +532,6 @@ async function toggleMealDone(idx) {
     }
 }
 
-/* 6. КАЛЕНДАРЬ С КАЛОРИЯМИ И АНАЛИТИКА */
 let allWorkoutsCache = [];
 let calYear = new Date().getFullYear();
 let calMonth = new Date().getMonth();
@@ -628,7 +619,7 @@ function renderCalendar() {
             border = isSelected ? "2px solid #34d399" : "1px solid rgba(52, 211, 153, 0.5)";
             color = "#34d399";
         } else if (isSelected) {
-            bg = "rgba(56, 189, 248, 0.18)";
+                        bg = "rgba(56, 189, 248, 0.18)";
             border = "2px solid #38bdf8";
             color = "#fff";
         }
@@ -655,12 +646,11 @@ function renderCalendar() {
 }
 
 function renderCalDayDetails(dateStr) {
-       const box = document.getElementById("calDayDetails");
+    const box = document.getElementById("calDayDetails");
     if (!box) return;
 
-        const parts = dateStr.split("-");
-    const niceDate = `${parts}.${parts}.${parts}`;
-
+    const parts = dateStr.split("-");
+    const niceDate = `${parts[2]}.${parts[1]}.${parts[0]}`;
     const dayItems = allWorkoutsCache.filter(w => w.created_at && new Date(w.created_at).toLocaleDateString("sv-SE") === dateStr);
 
     if (dayItems.length === 0) {
@@ -757,6 +747,3 @@ async function loadAnalytics() {
         }
     }
 }
-
-}
-
