@@ -129,7 +129,7 @@ async function askAiCoach() {
             d.suggested_plan.forEach(item => {
                 workoutPlan.push({
                     name: item.exercise_name,
-                    done: false,
+                    done: Boolean(item.done),
                     sets: item.sets || 3,
                     reps: item.reps || 12,
                     weight: item.weight || 0
@@ -138,6 +138,7 @@ async function askAiCoach() {
             savePlanStorage();
             renderPlan();
             if (navigator.vibrate) navigator.vibrate([40, 40, 40]);
+
 
         } else if (d.mode === "live_set" && d.workout_entry) {
             const entry = d.workout_entry;

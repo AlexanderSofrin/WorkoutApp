@@ -50,7 +50,7 @@ def _clean_markdown(text: str) -> str:
 
 
 def _extract_and_store_plan(user_id: int, raw_reply: str, db: Session) -> str:
-    """Извлекает структурированный план тренировки из ответа LLM и сохраняет в черновик до подтверждения."""
+    """Извлекает структурированный план или отчёт о тренировке из ответа LLM в черновик до сверки."""
     match = re.search(r"\[PLAN_JSON\](.*?)\[/PLAN_JSON\]", raw_reply, flags=re.DOTALL)
     if match:
         try:
@@ -61,7 +61,7 @@ def _extract_and_store_plan(user_id: int, raw_reply: str, db: Session) -> str:
                     ex_name = _match_catalog_exercise(str(item.get("exercise_name", "")).strip(), db)
                     if not ex_name:
                         continue
-                    sets = int(item.get("sets", 3))
+                    sets = int(item.get("sets", 1))
                     reps = int(item.get("reps", 12))
                     weight = float(item.get("weight", 0))
                     normalized.append({
@@ -69,12 +69,7 @@ def _extract_and_store_plan(user_id: int, raw_reply: str, db: Session) -> str:
                         "sets": sets,
                         "reps": reps,
                         "weight": weight,
-                        "sets_detail": [{"set": i + 1, "reps": reps, "weight": weight} for i in range(sets)],
-                        "summary": {
-                            "total_sets": sets,
-                            "total_reps": sets * reps,
-                            "tonnage_kg": round(sets * reps * weight, 1),
-                        },
+                        "done": bool(item.get("done", False)),
                     })
                 if normalized:
                     _PENDING_PLANS[user_id] = normalized
@@ -208,13 +203,17 @@ def _call_gigachat_llm(question: str, dossier: dict, window: list[dict], extra_i
         "- Учитывай досье атлета: возраст, актуальный вес, целевой вес (без урезания углеводов при наборе качественной массы) и недавние тренировки. "
         "- Всегда защищай поясницу, колени и связки локтей (исключай опасные осевые перегрузки и читинг, при дискомфорте сразу предлагай безопасную замену). "
         "- Соблюдай правило 48 часов отдыха для мышечных групп после тяжёлых сессий. "
-        "ФОРМАТ СОСТАВЛЕНИЯ ТРЕНИРОВКИ: "
-        "Если атлет просит составить план тренировки или подобрать упражнения, выстрой их строго по очереди нумерованным списком:\n"
+        "РЕЖИМ 1 — СОСТАВЛЕНИЕ НОВОГО ПЛАНА ТРЕНИРОВКИ: "
+        "Выстрой упражнения строго по очереди нумерованным списком:\n"
         "1. Название упражнения\n"
         "   Подходы × Повторы | Рабочий вес | Отдых | Короткий фокус по технике и суставам\n"
-        "В самом конце предложенного плана обязательно спроси: «Добавляю эту тренировку в план, да?» "
-        "И сразу после этого вопроса (в самом конце ответа) добавь технический блок для парсера строго в таком формате:\n"
-        "[PLAN_JSON][{\"exercise_name\": \"Название\", \"sets\": 3, \"reps\": 12, \"weight\": 15.0}][/PLAN_JSON]\n"
+        "В конце спроси: «Добавляю эту тренировку в план, да?» и добавь блок [PLAN_JSON]...[/PLAN_JSON].\n"
+        "РЕЖИМ 2 — ПРИЁМ ГОТОВОГО ОТЧЁТА О ТРЕНИРОВКЕ ОТ АТЛЕТА: "
+        "Если атлет прислал отчёт о уже выполненной тренировке (список упражнений, весов, подходов и повторений), "
+        "разбери каждый подход (если повторения в подходах разные, например 14, 16, 16, 12 — запиши каждый подход отдельной позицией с sets=1 и нужным reps), "
+        "выведи красивый нумерованный список для сверки и спроси: «Сверь, всё правильно? Переношу эти позиции в План тренировки, чтобы ты мог нажать Записать всю тренировку в БД?» "
+        "И в самом конце ответа добавь технический блок строго в таком формате:\n"
+        "[PLAN_JSON][{\"exercise_name\": \"Название\", \"sets\": 1, \"reps\": 14, \"weight\": 15.0, \"done\": true}][/PLAN_JSON]\n"
         f"Актуальное досье атлета из PostgreSQL: {json.dumps(dossier, ensure_ascii=False)}. "
         f"{extra_instruction}"
     )
@@ -272,10 +271,11 @@ def generate_coach_reply(question: str, user: User, db: Session, muscle_detector
     # 0. Подтверждение ранее предложенного плана тренировки («Да», «Добавляй», «Погнали»)
     if user.id in _PENDING_PLANS and _is_plan_confirmation(q):
         approved_plan = _PENDING_PLANS.pop(user.id)
-        ex_names = ", ".join(item["exercise_name"] for item in approved_plan)
+        unique_names = list(dict.fromkeys(item["exercise_name"] for item in approved_plan))
+        ex_names = ", ".join(unique_names)
         reply = (
-            f"Принято, {name}! Закинул всю тренировку в план ({ex_names}). "
-            "Отрабатывай в своём темпе, береги суставы и диктуй реальные подходы по ходу дела — потом одной кнопкой сохраним факт в базу."
+            f"Принято, {name}! Перенёс всё в План тренировки ({ex_names}). "
+            "Проверь позиции ниже и жми «Записать всю тренировку в БД», когда будешь готов зафиксировать в PostgreSQL."
         )
         append_session_memory(user.id, "user", text)
         append_session_memory(user.id, "assistant", reply)

@@ -11,32 +11,45 @@ def parse_weight_update(text: str) -> float | None:
 
 def parse_workout_command(text: str) -> dict | None:
     """
-    Разбирает живую фразу в структурированные подходы для базы PostgreSQL 17.
-    Поддерживает форматы:
-    - 'Запиши гоблет-приседания 25 кг: 14, 14, 14, 16'
-    - 'Гоблет-приседания: два подхода по 15, третий 16, четвёртый 20 с весом 25 кг'
-    - 'Сделал первый на дельты, махи 10 кг на 18'
-    - 'Сделал 24 на плечо' / 'Подтянулся 15 раз'
+    Разбирает ТОЛЬКО реальную живую диктовку выполненных подходов (с цифрами повторов/подходов).
+    Игнорирует длинные отчёты о всей тренировке и разговорные фразы при обсуждении плана.
     """
     clean = text.strip()
     lower = clean.lower()
 
-    triggers = ("запиши", "добавь", "сохрани", "сделал", "выполнил", "пожал", "присел", "подтянулся", "подход")
-    has_sets_pattern = bool(re.search(r"\d+\s*(?:по|x|х|\*)\s*\d+", lower)) or bool(re.search(r":\s*\d+", lower))
-
-    if not any(t in lower for t in triggers) and not has_sets_pattern:
+    # 1. Длинные отчёты с переносами строк или пунктами (1., 2.) отдаём в GigaChat для полной сверки
+    if "\n" in clean or len(clean) > 140:
         return None
 
-    # 1. Ищем рабочий вес (в кг)
+    # 2. Разговорные фразы обсуждения плана не считаем выполненным подходом
+    planning_phrases = (
+        "составь", "составим", "план", "тренировку", "давай сделаем",
+        "давай так", "что делать", "посоветуй", "подбери", "какие упражнения", "?"
+    )
+    if any(p in lower for p in planning_phrases):
+        return None
+
+    # 3. Обязательно должны быть цифры повторов или паттерн подходов
+    has_sets_pattern = bool(re.search(r"\d+\s*(?:по|x|х|\*)\s*\d+", lower)) or bool(re.search(r":\s*\d+", lower))
+    has_reps_num = bool(re.search(r"(?:на\s+\d+|\b\d+\s*(?:раз|повтор))", lower))
+    triggers = ("запиши", "добавь", "сохрани", "сделал", "выполнил", "пожал", "присел", "подтянулся", "подход")
+
+    if not (has_sets_pattern or has_reps_num or any(re.search(rf"\b{t}\b", lower) for t in triggers)):
+        return None
+
+    # 4. Ищем рабочий вес (в кг)
     weight = 0.0
     weight_match = re.search(r"(?:с\s+весом|вес|гантел[ьяией]*|блин[ома]*|штанг[аойу]*|гир[яейю]*)?\s*(\d+(?:[.,]\d+)?)\s*кг", lower)
     if weight_match:
         weight = float(weight_match.group(1).replace(",", "."))
 
-    # Убираем вес из строки, чтобы он не мешал поиску повторений
-    text_no_weight = re.sub(r"(?:с\s+весом|вес|гантел[ьяией]*|блин[ома]*|штанг[аойу]*|гир[яейю]*)?\s*\d+(?:[.,]\d+)?\s*кг", " ", clean, flags=re.IGNORECASE)
+    text_no_weight = re.sub(
+        r"(?:с\s+весом|вес|гантел[ьяией]*|блин[ома]*|штанг[аойу]*|гир[яейю]*)?\s*\d+(?:[.,]\d+)?\s*кг",
+        " ",
+        clean,
+        flags=re.IGNORECASE
+    )
 
-    # 2. Заменяем словесные числительные на цифры
     word_nums = {
         "один": "1", "первый": "1", "первом": "1",
         "два": "2", "второй": "2", "втором": "2",
@@ -49,13 +62,14 @@ def parse_workout_command(text: str) -> dict | None:
     for word, digit in word_nums.items():
         normalized = re.sub(rf"\b{word}\b", digit, normalized)
 
-    # 3. Извлекаем название упражнения
+    # 5. Очищаем название упражнения от разговорных вводных слов
     name_part = re.sub(
-        r"^(?:запиши|добавь|сохрани|я\s+сделал|сделал|выполнил|ещё|еще|сейчас)\s+(?:[1-6]\s*(?:подход)?\s*(?:на\s+[а-яё]+\s*)?[,.-]?\s*)?",
+        r"^(?:так\s+|ну\s+|короче\s+|давай\s+|делаем\s+|запиши\s+|добавь\s+|сохрани\s+|я\s+сделал\s+|сделал\s+|выполнил\s+|ещё\s+|еще\s+|сейчас\s+)+",
         "",
         clean,
         flags=re.IGNORECASE
     )
+    name_part = re.sub(r"^[1-6]\s*(?:подход)?\s*(?:на\s+[а-яё]+\s*)?[,.-]?\s*", "", name_part, flags=re.IGNORECASE)
     name_part = re.split(
         r"[:;]|\b\d+\s*(?:подход|по|повтор|раз|x|х|\*)|\b(?:один|два|три|четыре|пять|с\s+весом|вес|на\s+\d+)\b|\d+(?:[.,]\d+)?\s*кг",
         name_part,
@@ -63,33 +77,32 @@ def parse_workout_command(text: str) -> dict | None:
         flags=re.IGNORECASE
     )[0]
     exercise_name = name_part.strip(" ,.-—").capitalize()
-    if len(exercise_name) < 2:
-        exercise_name = "Свободное упражнение"
+    if len(exercise_name) < 3:
+        return None
 
     entries = []
 
-    # Вариант А: формат 'N подходов по M' (например: '2 подхода по 15' или '4 по 18')
+    # Вариант А: '4 по 30' или '3x12'
     multi_matches = re.findall(r"(\d+)\s*(?:подход[аов]*\s*)?(?:по|x|х|\*)\s*(\d+)", normalized)
     if multi_matches:
         for s_str, r_str in multi_matches:
             entries.append({"sets": int(s_str), "reps": int(r_str), "weight": weight})
 
-    # Вариант Б: порядковые подходы ('3 16, 4 20' или '3 подход на 24')
+    # Вариант Б: '3 16, 4 20' или '3 подход на 24'
     ord_matches = re.findall(r"(?:^|[,.;]\s*)([1-9])\s*(?:подход[ае]?\s*)?(?:на\s+|[-—:]\s*)?(\d{1,3})(?=\s*(?:[,.;]|повтор|раз|$))", normalized)
     for _, r_str in ord_matches:
         reps_val = int(r_str)
         if not any(e["reps"] == reps_val and e["sets"] == 1 for e in entries):
             entries.append({"sets": 1, "reps": reps_val, "weight": weight})
 
-    # Вариант В: перечисление повторов через запятую после двоеточия (например: ': 14, 14, 14, 16')
+    # Вариант В: перечисление после двоеточия ': 14, 14, 14, 16'
     if not entries and ":" in normalized:
-        after_colon = normalized.split(":", 1)
+        after_colon = normalized.split(":", 1)[1]
         nums = [int(n) for n in re.findall(r"\b\d{1,3}\b", after_colon)]
-
         for r_val in nums:
             entries.append({"sets": 1, "reps": r_val, "weight": weight})
 
-    # Вариант Г: одиночный живой подход ('на 18', '18 повторений', '15 раз', 'сделал 24')
+    # Вариант Г: одиночный подход 'на 18', '18 повторений', '15 раз'
     if not entries:
         single_match = re.search(r"(?:на\s+)?(\d{1,3})\s*(?:повтор\w*|раз\b)|(?:сделал|пожал|присел|подтянулся|на)\s+(\d{1,3})\b", normalized)
         if single_match:
