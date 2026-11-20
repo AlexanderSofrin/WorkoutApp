@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0b0f19">
     <link rel="manifest" href="manifest.json">
     <title>Workout Vault</title>
-    <link rel="stylesheet" href="style.css?v=17">
+    <link rel="stylesheet" href="style.css?v=20">
 </head>
 <body>
 <div class="container">
@@ -121,16 +121,16 @@
 
         <!-- ВКЛАДКА 2: ТРЕНЕРСКАЯ И ПЛАНЕР -->
         <section id="tab-workout" class="hidden">
-            <!-- 1. ЖИВОЙ ИИ-ТРЕНЕР НА САМОМ ВЕРХУ (С ПОЛНОЭКРАННЫМ РЕЖИМОМ И АВТОТАЙМЕРОМ) -->
+                        <!-- 1. ЖИВОЙ ИИ-ТРЕНЕР НА САМОМ ВЕРХУ (С ПОЛНОЭКРАННЫМ РЕЖИМОМ) -->
             <div id="coachCard" class="card" style="border-left: 4px solid #a855f7;">
                 <div class="coach-inner-wrap">
                     <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
                         <div style="display:flex; align-items:center; gap:8px;">
                             <h2 style="font-size:18px; color:#c084fc;">ИИ-Тренерская</h2>
-                            <span id="coachMiniTimer" class="badge" style="background:rgba(56,189,248,0.16); color:#38bdf8;">⏱ 00:00</span>
+                            <span id="coachMiniTimer" class="badge coach-hide-fs" style="background:rgba(56,189,248,0.16); color:#38bdf8;">⏱ 00:00</span>
                         </div>
                         <div style="display:flex; align-items:center; gap:8px;">
-                            <label style="display:flex; align-items:center; gap:4px; font-size:11px; color:#94a3b8; margin:0; cursor:pointer;">
+                            <label class="coach-hide-fs" style="display:flex; align-items:center; gap:4px; font-size:11px; color:#94a3b8; margin:0; cursor:pointer;">
                                 <input id="ttsToggle" type="checkbox" checked>
                                 <span>🔊 Голос</span>
                             </label>
@@ -139,7 +139,7 @@
                     </div>
 
                     <!-- Быстрые кнопки таймера прямо в тренерской -->
-                    <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
+                    <div class="coach-hide-fs" style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
                         <button class="t-btn" style="padding:4px 9px; min-height:30px;" onclick="startRestTimer(45)">45с</button>
                         <button class="t-btn" style="padding:4px 9px; min-height:30px;" onclick="startRestTimer(60)">1:00</button>
                         <button class="t-btn" style="padding:4px 9px; min-height:30px;" onclick="startRestTimer(90)">1:30</button>
@@ -156,7 +156,8 @@
                         <button onclick="askAiCoach()" class="btn-primary" style="width:auto; padding:0 16px; background:#a855f7; color:#fff;">OK</button>
                     </div>
                 </div>
-                        </div>
+            </div>
+
 
             <!-- 2. ПЛАН ТРЕНИРОВКИ НА СЕГОДНЯ -->
             <div class="card" style="border-left: 4px solid #34d399;">
@@ -301,7 +302,7 @@
         </section>
     </main>
 </div>
-<script src="app.js?v=18"></script>
+<script src="app.js?v=20"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/app/sw.js');

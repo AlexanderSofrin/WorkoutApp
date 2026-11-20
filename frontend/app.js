@@ -75,17 +75,61 @@ let isSendingCoach = false;
 let lastCoachText = "";
 let lastCoachTime = 0;
 
+function escapeHtml(str) {
+    return String(str || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+}
+
 function appendAiChat(sender, text, color = "#e2e8f0") {
     const box = document.getElementById("aiCoachBox");
     const div = document.createElement("div");
-    div.style.marginTop = "8px";
-    div.style.lineHeight = "1.45";
-    div.style.color = color;
-    const formatted = String(text || "").replace(/\n/g, "<br>");
-    div.innerHTML = "<strong>" + sender + ":</strong> " + formatted;
+    const cleanText = escapeHtml(text);
+    const formatted = cleanText.replace(/\n/g, "<br>");
+
+    if (sender === "Ты") {
+        div.className = "coach-msg coach-msg-user";
+        const preview = String(text || "").replace(/\s+/g, " ").trim();
+        div.innerHTML = `
+            <div class="coach-user-toggle" style="display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;padding:6px 10px;border-radius:10px;background:rgba(192,132,252,0.12);border:1px solid rgba(192,132,252,0.25);color:#d8b4fe;font-size:13px;">
+                <span class="coach-user-preview" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><strong>Ты:</strong> ${escapeHtml(preview)}</span>
+                <span class="coach-user-arrow" style="flex-shrink:0;font-size:12px;">▸</span>
+            </div>
+            <div class="coach-user-full" style="display:none;padding:8px 10px 4px;color:#e9d5ff;font-size:14px;line-height:1.45;">${formatted}</div>
+        `;
+        const toggle = div.querySelector(".coach-user-toggle");
+        const full = div.querySelector(".coach-user-full");
+        const arrow = div.querySelector(".coach-user-arrow");
+        const prevEl = div.querySelector(".coach-user-preview");
+        toggle.addEventListener("click", () => {
+            const isOpen = full.style.display === "block";
+            full.style.display = isOpen ? "none" : "block";
+            prevEl.style.display = isOpen ? "block" : "none";
+            if (isOpen) {
+                toggle.firstElementChild.innerHTML = `<strong>Ты:</strong> ${escapeHtml(preview)}`;
+            } else {
+                toggle.firstElementChild.innerHTML = `<strong>Ты</strong>`;
+            }
+            arrow.textContent = isOpen ? "▸" : "▾";
+        });
+    } else {
+        div.className = "coach-msg coach-msg-ai";
+        div.style.marginTop = "12px";
+        div.style.padding = "10px 12px";
+        div.style.borderRadius = "12px";
+        div.style.background = "rgba(30, 41, 59, 0.55)";
+        div.style.fontSize = "16px";
+        div.style.lineHeight = "1.55";
+        div.style.color = color;
+        div.innerHTML = `<div style="font-size:12px;text-transform:uppercase;letter-spacing:0.04em;color:#38bdf8;margin-bottom:4px;font-weight:600;">${escapeHtml(sender)}</div><div>${formatted}</div>`;
+    }
+
+    div.style.marginTop = "10px";
     box.appendChild(div);
     box.scrollTop = box.scrollHeight;
 }
+
 
 function speakText(text) {
     if (!document.getElementById("ttsToggle")?.checked) return;

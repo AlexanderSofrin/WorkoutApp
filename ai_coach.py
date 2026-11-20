@@ -50,32 +50,58 @@ def _clean_markdown(text: str) -> str:
 
 
 def _extract_and_store_plan(user_id: int, raw_reply: str, db: Session) -> str:
-    """Извлекает структурированный план или отчёт о тренировке из ответа LLM в черновик до сверки."""
+    """Извлекает план из [PLAN_JSON] или напрямую из нумерованного списка ответа LLM."""
+    normalized = []
+
+    # 1. Пробуем штатный блок [PLAN_JSON]
     match = re.search(r"\[PLAN_JSON\](.*?)\[/PLAN_JSON\]", raw_reply, flags=re.DOTALL)
     if match:
         try:
             items = json.loads(match.group(1).strip())
-            if isinstance(items, list) and items:
-                normalized = []
+            if isinstance(items, list):
                 for item in items:
-                    ex_name = _match_catalog_exercise(str(item.get("exercise_name", "")).strip(), db)
-                    if not ex_name:
+                    raw_name = str(item.get("exercise_name", "")).strip()
+                    if not raw_name:
                         continue
-                    sets = int(item.get("sets", 1))
-                    reps = int(item.get("reps", 12))
-                    weight = float(item.get("weight", 0))
+                    ex_name = _match_catalog_exercise(raw_name, db) or raw_name
                     normalized.append({
                         "exercise_name": ex_name,
-                        "sets": sets,
-                        "reps": reps,
-                        "weight": weight,
+                        "sets": int(item.get("sets", 1)),
+                        "reps": int(item.get("reps", 12)),
+                        "weight": float(item.get("weight", 0)),
                         "done": bool(item.get("done", False)),
                     })
-                if normalized:
-                    _PENDING_PLANS[user_id] = normalized
         except Exception as e:
             print("Plan JSON parse error:", repr(e))
+
+    # 2. Фолбэк: если LLM забыл [PLAN_JSON], парсим нумерованные карточки (1. Название \n 3 × 30...)
+    if not normalized:
+        card_pattern = re.finditer(
+            r"(?:^|\n)\s*\d+[\.\)]\s*([^\n]+)\n\s*(\d+)\s*[×xх*]\s*(\d+)(?:[^\n]*?(\d+(?:[.,]\d+)?)\s*кг)?",
+            raw_reply,
+            flags=re.IGNORECASE
+        )
+        for m in card_pattern:
+            raw_name = re.sub(r"[\*\#]+", "", m.group(1)).strip()
+            if not raw_name:
+                continue
+            ex_name = _match_catalog_exercise(raw_name, db) or raw_name
+            sets = int(m.group(2))
+            reps = int(m.group(3))
+            weight = float(m.group(4).replace(",", ".")) if m.group(4) else 0.0
+            normalized.append({
+                "exercise_name": ex_name,
+                "sets": sets,
+                "reps": reps,
+                "weight": weight,
+                "done": False,
+            })
+
+    if normalized:
+        _PENDING_PLANS[user_id] = normalized
+
     return _clean_markdown(raw_reply)
+
 
 def build_athlete_dossier(user: User, db: Session, muscle_detector) -> dict:
     """Уровень 2: Живой срез состояния атлета из PostgreSQL 17."""

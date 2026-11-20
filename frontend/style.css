@@ -158,3 +158,81 @@ tr:hover td { background: rgba(56, 189, 248, 0.05); }
     cursor: pointer;
 }
 .chip-btn:hover { border-color: #34d399; color: #34d399; }
+
+/* ===== ЧИСТЫЙ ПОЛНОЭКРАННЫЙ ЧАТ ИИ-ТРЕНЕРА ===== */
+#coachCard.coach-fullscreen {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    margin: 0;
+    border-radius: 0;
+    border-left: none !important;
+    background: #0b1120;
+    display: flex;
+    flex-direction: column;
+    padding: 12px 14px;
+}
+
+#coachCard.coach-fullscreen .coach-inner-wrap {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+    max-width: 820px;
+    margin: 0 auto;
+}
+
+/* В полноэкранном режиме прячем таймеры и лишние кнопки */
+#coachCard.coach-fullscreen .coach-hide-fs {
+    display: none !important;
+}
+
+/* Растягиваем окно переписки на весь экран и увеличиваем шрифт */
+#coachCard.coach-fullscreen #aiCoachBox {
+    flex: 1;
+    max-height: none !important;
+    background: transparent !important;
+    border: none !important;
+    padding: 6px 2px !important;
+    font-size: 16px !important;
+    line-height: 1.55 !important;
+}
+
+/* Пузырь сообщения пользователя (сворачивается в полноэкранном режиме) */
+.user-msg-wrap {
+    margin: 10px 0;
+    padding: 8px 12px;
+    border-radius: 12px;
+    background: rgba(168, 85, 247, 0.14);
+    border: 1px solid rgba(168, 85, 247, 0.3);
+    color: #e9d5ff;
+}
+
+#coachCard.coach-fullscreen .user-msg-wrap.collapsed .user-msg-text {
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.user-msg-toggle {
+    display: none;
+    background: none;
+    border: none;
+    color: #c084fc;
+    font-size: 13px;
+    cursor: pointer;
+    padding: 0 4px;
+    flex-shrink: 0;
+}
+
+#coachCard.coach-fullscreen .user-msg-toggle {
+    display: inline-block;
+}
+
+/* Ответ ИИ-тренера без узких рамок — читается как живой напарник */
+.ai-msg-wrap {
+    margin: 12px 0 16px;
+    color: #f1f5f9;
+}
