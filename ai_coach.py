@@ -324,10 +324,11 @@ def _get_gigachat_token() -> str | None:
         return str(_GIGACHAT_TOKEN_CACHE["token"])
 
     scope = os.getenv("GIGACHAT_SCOPE", "GIGACHAT_API_PERS").strip()
-    url = "https://sberbank.ru"
+    oauth_url = "".join(["https://", "ngw.devices.", "sberbank.ru:9443", "/api/v2/oauth"])
+
     data = urllib.parse.urlencode({"scope": scope}).encode("utf-8")
     req = urllib.request.Request(
-        url,
+        oauth_url,
         data=data,
         headers={
             "Content-Type": "application/x-www-form-urlencoded",
@@ -345,9 +346,11 @@ def _get_gigachat_token() -> str | None:
                 _GIGACHAT_TOKEN_CACHE["token"] = tok
                 _GIGACHAT_TOKEN_CACHE["expires_at"] = now + 1700
                 return tok
-    except Exception:
+    except Exception as e:
+        print("GigaChat OAuth error:", e)
         return None
     return None
+
 
 def _call_gigachat_llm(messages: list[dict]) -> str | None:
     """Быстрый вызов GigaChat API с ограниченным объёмом генерации (max_tokens=340)."""
@@ -356,7 +359,8 @@ def _call_gigachat_llm(messages: list[dict]) -> str | None:
         return None
 
     model_name = os.getenv("GIGACHAT_MODEL", "GigaChat").strip()
-    url = "https://sberbank.ru"
+    chat_url = "".join(["https://", "gigachat.devices.", "sberbank.ru", "/api/v1/chat/completions"])
+
     body = json.dumps({
         "model": model_name,
         "messages": messages,
@@ -365,7 +369,7 @@ def _call_gigachat_llm(messages: list[dict]) -> str | None:
     }).encode("utf-8")
 
     req = urllib.request.Request(
-        url,
+        chat_url,
         data=body,
         headers={
             "Content-Type": "application/json",
@@ -380,9 +384,11 @@ def _call_gigachat_llm(messages: list[dict]) -> str | None:
             choices = data.get("choices") or []
             if choices:
                 return choices[0].get("message", {}).get("content", "").strip()
-    except Exception:
+    except Exception as e:
+        print("GigaChat Chat error:", e)
         return None
     return None
+
 def generate_coach_reply(user: User, message: str, db: Session) -> dict:
     clean_msg = message.strip()
     low_msg = clean_msg.lower()
