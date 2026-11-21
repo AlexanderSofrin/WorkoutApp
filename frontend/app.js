@@ -226,6 +226,57 @@ async function askAiCoach() {
 
 
 let activeRecognition = null;
+let voiceAudioCtx = null;
+let voiceMediaStream = null;
+let voiceAnimFrame = null;
+
+function stopVoiceVisualizer() {
+    if (voiceAnimFrame) cancelAnimationFrame(voiceAnimFrame);
+    voiceAnimFrame = null;
+    if (voiceMediaStream) {
+        voiceMediaStream.getTracks().forEach(t => t.stop());
+        voiceMediaStream = null;
+    }
+    if (voiceAudioCtx) {
+        try { voiceAudioCtx.close(); } catch (e) {}
+        voiceAudioCtx = null;
+    }
+    const capsule = document.getElementById("coachInputCapsule");
+    const btn = document.getElementById("aiVoiceBtn");
+    if (capsule) capsule.classList.remove("listening");
+    if (btn) btn.classList.remove("active");
+    document.querySelectorAll("#aiVoiceWave span").forEach(bar => { bar.style.height = "5px"; });
+}
+
+async function startVoiceVisualizer() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+    try {
+        voiceMediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        voiceAudioCtx = new AudioCtx();
+        const source = voiceAudioCtx.createMediaStreamSource(voiceMediaStream);
+        const analyser = voiceAudioCtx.createAnalyser();
+        analyser.fftSize = 64;
+        source.connect(analyser);
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        const bars = document.querySelectorAll("#aiVoiceWave span");
+        const multipliers = [0.6, 0.95, 1.25, 0.95, 0.6];
+
+        const tick = () => {
+            if (!voiceAudioCtx) return;
+            analyser.getByteFrequencyData(dataArray);
+            let sum = 0;
+            for (let i = 0; i < 12; i++) sum += dataArray[i];
+            const avg = sum / 12;
+            bars.forEach((bar, idx) => {
+                const h = Math.max(5, Math.min(22, Math.round((avg / 140) * 20 * multipliers[idx] + 5)));
+                bar.style.height = h + "px";
+            });
+            voiceAnimFrame = requestAnimationFrame(tick);
+        };
+        tick();
+    } catch (e) {}
+}
 
 function startAiVoice() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -233,24 +284,24 @@ function startAiVoice() {
         appendAiChat("Система", "Используй микрофон на клавиатуре телефона для голосового ввода.", "#fbbf24");
         return;
     }
-    const btn = document.querySelector("button[onclick='startAiVoice()']");
+    const capsule = document.getElementById("coachInputCapsule");
+    const btn = document.getElementById("aiVoiceBtn");
     const input = document.getElementById("aiCoachInput");
 
     if (activeRecognition) {
         try { activeRecognition.stop(); } catch (e) {}
         activeRecognition = null;
+        stopVoiceVisualizer();
         return;
     }
 
     const oldPlaceholder = input.placeholder;
     const baseText = input.value.trim() ? (input.value.trim() + " ") : "";
 
-    if (btn) {
-        btn.style.borderColor = "#fb7185";
-        btn.style.background = "rgba(251,113,133,0.25)";
-        btn.textContent = "⏹️";
-    }
-    input.placeholder = "Говори... Нажми ⏹️ или ОК, когда закончишь";
+    if (capsule) capsule.classList.add("listening");
+    if (btn) btn.classList.add("active");
+    input.placeholder = "Слушаю тебя... Нажми ↑ чтобы отправить";
+    startVoiceVisualizer();
 
     const recog = new SpeechRecognition();
     activeRecognition = recog;
@@ -270,15 +321,15 @@ function startAiVoice() {
     };
     recog.onend = () => {
         activeRecognition = null;
-        if (btn) {
-            btn.style.borderColor = "#334155";
-            btn.style.background = "";
-            btn.textContent = "🎙️";
-        }
+        stopVoiceVisualizer();
         input.placeholder = oldPlaceholder;
     };
-    try { recog.start(); } catch (err) { activeRecognition = null; }
+    try { recog.start(); } catch (err) {
+        activeRecognition = null;
+        stopVoiceVisualizer();
+    }
 }
+
 
 
 

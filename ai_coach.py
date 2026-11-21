@@ -354,7 +354,8 @@ def generate_coach_reply(question: str, user: User, db: Session, muscle_detector
             f"Принято, {name}! Перенёс всё в План тренировки{date_note} ({ex_names}). "
             "Проверь позиции ниже и жми «Записать всю тренировку в БД», когда будешь готов."
         )
-        append_session_memory(user.id, "user", text)
+        # Очищаем окно диалога от старой таблицы, чтобы тренер больше не повторял её в следующих ответах
+        compress_session_memory(user.id, f"Атлет уже утвердил и перенёс в План тренировки{date_note}: {ex_names}.")
         append_session_memory(user.id, "assistant", reply)
         return {
             "mode": "plan_approved",
