@@ -277,7 +277,8 @@ function startAiVoice() {
     }
 
     const oldPlaceholder = input.placeholder;
-    const baseText = input.value.trim() ? (input.value.trim() + " ") : "";
+    const prefix = input.value.trim() ? (input.value.trim() + " ") : "";
+    let silenceTimer = null;
 
     const recog = new SpeechRecognition();
     activeRecognition = recog;
@@ -287,38 +288,55 @@ function startAiVoice() {
 
     if (capsule) capsule.classList.add("listening");
     if (btn) btn.classList.add("active");
-    input.placeholder = "Слушаю тебя... Нажми ↑ чтобы отправить";
+    input.placeholder = "Слушаю тебя...";
     voiceEnergy = 0.45;
     startVoiceVisualizer();
 
-    let finalTranscript = "";
+    const resetSilenceTimer = () => {
+        if (silenceTimer) clearTimeout(silenceTimer);
+        silenceTimer = setTimeout(() => {
+            if (activeRecognition) {
+                try { activeRecognition.stop(); } catch (e) {}
+            }
+        }, 3000);
+    };
+
     recog.onresult = (e) => {
         voiceEnergy = 1.0;
-        let interim = "";
-        for (let i = e.resultIndex; i < e.results.length; i++) {
-            const chunk = e.results[i][0].transcript;
-            if (e.results[i].isFinal) finalTranscript += chunk + " ";
-            else interim += chunk;
+        let fullSessionText = "";
+        for (let i = 0; i < e.results.length; i++) {
+            fullSessionText += e.results[i][0].transcript;
         }
-        input.value = (baseText + finalTranscript + interim).trim();
+        input.value = (prefix + fullSessionText).trim();
+        resetSilenceTimer();
     };
+
     recog.onerror = (e) => {
+        if (silenceTimer) clearTimeout(silenceTimer);
         if (e.error === "not-allowed") {
             appendAiChat("Система", "Разреши доступ к микрофону в настройках браузера.", "#fb7185");
         }
     };
+
     recog.onend = () => {
+        if (silenceTimer) clearTimeout(silenceTimer);
         activeRecognition = null;
         stopVoiceVisualizer();
         input.placeholder = oldPlaceholder;
+        if (input.value.trim()) {
+            askAiCoach();
+        }
     };
+
     try {
         recog.start();
+        resetSilenceTimer();
     } catch (err) {
         activeRecognition = null;
         stopVoiceVisualizer();
     }
 }
+
 
 
 
