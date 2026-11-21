@@ -394,21 +394,44 @@ def generate_coach_reply(user: User, message: str, db: Session) -> dict:
     low_msg = clean_msg.lower()
     first_name = (user.full_name or "Атлет").split()[0]
 
-    # 1. МГНОВЕННЫЙ FAST-PATH (Live Copilot + Черновик плана — отклик ~30 мс без ожидания нейросети)
-    fast_res = _fast_parse_live_copilot(user.id, clean_msg, db)
+    # 1. Подтверждение переноса накопленного черновика / предложенного плана в "План тренировки"
+    pending = _PENDING_PLANS.get(user.id)
+    cleaned_confirm = re.sub(r"[^\w\sа-яё]", "", low_msg).strip()
+    is_confirm = (
+        cleaned_confirm in CONFIRM_WORDS
+        or any(phrase in low_msg for phrase in ("в план", "добавь план", "перенеси план", "сохрани план"))
+    )
+    if pending and pending.get("items") and is_confirm:
+        items = pending["items"]
+        target_date = _extract_target_date(clean_msg) or pending.get("target_date")
+        names_preview = ", ".join(i["exercise_name"] for i in items)
+        compress_session_memory(user.id, f"Утверждён план: {names_preview}")
+        reply = (
+            f"Принято, {first_name}! Перенёс всё в «План тренировки» ({names_preview}). "
+            f"Проверь позиции ниже и жми «Записать всю тренировку в БД», когда будешь готов."
+        )
+        return {
+            "reply": reply,
+            "mode": "plan_approved",
+            "suggested_plan": items,
+            "target_date": target_date,
+            "workout_entry": None,
+            "updated_weight_kg": None
+        }
+
+    # 2. МГНОВЕННЫЙ FAST-PATH (Live Copilot + Черновик плана — отклик ~20 мс без ожидания нейросети)
+    fast_res = _fast_parse_live_copilot(user.id, clean_msg, db, first_name)
     if fast_res:
-        append_session_memory(user.id, "user", clean_msg)
-        append_session_memory(user.id, "assistant", fast_res["reply"])
         return {
             "reply": fast_res["reply"],
             "mode": fast_res["mode"],
             "suggested_plan": fast_res.get("suggested_plan"),
             "target_date": fast_res.get("target_date"),
-            "workout_entry": None,
+            "workout_entry": fast_res.get("workout_entry"),
             "updated_weight_kg": None
         }
 
-    # 2. Обновление веса тела ("мой вес 67.2")
+    # 3. Обновление веса тела ("мой вес 67.2")
     new_weight = parse_weight_update(clean_msg)
     if new_weight is not None:
         user.weight_kg = new_weight
@@ -425,7 +448,7 @@ def generate_coach_reply(user: User, message: str, db: Session) -> dict:
             "target_date": None
         }
 
-    # 3. Классический парсер одиночного подхода ("подъём гантелей 13 кг 3 по 16")
+    # 4. Классический парсер одиночного подхода ("подъём гантелей 13 кг 3 по 16")
     parsed = parse_workout_command(clean_msg, db)
     if parsed and parsed.get("entries"):
         matched_name = _match_catalog_exercise(parsed["exercise_name"], db)
@@ -447,7 +470,8 @@ def generate_coach_reply(user: User, message: str, db: Session) -> dict:
             "suggested_plan": None,
             "target_date": None
         }
-    # 4. Ускоренный диалог с GigaChat (Keep-Alive OAuth + сжатый контекст + парсинг предложенного плана)
+
+    # 5. Ускоренный диалог с GigaChat (кэшированный OAuth + сжатый контекст + парсинг предложенного плана)
     recent_workouts = (
         db.query(Workout)
         .filter(Workout.user_id == user.id)
@@ -483,31 +507,7 @@ def generate_coach_reply(user: User, message: str, db: Session) -> dict:
 
     llm_raw = _call_gigachat_llm(messages)
     if llm_raw:
-        reply = _clean_markdown(llm_raw)
-        # Извлекаем упражнения из ответа модели в буфер _PENDING_PLANS (если модель предложила тренировку)
-        extracted_items = []
-        for line in reply.splitlines():
-            m = re.match(
-                r"^\s*\d+[\.\)]\s*([А-ЯЁA-Za-z«»\"()\-\s]{4,60}?)\s*[—\-–:]\s*(\d+)\s*(?:подход\w*|x|х|\*)\s*[×xх\*]?\s*(\d+)(?:[^\d\n]{0,25}?(\d+(?:[.,]\d+)?)\s*кг)?",
-                line,
-                re.IGNORECASE
-            )
-            if m:
-                ex_name = _match_catalog_exercise(m.group(1).strip(), db)
-                extracted_items.append({
-                    "exercise_name": ex_name,
-                    "sets": int(m.group(2)),
-                    "reps": int(m.group(3)),
-                    "weight": float(m.group(4).replace(",", ".")) if m.group(4) else 0.0,
-                    "done": False
-                })
-
-        if extracted_items:
-            _PENDING_PLANS[user.id] = {
-                "items": extracted_items,
-                "target_date": _extract_target_date(clean_msg)
-            }
-
+        reply = _extract_and_store_plan(user.id, llm_raw, db, _extract_target_date(clean_msg))
         append_session_memory(user.id, "user", clean_msg)
         append_session_memory(user.id, "assistant", reply)
         return {
@@ -519,7 +519,7 @@ def generate_coach_reply(user: User, message: str, db: Session) -> dict:
             "target_date": None
         }
 
-    # 5. Фоллбэк, если GigaChat временно недоступен
+    # 6. Фоллбэк, если GigaChat временно недоступен
     fallback_reply = (
         f"{first_name}, я на связи! Можешь сразу диктовать подход (например: «Молотки 12.5 кг 3 по 15») "
         f"или собирать тренировку по упражнениям («Добавь подъём на бицепс 4 по 16, 13 кг»)."
@@ -534,6 +534,7 @@ def generate_coach_reply(user: User, message: str, db: Session) -> dict:
         "suggested_plan": None,
         "target_date": None
     }
+
 
 
 
