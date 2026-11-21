@@ -298,7 +298,7 @@ function startAiVoice() {
             if (activeRecognition) {
                 try { activeRecognition.stop(); } catch (e) {}
             }
-        }, 3000);
+        }, 2000);
     };
 
     recog.onresult = (e) => {
