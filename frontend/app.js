@@ -278,6 +278,39 @@ async function startVoiceVisualizer() {
     } catch (e) {}
 }
 
+let activeRecognition = null;
+let voiceAnimFrame = null;
+let voiceEnergy = 0;
+
+function stopVoiceVisualizer() {
+    if (voiceAnimFrame) cancelAnimationFrame(voiceAnimFrame);
+    voiceAnimFrame = null;
+    voiceEnergy = 0;
+    const capsule = document.getElementById("coachInputCapsule");
+    const btn = document.getElementById("aiVoiceBtn");
+    if (capsule) capsule.classList.remove("listening");
+    if (btn) btn.classList.remove("active");
+    document.querySelectorAll("#aiVoiceWave span").forEach(bar => { bar.style.height = "5px"; });
+}
+
+function startVoiceVisualizer() {
+    const bars = document.querySelectorAll("#aiVoiceWave span");
+    const phases = [0, 1.1, 2.2, 1.1, 0];
+    let t = 0;
+    const tick = () => {
+        if (!activeRecognition) return;
+        t += 0.18;
+        voiceEnergy = Math.max(0.18, voiceEnergy * 0.92);
+        bars.forEach((bar, idx) => {
+            const wave = (Math.sin(t + phases[idx]) + 1) / 2;
+            const h = Math.round(5 + wave * 16 * voiceEnergy);
+            bar.style.height = h + "px";
+        });
+        voiceAnimFrame = requestAnimationFrame(tick);
+    };
+    tick();
+}
+
 function startAiVoice() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -298,19 +331,21 @@ function startAiVoice() {
     const oldPlaceholder = input.placeholder;
     const baseText = input.value.trim() ? (input.value.trim() + " ") : "";
 
-    if (capsule) capsule.classList.add("listening");
-    if (btn) btn.classList.add("active");
-    input.placeholder = "Слушаю тебя... Нажми ↑ чтобы отправить";
-    startVoiceVisualizer();
-
     const recog = new SpeechRecognition();
     activeRecognition = recog;
     recog.lang = "ru-RU";
     recog.interimResults = true;
     recog.continuous = true;
 
+    if (capsule) capsule.classList.add("listening");
+    if (btn) btn.classList.add("active");
+    input.placeholder = "Слушаю тебя... Нажми ↑ чтобы отправить";
+    voiceEnergy = 0.45;
+    startVoiceVisualizer();
+
     let finalTranscript = "";
     recog.onresult = (e) => {
+        voiceEnergy = 1.0;
         let interim = "";
         for (let i = e.resultIndex; i < e.results.length; i++) {
             const chunk = e.results[i][0].transcript;
@@ -319,16 +354,24 @@ function startAiVoice() {
         }
         input.value = (baseText + finalTranscript + interim).trim();
     };
+    recog.onerror = (e) => {
+        if (e.error === "not-allowed") {
+            appendAiChat("Система", "Разреши доступ к микрофону в настройках браузера.", "#fb7185");
+        }
+    };
     recog.onend = () => {
         activeRecognition = null;
         stopVoiceVisualizer();
         input.placeholder = oldPlaceholder;
     };
-    try { recog.start(); } catch (err) {
+    try {
+        recog.start();
+    } catch (err) {
         activeRecognition = null;
         stopVoiceVisualizer();
     }
 }
+
 
 
 
