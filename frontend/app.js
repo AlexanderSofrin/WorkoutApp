@@ -494,7 +494,12 @@ function selectExerciseForForm(name) {
 
 function savePlanStorage() {
     localStorage.setItem("wv_plan", JSON.stringify(workoutPlan));
+    const dateVal = document.getElementById("workoutDateInput")?.value || new Date().toLocaleDateString("sv-SE");
+    localStorage.setItem("wv_plan_date", dateVal);
+    renderCalendar();
+    renderCalDayDetails(selectedDateStr);
 }
+
 
 function addToPlan(name) {
     workoutPlan.push({ name: name, done: false, sets: 3, reps: 15, weight: 0 });
@@ -775,8 +780,11 @@ function renderCalendar() {
         const dStr = `${calYear}-${String(calMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
         const dayItems = workoutsByDate[dStr];
         const hasWorkout = Boolean(dayItems);
+        const plannedDate = localStorage.getItem("wv_plan_date") || "";
+        const isPlanned = !hasWorkout && workoutPlan.length > 0 && dStr === plannedDate;
+
         const isSelected = dStr === selectedDateStr;
-        const isToday = dStr === todayStr;
+                const isToday = dStr === todayStr;
 
         if (hasWorkout) {
             monthWorkoutsCount++;
@@ -785,25 +793,36 @@ function renderCalendar() {
 
         let bg = "#0f172a";
         let border = isToday ? "1px solid #38bdf8" : "1px solid #1e293b";
-        let color = "#cbd5e1";
+        let color = "#94a3b8";
 
         if (hasWorkout) {
             bg = "rgba(52, 211, 153, 0.16)";
             border = isSelected ? "2px solid #34d399" : "1px solid rgba(52, 211, 153, 0.5)";
             color = "#34d399";
+        } else if (isPlanned) {
+            bg = "rgba(168, 85, 247, 0.20)";
+            border = isSelected ? "2px solid #c084fc" : "1px solid rgba(168, 85, 247, 0.55)";
+            color = "#d8b4fe";
         } else if (isSelected) {
-                        bg = "rgba(56, 189, 248, 0.18)";
+            bg = "rgba(56, 189, 248, 0.18)";
             border = "2px solid #38bdf8";
             color = "#fff";
         }
 
-        const dot = hasWorkout ? `<div style="width:5px; height:5px; border-radius:50%; background:#34d399; margin:2px auto 0;"></div>` : `<div style="height:7px;"></div>`;
+        const dot = hasWorkout
+            ? `<div style="width:5px; height:5px; border-radius:50%; background:#34d399; margin:2px auto 0;"></div>`
+            : (isPlanned
+                ? `<div style="width:5px; height:5px; border-radius:50%; background:#c084fc; margin:2px auto 0;"></div>`
+                : `<div style="height:7px;"></div>`);
 
         grid.innerHTML +=
-            `<button onclick="selectCalDay('${dStr}')" style="background:${bg}; border:${border}; border-radius:10px; padding:6px 2px; cursor:pointer; text-align:center; color:${color}; font-weight:${hasWorkout || isSelected ? '700' : '500'}; font-size:13px;">` +
+            `<button onclick="selectCalDay('${dStr}')" style="background:${bg}; border:${border}; border-radius:10px; padding:6px 2px; cursor:pointer; text-align:center; color:${color}; font-weight:${hasWorkout || isPlanned || isSelected ? '700' : '500'}; font-size:13px;">` +
             `<div>${day}</div>${dot}` +
             `</button>`;
     }
+
+
+
 
     let summaryEl = document.getElementById("calMonthSummary");
     if (!summaryEl) {
@@ -827,6 +846,25 @@ function renderCalDayDetails(dateStr) {
     const dayItems = allWorkoutsCache.filter(w => w.created_at && new Date(w.created_at).toLocaleDateString("sv-SE") === dateStr);
 
     if (dayItems.length === 0) {
+        const plannedDate = localStorage.getItem("wv_plan_date") || "";
+        if (workoutPlan.length > 0 && dateStr === plannedDate) {
+            let planHtml = "";
+            workoutPlan.forEach((p, idx) => {
+                planHtml +=
+                    `<div style="display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid #1e293b; font-size:12px;">` +
+                    `<span style="color:#e2e8f0;"><strong>${idx + 1}. ${p.name}</strong></span>` +
+                    `<span style="color:#c084fc;">${p.sets || 3}×${p.reps || 12} • ${p.weight || 0} кг</span>` +
+                    `</div>`;
+            });
+            box.innerHTML =
+                `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">` +
+                `<strong style="color:#c084fc;">Запланировано на ${niceDate}</strong>` +
+                `<span class="badge" style="background:rgba(168,85,247,0.18); color:#d8b4fe;">План (${workoutPlan.length} поз.)</span>` +
+                `</div>` +
+                planHtml;
+            return;
+        }
+
         box.innerHTML =
             `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">` +
             `<strong style="color:#38bdf8;">${niceDate}</strong>` +
@@ -861,6 +899,8 @@ function renderCalDayDetails(dateStr) {
         `</div>` +
         rowsHtml;
 }
+
+
 
 async function loadAnalytics() {
     const [recRes, histRes] = await Promise.all([
