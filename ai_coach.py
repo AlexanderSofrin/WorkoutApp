@@ -4,6 +4,7 @@ import re
 import ssl
 import uuid
 import time
+import random
 import urllib.request
 import urllib.parse
 from datetime import datetime
@@ -12,25 +13,33 @@ from db_models import User, Workout, Exercise
 from coach_parser import parse_workout_command, parse_weight_update
 
 # ==============================================================================================
-# ТРЁХУРОВНЕВАЯ БЫСТРАЯ ПАМЯТЬ ИИ-ТРЕНЕРА (Sliding Window + Срез БД + Сжатие + Черновик плана)
+# ТРЁХУРОВНЕВАЯ БЫСТРАЯ ПАМЯТЬ + ЖИВАЯ СЕССИЯ ТРЕНИРОВКИ (Live Copilot + Черновик плана)
 # ==============================================================================================
 _CHAT_WINDOWS: dict[int, list[dict]] = {}
 _COMPRESSED_CONTEXT: dict[int, str] = {}
-_PENDING_PLANS: dict[int, list[dict]] = {}
-MAX_WINDOW_MESSAGES = 10
+_PENDING_PLANS: dict[int, dict] = {}
+_ACTIVE_EXERCISES: dict[int, dict] = {}  # {user_id: {"name": str, "weight": float}}
+MAX_WINDOW_MESSAGES = 8
 
 _GIGACHAT_TOKEN_CACHE: dict[str, object] = {"token": "", "expires_at": 0.0}
+_SSL_CTX = ssl._create_unverified_context()
 
 CONFIRM_WORDS = {
     "да", "давай", "добавляй", "добавь", "согласен", "погнали",
     "ок", "окей", "хорошо", "утверждаю", "записывай в план", "в план",
-    "запиши", "записывай", "записать", "переноси", "перенеси"
+    "запиши", "записывай", "записать", "переноси", "перенеси", "готово"
 }
 
+FAST_SET_PRAISES = [
+    "Чётко, {name}! Записал в план: {summary}. Отдышись спокойно и жми таймер, когда будешь готов.",
+    "Отличный темп, {name}! Зафиксировал: {summary}. Контролируй негативную фазу и береги связки.",
+    "Мощно зашло, {name}! Внёс в план: {summary}. Пей воду и восстанавливай дыхание перед следующим подходом.",
+    "Принято в работу, {name}! Записал: {summary}. Двигаемся ровно и без лишней суеты."
+]
 
 
 def append_session_memory(user_id: int, role: str, content: str) -> None:
-    """Уровень 1: Скользящее окно последних 10 реплик для живого непрерывного диалога."""
+    """Уровень 1: Скользящее окно последних 8 реплик для живого непрерывного диалога."""
     history = _CHAT_WINDOWS.setdefault(user_id, [])
     history.append({"role": role, "content": content})
     if len(history) > MAX_WINDOW_MESSAGES:
@@ -38,7 +47,7 @@ def append_session_memory(user_id: int, role: str, content: str) -> None:
 
 
 def compress_session_memory(user_id: int, summary_note: str) -> None:
-    """Уровень 3: Сжатие истории диалога после записи тренировки в PostgreSQL."""
+    """Уровень 3: Сжатие истории диалога после утверждения плана или записи тренировки в БД."""
     _COMPRESSED_CONTEXT[user_id] = summary_note
     _CHAT_WINDOWS[user_id] = []
     _PENDING_PLANS.pop(user_id, None)
@@ -52,13 +61,17 @@ def _clean_markdown(text: str) -> str:
 
 
 def _extract_target_date(text: str) -> str | None:
-    """Извлекает дату вида '26 число', '26.11', '26 ноября' и возвращает YYYY-MM-DD."""
+    """Извлекает дату вида '26 число', '26.11', '26 ноября', 'сегодня' и возвращает YYYY-MM-DD."""
     now = datetime.now()
+    low = text.lower()
+    if "сегодня" in low:
+        return now.strftime("%Y-%m-%d")
+
     months = {
         "январ": 1, "феврал": 2, "март": 3, "апрел": 4, "ма": 5, "июн": 6,
         "июл": 7, "август": 8, "сентябр": 9, "октябр": 10, "ноябр": 11, "декабр": 12
     }
-    m_word = re.search(r"\b(\d{1,2})\s+(январ|феврал|март|апрел|ма|июн|июл|август|сентябр|октябр|ноябр|декабр)[а-яё]*", text.lower())
+    m_word = re.search(r"\b(\d{1,2})\s+(январ|феврал|март|апрел|ма|июн|июл|август|сентябр|октябр|ноябр|декабр)[а-яё]*", low)
     if m_word:
         day = int(m_word.group(1))
         month = months[m_word.group(2)]
@@ -79,7 +92,7 @@ def _extract_target_date(text: str) -> str | None:
         except ValueError:
             pass
 
-    m_day = re.search(r"\bна\s+(\d{1,2})(?:\s*-?\s*(?:е|ое|го))?\s*(?:числ[оае]?)?\b", text.lower())
+    m_day = re.search(r"\bна\s+(\d{1,2})(?:\s*-?\s*(?:е|ое|го))?\s*(?:числ[оае]?)?\b", low)
     if m_day:
         day = int(m_day.group(1))
         try:
@@ -87,115 +100,6 @@ def _extract_target_date(text: str) -> str | None:
         except ValueError:
             pass
     return None
-
-
-def _extract_and_store_plan(user_id: int, raw_reply: str, db: Session, target_date: str | None = None) -> str:
-    """Извлекает план из [PLAN_JSON] или напрямую из нумерованного списка ответа LLM."""
-    normalized = []
-
-    match = re.search(r"\[PLAN_JSON\](.*?)\[/PLAN_JSON\]", raw_reply, flags=re.DOTALL)
-    if match:
-        try:
-            items = json.loads(match.group(1).strip())
-            if isinstance(items, list):
-                for item in items:
-                    raw_name = str(item.get("exercise_name", "")).strip()
-                    if not raw_name:
-                        continue
-                    ex_name = _match_catalog_exercise(raw_name, db) or raw_name
-                    normalized.append({
-                        "exercise_name": ex_name,
-                        "sets": int(item.get("sets", 1)),
-                        "reps": int(item.get("reps", 12)),
-                        "weight": float(item.get("weight", 0)),
-                        "done": bool(item.get("done", False)),
-                    })
-        except Exception as e:
-            print("Plan JSON parse error:", repr(e))
-
-    if not normalized:
-        card_pattern = re.finditer(
-            r"(?:^|\n)\s*\d+[\.\)]\s*([^\n]+)\n\s*(\d+)\s*(?:подход[а-яё]*\s*)?[×xх*]\s*(\d+)(?:[^\n]*?(\d+(?:[.,]\d+)?)\s*кг)?",
-            raw_reply,
-            flags=re.IGNORECASE
-        )
-        for m in card_pattern:
-            raw_name = re.sub(r"[\*\#]+", "", m.group(1)).strip()
-            if not raw_name:
-                continue
-            ex_name = _match_catalog_exercise(raw_name, db) or raw_name
-            sets = int(m.group(2))
-            reps = int(m.group(3))
-            weight = float(m.group(4).replace(",", ".")) if m.group(4) else 0.0
-            normalized.append({
-                "exercise_name": ex_name,
-                "sets": sets,
-                "reps": reps,
-                "weight": weight,
-                "done": False,
-            })
-
-    if normalized:
-        prev_date = _PENDING_PLANS.get(user_id, {}).get("target_date") if isinstance(_PENDING_PLANS.get(user_id), dict) else None
-        _PENDING_PLANS[user_id] = {
-            "items": normalized,
-            "target_date": target_date or prev_date
-        }
-
-    return _clean_markdown(raw_reply)
-
-
-
-def build_athlete_dossier(user: User, db: Session, muscle_detector) -> dict:
-    """Уровень 2: Живой срез состояния атлета из PostgreSQL 17."""
-    now = datetime.utcnow()
-    workouts = (
-        db.query(Workout)
-        .filter(Workout.user_id == user.id)
-        .order_by(Workout.created_at.desc(), Workout.id.desc())
-        .limit(40)
-        .all()
-    )
-
-    last_trained: dict[str, datetime] = {}
-    recent_log = []
-    today_items = []
-    today_date = now.date()
-
-    for idx, w in enumerate(workouts):
-        grp = muscle_detector(w.exercise_name)
-        if grp and grp not in last_trained and w.created_at:
-            last_trained[grp] = w.created_at
-        if idx < 12:
-            dt = w.created_at.strftime("%d.%m %H:%M") if w.created_at else "—"
-            recent_log.append(f"{dt}: {w.exercise_name} ({w.sets}x{w.reps}, {w.weight or 0} кг)")
-        if w.created_at and w.created_at.date() == today_date:
-            today_items.append(f"{w.exercise_name} {w.sets}x{w.reps} ({w.weight or 0} кг)")
-
-    recovery_hours_map = {}
-    for grp, dt_last in last_trained.items():
-        recovery_hours_map[grp] = int((now - dt_last).total_seconds() // 3600)
-
-    total_tonnage = round(sum((w.sets * w.reps * (w.weight or 0)) for w in workouts), 1)
-
-    return {
-        "name": user.full_name or user.username,
-        "age": user.age,
-        "height_cm": user.height_cm,
-        "weight_kg": user.weight_kg,
-        "target_weight_kg": user.target_weight_kg,
-        "goal": user.goal,
-        "work_schedule": user.work_schedule,
-        "protect_lower_back": bool(user.protect_lower_back),
-        "protect_knees": bool(user.protect_knees),
-        "protect_elbows": bool(user.protect_elbows),
-        "injury_notes": user.injury_notes,
-        "today_workouts": today_items,
-        "recent_workouts": recent_log,
-        "hours_since_muscle_trained": recovery_hours_map,
-        "recent_40_tonnage_kg": total_tonnage,
-        "compressed_note": _COMPRESSED_CONTEXT.get(user.id, ""),
-    }
 
 
 def _match_catalog_exercise(raw_name: str, db: Session) -> str:
@@ -215,19 +119,216 @@ def _match_catalog_exercise(raw_name: str, db: Session) -> str:
         if words and all(w[:4] in cat_low for w in words[:2]):
             return cat_name
     return raw_name
+def _extract_and_store_plan(user_id: int, llm_text: str, db: Session, target_date: str | None = None) -> str:
+    """Извлекает тренировочный план из ответа LLM (JSON, таблица или список) и кладёт в буфер."""
+    items = []
+    m = re.search(r"\[PLAN_JSON\](.*?)\[/PLAN_JSON\]", llm_text, flags=re.DOTALL)
+    if m:
+        try:
+            raw_list = json.loads(m.group(1).strip())
+            if isinstance(raw_list, list):
+                for item in raw_list:
+                    ex_name = _match_catalog_exercise(str(item.get("exercise_name", "")).strip(), db)
+                    if ex_name:
+                        items.append({
+                            "exercise_name": ex_name,
+                            "sets": int(item.get("sets") or 3),
+                            "reps": int(item.get("reps") or 12),
+                            "weight": float(item.get("weight") or 0),
+                            "done": False
+                        })
+        except Exception:
+            items = []
+
+    if not items:
+        for line in llm_text.splitlines():
+            line_s = line.strip()
+            if not line_s.startswith("|") or line_s.startswith("|---") or "упражнен" in line_s.lower():
+                continue
+            cols = [c.strip(" *") for c in line_s.strip("|").split("|")]
+            if len(cols) >= 3 and cols[0]:
+                ex_name = _match_catalog_exercise(cols[0], db)
+                nums_sets = re.findall(r"\d+", cols[1])
+                nums_reps = re.findall(r"\d+", cols[2])
+                nums_w = re.findall(r"\d+(?:[.,]\d+)?", cols[3]) if len(cols) > 3 else []
+                items.append({
+                    "exercise_name": ex_name,
+                    "sets": int(nums_sets[0]) if nums_sets else 3,
+                    "reps": int(nums_reps[-1]) if nums_reps else 12,
+                    "weight": float(nums_w[0].replace(",", ".")) if nums_w else 0.0,
+                    "done": False
+                })
+
+    if not items:
+        for line in llm_text.splitlines():
+            m_num = re.match(r"^\s*\d+[\.\)]\s+(.+)$", line.strip())
+            if not m_num:
+                continue
+            raw_title = re.sub(r"\*+", "", m_num.group(1)).strip()
+            raw_title = re.split(r"\s*[—–-]\s*|\s*\(", raw_title)[0].strip()
+            if len(raw_title) < 4:
+                continue
+            ex_name = _match_catalog_exercise(raw_title, db)
+            m_sr = re.search(r"(\d+)\s*(?:подход[а-я]*|x|х|\*)\s*(?:по\s*)?(\d+)", line.lower())
+            m_w = re.search(r"(\d+(?:[.,]\d+)?)\s*кг", line.lower())
+            items.append({
+                "exercise_name": ex_name,
+                "sets": int(m_sr.group(1)) if m_sr else 3,
+                "reps": int(m_sr.group(2)) if m_sr else 12,
+                "weight": float(m_w.group(1).replace(",", ".")) if m_w else 0.0,
+                "done": False
+            })
+
+    if items:
+        existing = _PENDING_PLANS.get(user_id, {})
+        prev_date = existing.get("target_date")
+        _PENDING_PLANS[user_id] = {
+            "items": items,
+            "target_date": target_date or prev_date
+        }
+    return _clean_markdown(llm_text)
 
 
-def _get_gigachat_access_token(auth_key: str) -> str | None:
-    """Получает и кэширует OAuth-токен GigaChat (действует 30 минут)."""
-    now_ts = time.time()
-    if _GIGACHAT_TOKEN_CACHE["token"] and now_ts < float(_GIGACHAT_TOKEN_CACHE["expires_at"]) - 60:
+def _fast_parse_live_copilot(user_id: int, message: str, db: Session, first_name: str) -> dict | None:
+    """
+    МГНОВЕННЫЙ FAST-PATH (~20 мс, без обращения к LLM):
+    1) Старт/смена упражнения: 'начинаю тренировку, сейчас буду делать молотки 10 кг'
+    2) Серия подходов на лету: 'первый подход 10 кг на 15, второй 16, третий 18, четвёртый 24 на пампе'
+    3) Пошаговое добавление в черновик: 'добавь молотки 4 по 15, вес 15.5 кг'
+    """
+    low = message.lower().strip()
+    target_date = _extract_target_date(message)
+
+    # 1. Старт или переключение текущего упражнения во время тренировки
+    m_start = re.search(
+        r"(?:начинаю\s+тренировк\w*|сейчас\s+(?:буду\s+)?дела\w*|дальше\s+(?:будем\s+)?дела\w*|следующ\w*\s+упражнен\w*)\s*[:,-]?\s*(.+)",
+        low
+    )
+    if m_start and not re.search(r"(?:первый|второй|третий|четвертый|четвёртый|1-й|2-й|3-й|4-й)\s+(?:подход)?", low):
+        tail = m_start.group(1).strip()
+        w_m = re.search(r"(\d+(?:[.,]\d+)?)\s*кг", tail)
+        weight = float(w_m.group(1).replace(",", ".")) if w_m else 0.0
+        clean_ex = re.sub(r"\d+(?:[.,]\d+)?\s*кг.*", "", tail).strip(" .,-")
+        if len(clean_ex) >= 3:
+            matched_name = _match_catalog_exercise(clean_ex, db)
+            _ACTIVE_EXERCISES[user_id] = {"name": matched_name, "weight": weight}
+            w_note = f" (рабочий вес {weight} кг)" if weight > 0 else ""
+            reply = f"Погнали, {first_name}! Зафиксировал текущее упражнение: {matched_name}{w_note}. Диктуй подходы по ходу работы!"
+            append_session_memory(user_id, "user", message)
+            append_session_memory(user_id, "assistant", reply)
+            return {
+                "reply": reply,
+                "mode": "chat",
+                "used_llm": False,
+                "workout_entry": None,
+                "suggested_plan": None,
+                "target_date": target_date
+            }
+
+    # 2. Серия подходов в реальном времени ('первый 15, второй 16, третий 18, четвёртый 24, вес 10 кг')
+    ordinals = re.findall(
+        r"(?:перв\w+|втор\w+|трет\w+|четв[её]рт\w+|пят\w+|\d+-?[йм])\s*(?:подход)?\s*(?:в|на|по)?\s*(\d+)\s*(?:раз|повтор\w*|на\s*памп\w*)?",
+        low
+    )
+    if len(ordinals) >= 2:
+        active = _ACTIVE_EXERCISES.get(user_id, {})
+        ex_name = active.get("name", "")
+        if not ex_name:
+            # Пробуем вытащить упражнение из фразы, если не объявляли заранее
+            cleaned_phrase = re.sub(r"(?:перв\w+|втор\w+|трет\w+|четв[её]рт\w+|пят\w+|\d+-?[йм]).*", "", low).strip(" .,-")
+            if len(cleaned_phrase) >= 3:
+                ex_name = _match_catalog_exercise(cleaned_phrase, db)
+        if not ex_name:
+            ex_name = "Упражнение текущей тренировки"
+
+        w_m = re.search(r"(\d+(?:[.,]\d+)?)\s*кг", low)
+        weight = float(w_m.group(1).replace(",", ".")) if w_m else float(active.get("weight", 0.0))
+        if weight > 0:
+            _ACTIVE_EXERCISES[user_id] = {"name": ex_name, "weight": weight}
+
+        reps_list = [int(r) for r in ordinals]
+        entries = [{"sets": 1, "reps": r, "weight": weight} for r in reps_list]
+        total_reps = sum(reps_list)
+        tonnage = round(total_reps * weight, 1)
+        reps_str = ", ".join(str(r) for r in reps_list)
+        ton_note = f" (тоннаж {tonnage} кг)" if tonnage > 0 else ""
+
+        reply = (
+            f"Огонь, {first_name}! Закрыли «{ex_name}»: {len(reps_list)} подхода "
+            f"({reps_str} повторений × {weight} кг){ton_note}. Перенёс в «План тренировки». Что ставим дальше?"
+        )
+        append_session_memory(user_id, "user", message)
+        append_session_memory(user_id, "assistant", reply)
+        return {
+            "reply": reply,
+            "mode": "live_set",
+            "used_llm": False,
+            "workout_entry": {
+                "exercise_name": ex_name,
+                "entries": entries
+            },
+            "suggested_plan": None,
+            "target_date": target_date
+        }
+
+    # 3. Пошаговое добавление упражнения в черновик плана ('добавь молотки 4 по 15, вес 15.5 кг')
+    m_add = re.match(r"^(?:добавь|ещ[её]\s+добавь|поставь|закинь|плюс)\s+(.+)$", low)
+    if m_add and not any(w in low for w in ("в план", "тренировку в бд", "в базу")):
+        tail = m_add.group(1).strip()
+        m_sr = re.search(r"(\d+)\s*(?:подход[а-я]*|x|х|\*)\s*(?:по\s*)?(\d+)", tail)
+        m_w = re.search(r"(\d+(?:[.,]\d+)?)\s*кг", tail)
+        sets = int(m_sr.group(1)) if m_sr else 3
+        reps = int(m_sr.group(2)) if m_sr else 12
+        weight = float(m_w.group(1).replace(",", ".")) if m_w else 0.0
+
+        ex_raw = re.split(r"\d+\s*(?:подход|x|х|\*)|\d+(?:[.,]\d+)?\s*кг", tail)[0].strip(" .,-")
+        if len(ex_raw) >= 3:
+            ex_name = _match_catalog_exercise(ex_raw, db)
+            buf = _PENDING_PLANS.setdefault(user_id, {"items": [], "target_date": target_date})
+            if target_date:
+                buf["target_date"] = target_date
+            buf["items"].append({
+                "exercise_name": ex_name,
+                "sets": sets,
+                "reps": reps,
+                "weight": weight,
+                "done": False
+            })
+            count = len(buf["items"])
+            w_txt = f", {weight} кг" if weight > 0 else ""
+            reply = (
+                f"Добавил в черновик (#{count}): {ex_name} — {sets}×{reps}{w_txt}. "
+                f"Диктуй следующее упражнение или скажи «Всё, добавь в план»."
+            )
+            append_session_memory(user_id, "user", message)
+            append_session_memory(user_id, "assistant", reply)
+            return {
+                "reply": reply,
+                "mode": "chat",
+                "used_llm": False,
+                "workout_entry": None,
+                "suggested_plan": None,
+                "target_date": buf.get("target_date")
+            }
+
+    return None
+
+
+def _get_gigachat_token() -> str | None:
+    """Получает и кэширует OAuth-токен GigaChat на 29 минут."""
+    auth_key = os.getenv("GIGACHAT_AUTH_KEY", "").strip()
+    if not auth_key:
+        return None
+    now = time.time()
+    if _GIGACHAT_TOKEN_CACHE["token"] and now < float(_GIGACHAT_TOKEN_CACHE["expires_at"]):
         return str(_GIGACHAT_TOKEN_CACHE["token"])
 
     scope = os.getenv("GIGACHAT_SCOPE", "GIGACHAT_API_PERS").strip()
-    body = urllib.parse.urlencode({"scope": scope}).encode("utf-8")
+    url = "https://sberbank.ru"
+    data = urllib.parse.urlencode({"scope": scope}).encode("utf-8")
     req = urllib.request.Request(
-        url="https://" + "ngw.devices.sberbank.ru:9443/api/v2/oauth",
-        data=body,
+        url,
+        data=data,
         headers={
             "Content-Type": "application/x-www-form-urlencoded",
             "Accept": "application/json",
@@ -236,196 +337,197 @@ def _get_gigachat_access_token(auth_key: str) -> str | None:
         },
         method="POST",
     )
-    ctx = ssl._create_unverified_context()
     try:
-        with urllib.request.urlopen(req, timeout=8, context=ctx) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            token = data.get("access_token", "")
-            expires_ms = data.get("expires_at", 0)
-            if token:
-                _GIGACHAT_TOKEN_CACHE["token"] = token
-                _GIGACHAT_TOKEN_CACHE["expires_at"] = (expires_ms / 1000.0) if expires_ms else (now_ts + 1500)
-                return token
-    except Exception as e:
-        print("GigaChat OAuth error:", repr(e))
+        with urllib.request.urlopen(req, timeout=8, context=_SSL_CTX) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+            tok = payload.get("access_token", "")
+            if tok:
+                _GIGACHAT_TOKEN_CACHE["token"] = tok
+                _GIGACHAT_TOKEN_CACHE["expires_at"] = now + 1700
+                return tok
+    except Exception:
         return None
     return None
 
-def _call_gigachat_llm(question: str, dossier: dict, window: list[dict], extra_instruction: str = "") -> str | None:
-    """Живой человеческий разум на базе GigaChat API (отклик 1-2 сек из Москвы)."""
-    auth_key = os.getenv("GIGACHAT_AUTH_KEY", "").strip()
-    if not auth_key:
+def _call_gigachat_llm(messages: list[dict]) -> str | None:
+    """Быстрый вызов GigaChat API с ограниченным объёмом генерации (max_tokens=340)."""
+    token = _get_gigachat_token()
+    if not token:
         return None
 
-    access_token = _get_gigachat_access_token(auth_key)
-    if not access_token:
-        return None
-
-    model_name = os.getenv("GIGACHAT_MODEL", "GigaChat-Max").strip()
-    system_prompt = (
-        "Ты — живой, мудрый и прямой персональный тренер-напарник в приложении Workout Vault. "
-        "Общайся с атлетом на «ты», как равный партнёр и наставник в зале: по делу, без канцелярита, воды и нотаций (протокол Zero-Shame). "
-        "СТРОГИЙ ЗАПРЕТ НА MARKDOWN-ЗВЁЗДОЧКИ: никогда не используй символы ** или __ для выделения текста. "
-        "Когда к месту для настроя или преодоления усталости после смен — приводи короткие живые примеры или цитаты легенд спорта "
-        "(Арнольда Шварценеггера, Мухаммеда Али, Майка Тайсона). "
-        "ПРАВИЛА ФИЗИОЛОГИИ И БЕЗОПАСНОСТИ: "
-        "- Учитывай досье атлета: возраст, актуальный вес, целевой вес (без урезания углеводов при наборе качественной массы) и недавние тренировки. "
-        "- Всегда защищай поясницу, колени и связки локтей (исключай опасные осевые перегрузки и читинг, при дискомфорте сразу предлагай безопасную замену). "
-        "- Соблюдай правило 48 часов отдыха для мышечных групп после тяжёлых сессий. "
-        "РЕЖИМ 1 — СОСТАВЛЕНИЕ НОВОГО ПЛАНА ТРЕНИРОВКИ: "
-        "Выстрой упражнения строго по очереди нумерованным списком:\n"
-        "1. Название упражнения\n"
-        "   Подходы × Повторы | Рабочий вес | Отдых | Короткий фокус по технике и суставам\n"
-        "В конце спроси: «Добавляю эту тренировку в план, да?» и добавь блок [PLAN_JSON]...[/PLAN_JSON].\n"
-        "РЕЖИМ 2 — ПРИЁМ ГОТОВОГО ОТЧЁТА О ТРЕНИРОВКЕ ОТ АТЛЕТА: "
-        "Если атлет прислал отчёт о уже выполненной тренировке (список упражнений, весов, подходов и повторений), "
-        "разбери каждый подход (если повторения в подходах разные, например 14, 16, 16, 12 — запиши каждый подход отдельной позицией с sets=1 и нужным reps), "
-        "выведи красивый нумерованный список для сверки и спроси: «Сверь, всё правильно? Переношу эти позиции в План тренировки, чтобы ты мог нажать Записать всю тренировку в БД?» "
-        "И в самом конце ответа добавь технический блок строго в таком формате:\n"
-        "[PLAN_JSON][{\"exercise_name\": \"Название\", \"sets\": 1, \"reps\": 14, \"weight\": 15.0, \"done\": true}][/PLAN_JSON]\n"
-        f"Актуальное досье атлета из PostgreSQL: {json.dumps(dossier, ensure_ascii=False)}. "
-        f"{extra_instruction}"
-    )
-
-    messages = [{"role": "system", "content": system_prompt}] + window + [{"role": "user", "content": question}]
-    payload = json.dumps({
+    model_name = os.getenv("GIGACHAT_MODEL", "GigaChat").strip()
+    url = "https://sberbank.ru"
+    body = json.dumps({
         "model": model_name,
         "messages": messages,
-        "temperature": 0.55,
-        "max_tokens": 900,
+        "temperature": 0.45,
+        "max_tokens": 340
     }).encode("utf-8")
 
     req = urllib.request.Request(
-        url="https://" + "gigachat.devices.sberbank.ru/api/v1/chat/completions",
-        data=payload,
+        url,
+        data=body,
         headers={
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "Authorization": f"Bearer {access_token}",
+            "Authorization": f"Bearer {token}"
         },
-        method="POST",
+        method="POST"
     )
-    ctx = ssl._create_unverified_context()
     try:
-        with urllib.request.urlopen(req, timeout=14, context=ctx) as resp:
+        with urllib.request.urlopen(req, timeout=14, context=_SSL_CTX) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-            return data["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        print("GigaChat Chat error:", repr(e))
+            choices = data.get("choices") or []
+            if choices:
+                return choices[0].get("message", {}).get("content", "").strip()
+    except Exception:
         return None
+    return None
+def generate_coach_reply(user: User, message: str, db: Session) -> dict:
+    clean_msg = message.strip()
+    low_msg = clean_msg.lower()
+    first_name = (user.full_name or "Атлет").split()[0]
 
-
-def _is_plan_confirmation(text_low: str) -> bool:
-    """Проверяет, подтвердил ли атлет добавление согласованного плана в тренировку."""
-    cleaned = re.sub(r"[^\w\sа-яё]", "", text_low).strip()
-    if cleaned in CONFIRM_WORDS:
-        return True
-    prefixes = ("да ", "давай ", "добав", "запиш", "записыв", "перенес", "ок ", "окей ", "хорошо ")
-    return any(cleaned.startswith(p) for p in prefixes) and len(cleaned.split()) <= 6
-
-
-
-def generate_coach_reply(question: str, user: User, db: Session, muscle_detector) -> dict:
-    """
-    Живой ИИ-тренер Workout Vault:
-    - Общается по-человечески через GigaChat-Max с пошаговой структурой и без звёздочек **;
-    - Предлагает план тренировки и добавляет его в список только после подтверждения атлета («Да»);
-    - Понимает живую диктовку подходов и обновление веса;
-    - Таймер отдыха запускается строго вручную атлетом.
-    """
-    text = question.strip()
-    q = text.lower()
-    name = user.full_name or user.username
-    dossier = build_athlete_dossier(user, db, muscle_detector)
-    window = _CHAT_WINDOWS.get(user.id, [])
-
-    mentioned_date = _extract_target_date(text)
-
-    # 0. Подтверждение ранее предложенного плана тренировки («Да», «Да, на 26 число», «Добавляй»)
-    if user.id in _PENDING_PLANS and _is_plan_confirmation(q):
-        pending_obj = _PENDING_PLANS.pop(user.id)
-        approved_plan = pending_obj["items"] if isinstance(pending_obj, dict) else pending_obj
-        plan_date = mentioned_date or (pending_obj.get("target_date") if isinstance(pending_obj, dict) else None)
-
-        unique_names = list(dict.fromkeys(item["exercise_name"] for item in approved_plan))
-        ex_names = ", ".join(unique_names)
-        date_note = f" на дату {plan_date}" if plan_date else ""
-        reply = (
-            f"Принято, {name}! Перенёс всё в План тренировки{date_note} ({ex_names}). "
-            "Проверь позиции ниже и жми «Записать всю тренировку в БД», когда будешь готов."
-        )
-        # Очищаем окно диалога от старой таблицы, чтобы тренер больше не повторял её в следующих ответах
-        compress_session_memory(user.id, f"Атлет уже утвердил и перенёс в План тренировки{date_note}: {ex_names}.")
-        append_session_memory(user.id, "assistant", reply)
+    # 1. МГНОВЕННЫЙ FAST-PATH (Live Copilot + Черновик плана — отклик ~30 мс без ожидания нейросети)
+    fast_res = _fast_parse_live_copilot(user.id, clean_msg, db)
+    if fast_res:
+        append_session_memory(user.id, "user", clean_msg)
+        append_session_memory(user.id, "assistant", fast_res["reply"])
         return {
-            "mode": "plan_approved",
-            "reply": reply,
-            "suggested_plan": approved_plan,
-            "target_date": plan_date,
+            "reply": fast_res["reply"],
+            "mode": fast_res["mode"],
+            "suggested_plan": fast_res.get("suggested_plan"),
+            "target_date": fast_res.get("target_date"),
+            "workout_entry": None,
+            "updated_weight_kg": None
         }
 
-    # 1. Обновление веса в диалоге + живая реакция нейросети
-    new_weight = parse_weight_update(text)
-    if new_weight is not None and 30 <= new_weight <= 300:
+    # 2. Обновление веса тела ("мой вес 67.2")
+    new_weight = parse_weight_update(clean_msg)
+    if new_weight is not None:
         user.weight_kg = new_weight
         db.commit()
-        dossier["weight_kg"] = new_weight
-        live_reply = _call_gigachat_llm(
-            text,
-            dossier,
-            window,
-            extra_instruction=f"Атлет только что обновил свой вес до {new_weight} кг. По-дружески прокомментируй это относительно его Зелёного коридора."
-        )
-        reply = _clean_markdown(live_reply) if live_reply else f"Принято, {name}! Обновил твой вес до {new_weight} кг."
-        append_session_memory(user.id, "user", text)
-        append_session_memory(user.id, "assistant", reply)
-        return {"mode": "weight_updated", "reply": reply, "weight_kg": new_weight}
-
-    # 2. Распознавание одиночного подхода (только для коротких однострочных реплик, чтобы таблицы шли в LLM)
-    is_multiline_table = ("\n" in text) or (len(text) > 95)
-    parsed = None if is_multiline_table else parse_workout_command(text)
-
-    if parsed:
-        matched_name = _match_catalog_exercise(parsed["exercise_name"], db)
-        parsed["exercise_name"] = matched_name
-
-        summary_str = f"{matched_name}: {parsed['summary']['total_sets']} подх., {parsed['summary']['total_reps']} повт., тоннаж {parsed['summary']['tonnage_kg']} кг"
-        live_reply = _call_gigachat_llm(
-            text,
-            dossier,
-            window,
-            extra_instruction=(
-                f"Ты только что занёс в план тренировки атлета выполненную работу ({summary_str}). "
-                "Отреагируй как живой опытный напарник: похвали за конкретные цифры, памп или выносливость, "
-                "напомни про технику и бережное отношение к суставам. НЕ пиши про автозапуск таймера."
-            )
-        )
-        reply = _clean_markdown(live_reply) if live_reply else (
-            f"Красавчик, {name}! Записал в план: {summary_str}. "
-            "Отдышись спокойно и запускай таймер сам, когда будешь готов к следующему подходу."
-        )
-        append_session_memory(user.id, "user", text)
+        reply = f"Зафиксировал новый вес: {new_weight} кг. Двигаемся в зелёном коридоре к цели {user.target_weight_kg} кг!"
+        append_session_memory(user.id, "user", clean_msg)
         append_session_memory(user.id, "assistant", reply)
         return {
-            "mode": "live_set",
             "reply": reply,
-            "workout_entry": parsed,
-            "auto_timer_sec": None,
+            "mode": "weight_updated",
+            "updated_weight_kg": new_weight,
+            "workout_entry": None,
+            "suggested_plan": None,
+            "target_date": None
         }
 
-    # 3. Свободный живой разговор с тренером (приветствие, самочувствие, составление плана тренировки)
-    llm_answer = _call_gigachat_llm(text, dossier, window)
-    if llm_answer:
-        clean_reply = _extract_and_store_plan(user.id, llm_answer, db, mentioned_date)
-        append_session_memory(user.id, "user", text)
-        append_session_memory(user.id, "assistant", clean_reply)
-        return {"mode": "llm_ai", "reply": clean_reply}
-
-    # 4. Естественный живой переспрос при временном сбое сети (без сухих заглушек)
-    reply = (
-        f"Связь в зале чуть моргнула, {name} — повтори, пожалуйста, ещё раз. "
-        "Как самочувствие сегодня, что будем качать или какие подходы уже сделал?"
+    # 3. Классический парсер одиночного подхода ("подъём гантелей 13 кг 3 по 16")
+    parsed = parse_workout_command(clean_msg, db)
+    if parsed and parsed.get("entries"):
+        matched_name = _match_catalog_exercise(parsed["exercise_name"], db)
+        parsed["exercise_name"] = matched_name
+        _ACTIVE_EXERCISES[user.id] = {
+            "name": matched_name,
+            "weight": parsed["entries"][0].get("weight", 0)
+        }
+        parts = [f"{e['sets']}×{e['reps']} ({e['weight']} кг)" for e in parsed["entries"]]
+        summary = f"{matched_name}: " + ", ".join(parts)
+        reply = random.choice(FAST_SET_PRAISES).format(name=first_name, summary=summary)
+        append_session_memory(user.id, "user", clean_msg)
+        append_session_memory(user.id, "assistant", reply)
+        return {
+            "reply": reply,
+            "mode": "live_set",
+            "workout_entry": parsed,
+            "updated_weight_kg": None,
+            "suggested_plan": None,
+            "target_date": None
+        }
+    # 4. Ускоренный диалог с GigaChat (Keep-Alive OAuth + сжатый контекст + парсинг предложенного плана)
+    recent_workouts = (
+        db.query(Workout)
+        .filter(Workout.user_id == user.id)
+        .order_by(Workout.created_at.desc())
+        .limit(5)
+        .all()
     )
-    append_session_memory(user.id, "user", text)
-    append_session_memory(user.id, "assistant", reply)
-    return {"mode": "smart_engine", "reply": reply}
+    recent_summary = ", ".join(
+        f"{w.exercise_name} {w.sets}x{w.reps} ({w.weight} кг)" for w in recent_workouts
+    ) or "пока без записей"
+
+    active_ex = _ACTIVE_EXERCISES.get(user.id)
+    active_note = (
+        f"Текущее упражнение в работе: {active_ex['name']} (вес {active_ex.get('weight', 0)} кг)."
+        if active_ex else "Активное упражнение сейчас не выбрано."
+    )
+    compressed_note = _COMPRESSED_CONTEXT.get(user.id, "")
+
+    system_prompt = (
+        f"Ты — персональный ИИ-тренер и нутрициолог в Workout Vault для атлета {first_name} "
+        f"(вес {user.weight_kg} кг, цель {user.target_weight_kg} кг). "
+        f"Общайся живо, по-дружески на «ты», кратко и по делу (без воды и без символов ** или #). "
+        f"Недавние записи: {recent_summary}. {active_note} {compressed_note}\n"
+        f"Если атлет просит составить тренировку или программу, выведи её строго нумерованным списком:\n"
+        f"1. Название упражнения — 3 подхода × 12 повторений | Вес: 15 кг\n"
+        f"И в конце спроси: «Добавить эту тренировку в план?»"
+    )
+
+    messages = [{"role": "system", "content": system_prompt}]
+    for item in _CHAT_WINDOWS.get(user.id, []):
+        messages.append(item)
+    messages.append({"role": "user", "content": clean_msg})
+
+    llm_raw = _call_gigachat_llm(messages)
+    if llm_raw:
+        reply = _clean_markdown(llm_raw)
+        # Извлекаем упражнения из ответа модели в буфер _PENDING_PLANS (если модель предложила тренировку)
+        extracted_items = []
+        for line in reply.splitlines():
+            m = re.match(
+                r"^\s*\d+[\.\)]\s*([А-ЯЁA-Za-z«»\"()\-\s]{4,60}?)\s*[—\-–:]\s*(\d+)\s*(?:подход\w*|x|х|\*)\s*[×xх\*]?\s*(\d+)(?:[^\d\n]{0,25}?(\d+(?:[.,]\d+)?)\s*кг)?",
+                line,
+                re.IGNORECASE
+            )
+            if m:
+                ex_name = _match_catalog_exercise(m.group(1).strip(), db)
+                extracted_items.append({
+                    "exercise_name": ex_name,
+                    "sets": int(m.group(2)),
+                    "reps": int(m.group(3)),
+                    "weight": float(m.group(4).replace(",", ".")) if m.group(4) else 0.0,
+                    "done": False
+                })
+
+        if extracted_items:
+            _PENDING_PLANS[user.id] = {
+                "items": extracted_items,
+                "target_date": _extract_target_date(clean_msg)
+            }
+
+        append_session_memory(user.id, "user", clean_msg)
+        append_session_memory(user.id, "assistant", reply)
+        return {
+            "reply": reply,
+            "mode": "chat",
+            "workout_entry": None,
+            "updated_weight_kg": None,
+            "suggested_plan": None,
+            "target_date": None
+        }
+
+    # 5. Фоллбэк, если GigaChat временно недоступен
+    fallback_reply = (
+        f"{first_name}, я на связи! Можешь сразу диктовать подход (например: «Молотки 12.5 кг 3 по 15») "
+        f"или собирать тренировку по упражнениям («Добавь подъём на бицепс 4 по 16, 13 кг»)."
+    )
+    append_session_memory(user.id, "user", clean_msg)
+    append_session_memory(user.id, "assistant", fallback_reply)
+    return {
+        "reply": fallback_reply,
+        "mode": "chat",
+        "workout_entry": None,
+        "updated_weight_kg": None,
+        "suggested_plan": None,
+        "target_date": None
+    }
+
+
+
