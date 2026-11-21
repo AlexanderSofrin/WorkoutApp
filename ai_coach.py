@@ -450,7 +450,7 @@ def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn
         }
 
     # 4. Классический парсер одиночного подхода ("подъём гантелей 13 кг 3 по 16")
-    parsed = parse_workout_command(clean_msg, db)
+    parsed = parse_workout_command(clean_msg)
     if parsed and parsed.get("entries"):
         matched_name = _match_catalog_exercise(parsed["exercise_name"], db)
         parsed["exercise_name"] = matched_name
