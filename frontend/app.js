@@ -169,7 +169,8 @@ async function askAiCoach() {
         appendAiChat("ИИ-тренер", d.reply, "#e2e8f0");
         speakText(d.reply);
 
-        if (d.mode === "plan_approved" && Array.isArray(d.suggested_plan)) {
+                if (d.mode === "plan_approved" && Array.isArray(d.suggested_plan)) {
+            workoutPlan = []
             d.suggested_plan.forEach(item => {
                 workoutPlan.push({
                     name: item.exercise_name,
@@ -181,8 +182,17 @@ async function askAiCoach() {
             });
             savePlanStorage();
             renderPlan();
+            appendAiChat("Система", `✓ План (${d.suggested_plan.length} поз.) перенесён в «План тренировки» ниже.`, "#34d399");
             if (navigator.vibrate) navigator.vibrate([40, 40, 40]);
 
+            const card = document.getElementById("coachCard");
+            if (card && card.classList.contains("coach-fullscreen")) {
+                toggleCoachFullscreen();
+            }
+            const planEl = document.getElementById("workoutPlanList");
+            if (planEl) {
+                planEl.scrollIntoView({ behavior: "smooth", block: "center" });
+            }
 
         } else if (d.mode === "live_set" && d.workout_entry) {
             const entry = d.workout_entry;
@@ -197,14 +207,18 @@ async function askAiCoach() {
             });
             savePlanStorage();
             renderPlan();
+            appendAiChat("Система", `✓ Подход (${entry.exercise_name}) добавлен в текущий план.`, "#34d399");
 
         } else if (d.mode === "weight_updated") {
             await Promise.all([loadSupport(), loadNutrition()]);
         }
-    } finally {
+
+    }finally {
         isSendingCoach = false;
     }
 }
+
+
 
 function startAiVoice() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;

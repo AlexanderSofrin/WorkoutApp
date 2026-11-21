@@ -23,8 +23,10 @@ _GIGACHAT_TOKEN_CACHE: dict[str, object] = {"token": "", "expires_at": 0.0}
 
 CONFIRM_WORDS = {
     "да", "давай", "добавляй", "добавь", "согласен", "погнали",
-    "ок", "окей", "хорошо", "утверждаю", "записывай в план", "в план"
+    "ок", "окей", "хорошо", "утверждаю", "записывай в план", "в план",
+    "запиши", "записывай", "записать", "переноси", "перенеси"
 }
+
 
 
 def append_session_memory(user_id: int, role: str, content: str) -> None:
@@ -277,7 +279,9 @@ def _is_plan_confirmation(text_low: str) -> bool:
     cleaned = re.sub(r"[^\w\sа-яё]", "", text_low).strip()
     if cleaned in CONFIRM_WORDS:
         return True
-    return any(cleaned.startswith(w + " ") or cleaned == w for w in ("да добавляй", "давай добавляй", "добавляй в план", "да погнали"))
+    prefixes = ("да ", "давай ", "добав", "запиш", "записыв", "перенес", "ок ", "окей ", "хорошо ")
+    return any(cleaned.startswith(p) for p in prefixes) and len(cleaned.split()) <= 6
+
 
 
 def generate_coach_reply(question: str, user: User, db: Session, muscle_detector) -> dict:
@@ -328,8 +332,10 @@ def generate_coach_reply(question: str, user: User, db: Session, muscle_detector
         append_session_memory(user.id, "assistant", reply)
         return {"mode": "weight_updated", "reply": reply, "weight_kg": new_weight}
 
-    # 2. Распознавание подхода или серии из 3-4 подходов + живая человеческая реакция тренера
-    parsed = parse_workout_command(text)
+    # 2. Распознавание одиночного подхода (только для коротких однострочных реплик, чтобы таблицы шли в LLM)
+    is_multiline_table = ("\n" in text) or (len(text) > 95)
+    parsed = None if is_multiline_table else parse_workout_command(text)
+
     if parsed:
         matched_name = _match_catalog_exercise(parsed["exercise_name"], db)
         parsed["exercise_name"] = matched_name
