@@ -225,58 +225,6 @@ async function askAiCoach() {
 
 
 
-let activeRecognition = null;
-let voiceAudioCtx = null;
-let voiceMediaStream = null;
-let voiceAnimFrame = null;
-
-function stopVoiceVisualizer() {
-    if (voiceAnimFrame) cancelAnimationFrame(voiceAnimFrame);
-    voiceAnimFrame = null;
-    if (voiceMediaStream) {
-        voiceMediaStream.getTracks().forEach(t => t.stop());
-        voiceMediaStream = null;
-    }
-    if (voiceAudioCtx) {
-        try { voiceAudioCtx.close(); } catch (e) {}
-        voiceAudioCtx = null;
-    }
-    const capsule = document.getElementById("coachInputCapsule");
-    const btn = document.getElementById("aiVoiceBtn");
-    if (capsule) capsule.classList.remove("listening");
-    if (btn) btn.classList.remove("active");
-    document.querySelectorAll("#aiVoiceWave span").forEach(bar => { bar.style.height = "5px"; });
-}
-
-async function startVoiceVisualizer() {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
-    try {
-        voiceMediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        voiceAudioCtx = new AudioCtx();
-        const source = voiceAudioCtx.createMediaStreamSource(voiceMediaStream);
-        const analyser = voiceAudioCtx.createAnalyser();
-        analyser.fftSize = 64;
-        source.connect(analyser);
-        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-        const bars = document.querySelectorAll("#aiVoiceWave span");
-        const multipliers = [0.6, 0.95, 1.25, 0.95, 0.6];
-
-        const tick = () => {
-            if (!voiceAudioCtx) return;
-            analyser.getByteFrequencyData(dataArray);
-            let sum = 0;
-            for (let i = 0; i < 12; i++) sum += dataArray[i];
-            const avg = sum / 12;
-            bars.forEach((bar, idx) => {
-                const h = Math.max(5, Math.min(22, Math.round((avg / 140) * 20 * multipliers[idx] + 5)));
-                bar.style.height = h + "px";
-            });
-            voiceAnimFrame = requestAnimationFrame(tick);
-        };
-        tick();
-    } catch (e) {}
-}
 
 let activeRecognition = null;
 let voiceAnimFrame = null;
