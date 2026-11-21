@@ -1082,9 +1082,12 @@ def ask_personal_ai_coach(
         "mode": result["mode"],
         "reply": result["reply"],
         "workout_entry": result.get("workout_entry"),
+        "suggested_plan": result.get("suggested_plan"),
+        "target_date": result.get("target_date"),
         "auto_timer_sec": result.get("auto_timer_sec"),
         "weight_kg": result.get("weight_kg")
     }
+
 
 class NutritionLogUpsert(BaseModel):
     log_date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
