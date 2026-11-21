@@ -389,7 +389,8 @@ def _call_gigachat_llm(messages: list[dict]) -> str | None:
         return None
     return None
 
-def generate_coach_reply(user: User, message: str, db: Session) -> dict:
+def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn=None) -> dict:
+
     clean_msg = message.strip()
     low_msg = clean_msg.lower()
     first_name = (user.full_name or "Атлет").split()[0]
