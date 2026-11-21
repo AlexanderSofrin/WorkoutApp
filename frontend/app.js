@@ -169,8 +169,13 @@ async function askAiCoach() {
         appendAiChat("ИИ-тренер", d.reply, "#e2e8f0");
         speakText(d.reply);
 
-                if (d.mode === "plan_approved" && Array.isArray(d.suggested_plan)) {
-            workoutPlan = []
+                        if (d.mode === "plan_approved" && Array.isArray(d.suggested_plan)) {
+            if (d.target_date) {
+                const dateInp = document.getElementById("workoutDateInput");
+                if (dateInp) dateInp.value = d.target_date;
+            }
+            workoutPlan = [];
+
             d.suggested_plan.forEach(item => {
                 workoutPlan.push({
                     name: item.exercise_name,
@@ -220,6 +225,8 @@ async function askAiCoach() {
 
 
 
+let activeRecognition = null;
+
 function startAiVoice() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -228,33 +235,41 @@ function startAiVoice() {
     }
     const btn = document.querySelector("button[onclick='startAiVoice()']");
     const input = document.getElementById("aiCoachInput");
+
+    if (activeRecognition) {
+        try { activeRecognition.stop(); } catch (e) {}
+        activeRecognition = null;
+        return;
+    }
+
     const oldPlaceholder = input.placeholder;
+    const baseText = input.value.trim() ? (input.value.trim() + " ") : "";
 
     if (btn) {
         btn.style.borderColor = "#fb7185";
         btn.style.background = "rgba(251,113,133,0.25)";
-        btn.textContent = "〰️🔴";
+        btn.textContent = "⏹️";
     }
-    input.placeholder = "Слушаю голос... Говори...";
+    input.placeholder = "Говори... Нажми ⏹️ или ОК, когда закончишь";
 
     const recog = new SpeechRecognition();
+    activeRecognition = recog;
     recog.lang = "ru-RU";
     recog.interimResults = true;
-    recog.continuous = false;
+    recog.continuous = true;
 
-    let finalSent = false;
+    let finalTranscript = "";
     recog.onresult = (e) => {
-        let liveText = "";
+        let interim = "";
         for (let i = e.resultIndex; i < e.results.length; i++) {
-            liveText += e.results[i][0].transcript;
+            const chunk = e.results[i][0].transcript;
+            if (e.results[i].isFinal) finalTranscript += chunk + " ";
+            else interim += chunk;
         }
-        input.value = liveText;
-        if (e.results[e.results.length - 1].isFinal && !finalSent) {
-            finalSent = true;
-            askAiCoach();
-        }
+        input.value = (baseText + finalTranscript + interim).trim();
     };
     recog.onend = () => {
+        activeRecognition = null;
         if (btn) {
             btn.style.borderColor = "#334155";
             btn.style.background = "";
@@ -262,8 +277,9 @@ function startAiVoice() {
         }
         input.placeholder = oldPlaceholder;
     };
-    try { recog.start(); } catch (err) {}
+    try { recog.start(); } catch (err) { activeRecognition = null; }
 }
+
 
 
 function startRestTimer(seconds) {

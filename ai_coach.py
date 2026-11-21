@@ -51,11 +51,48 @@ def _clean_markdown(text: str) -> str:
     return text.strip()
 
 
-def _extract_and_store_plan(user_id: int, raw_reply: str, db: Session) -> str:
+def _extract_target_date(text: str) -> str | None:
+    """Извлекает дату вида '26 число', '26.11', '26 ноября' и возвращает YYYY-MM-DD."""
+    now = datetime.now()
+    months = {
+        "январ": 1, "феврал": 2, "март": 3, "апрел": 4, "ма": 5, "июн": 6,
+        "июл": 7, "август": 8, "сентябр": 9, "октябр": 10, "ноябр": 11, "декабр": 12
+    }
+    m_word = re.search(r"\b(\d{1,2})\s+(январ|феврал|март|апрел|ма|июн|июл|август|сентябр|октябр|ноябр|декабр)[а-яё]*", text.lower())
+    if m_word:
+        day = int(m_word.group(1))
+        month = months[m_word.group(2)]
+        year = now.year + (1 if month < now.month - 6 else 0)
+        try:
+            return datetime(year, month, day).strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+
+    m_dot = re.search(r"\b(\d{1,2})\.(\d{1,2})(?:\.(\d{2,4}))?\b", text)
+    if m_dot:
+        day, month = int(m_dot.group(1)), int(m_dot.group(2))
+        year = int(m_dot.group(3)) if m_dot.group(3) else now.year
+        if year < 100:
+            year += 2000
+        try:
+            return datetime(year, month, day).strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+
+    m_day = re.search(r"\bна\s+(\d{1,2})(?:\s*-?\s*(?:е|ое|го))?\s*(?:числ[оае]?)?\b", text.lower())
+    if m_day:
+        day = int(m_day.group(1))
+        try:
+            return datetime(now.year, now.month, day).strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+    return None
+
+
+def _extract_and_store_plan(user_id: int, raw_reply: str, db: Session, target_date: str | None = None) -> str:
     """Извлекает план из [PLAN_JSON] или напрямую из нумерованного списка ответа LLM."""
     normalized = []
 
-    # 1. Пробуем штатный блок [PLAN_JSON]
     match = re.search(r"\[PLAN_JSON\](.*?)\[/PLAN_JSON\]", raw_reply, flags=re.DOTALL)
     if match:
         try:
@@ -76,10 +113,9 @@ def _extract_and_store_plan(user_id: int, raw_reply: str, db: Session) -> str:
         except Exception as e:
             print("Plan JSON parse error:", repr(e))
 
-    # 2. Фолбэк: если LLM забыл [PLAN_JSON], парсим нумерованные карточки (1. Название \n 3 × 30...)
     if not normalized:
         card_pattern = re.finditer(
-            r"(?:^|\n)\s*\d+[\.\)]\s*([^\n]+)\n\s*(\d+)\s*[×xх*]\s*(\d+)(?:[^\n]*?(\d+(?:[.,]\d+)?)\s*кг)?",
+            r"(?:^|\n)\s*\d+[\.\)]\s*([^\n]+)\n\s*(\d+)\s*(?:подход[а-яё]*\s*)?[×xх*]\s*(\d+)(?:[^\n]*?(\d+(?:[.,]\d+)?)\s*кг)?",
             raw_reply,
             flags=re.IGNORECASE
         )
@@ -100,9 +136,14 @@ def _extract_and_store_plan(user_id: int, raw_reply: str, db: Session) -> str:
             })
 
     if normalized:
-        _PENDING_PLANS[user_id] = normalized
+        prev_date = _PENDING_PLANS.get(user_id, {}).get("target_date") if isinstance(_PENDING_PLANS.get(user_id), dict) else None
+        _PENDING_PLANS[user_id] = {
+            "items": normalized,
+            "target_date": target_date or prev_date
+        }
 
     return _clean_markdown(raw_reply)
+
 
 
 def build_athlete_dossier(user: User, db: Session, muscle_detector) -> dict:
@@ -298,14 +339,20 @@ def generate_coach_reply(question: str, user: User, db: Session, muscle_detector
     dossier = build_athlete_dossier(user, db, muscle_detector)
     window = _CHAT_WINDOWS.get(user.id, [])
 
-    # 0. Подтверждение ранее предложенного плана тренировки («Да», «Добавляй», «Погнали»)
+    mentioned_date = _extract_target_date(text)
+
+    # 0. Подтверждение ранее предложенного плана тренировки («Да», «Да, на 26 число», «Добавляй»)
     if user.id in _PENDING_PLANS and _is_plan_confirmation(q):
-        approved_plan = _PENDING_PLANS.pop(user.id)
+        pending_obj = _PENDING_PLANS.pop(user.id)
+        approved_plan = pending_obj["items"] if isinstance(pending_obj, dict) else pending_obj
+        plan_date = mentioned_date or (pending_obj.get("target_date") if isinstance(pending_obj, dict) else None)
+
         unique_names = list(dict.fromkeys(item["exercise_name"] for item in approved_plan))
         ex_names = ", ".join(unique_names)
+        date_note = f" на дату {plan_date}" if plan_date else ""
         reply = (
-            f"Принято, {name}! Перенёс всё в План тренировки ({ex_names}). "
-            "Проверь позиции ниже и жми «Записать всю тренировку в БД», когда будешь готов зафиксировать в PostgreSQL."
+            f"Принято, {name}! Перенёс всё в План тренировки{date_note} ({ex_names}). "
+            "Проверь позиции ниже и жми «Записать всю тренировку в БД», когда будешь готов."
         )
         append_session_memory(user.id, "user", text)
         append_session_memory(user.id, "assistant", reply)
@@ -313,6 +360,7 @@ def generate_coach_reply(question: str, user: User, db: Session, muscle_detector
             "mode": "plan_approved",
             "reply": reply,
             "suggested_plan": approved_plan,
+            "target_date": plan_date,
         }
 
     # 1. Обновление веса в диалоге + живая реакция нейросети
@@ -367,7 +415,7 @@ def generate_coach_reply(question: str, user: User, db: Session, muscle_detector
     # 3. Свободный живой разговор с тренером (приветствие, самочувствие, составление плана тренировки)
     llm_answer = _call_gigachat_llm(text, dossier, window)
     if llm_answer:
-        clean_reply = _extract_and_store_plan(user.id, llm_answer, db)
+        clean_reply = _extract_and_store_plan(user.id, llm_answer, db, mentioned_date)
         append_session_memory(user.id, "user", text)
         append_session_memory(user.id, "assistant", clean_reply)
         return {"mode": "llm_ai", "reply": clean_reply}
