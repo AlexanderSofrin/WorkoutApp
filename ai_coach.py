@@ -8,8 +8,10 @@ import random
 import urllib.request
 import urllib.parse
 from datetime import datetime
+from sqlalchemy import func
 from sqlalchemy.orm import Session
-from db_models import User, Workout, Exercise
+from db_models import User, Workout, Exercise, DailyNutritionLog
+
 from coach_parser import parse_workout_command, parse_weight_update
 
 # ==============================================================================================
@@ -389,6 +391,84 @@ def _call_gigachat_llm(messages: list[dict]) -> str | None:
         return None
     return None
 
+def _build_user_context(user: User, db: Session) -> str:
+    """
+    Собирает живое досье атлета из PostgreSQL (users + workouts + daily_nutrition_logs)
+    для контекстного обогащения системного промпта GigaChat-Max.
+    """
+    goal_map = {
+        "cut": "сушка и рельеф",
+        "recomp": "рекомпозиция (рост мышц при контроле жира)",
+        "bulk": "качественный набор мышечной массы"
+    }
+    goal_text = goal_map.get(user.goal or "recomp", user.goal or "рекомпозиция")
+
+    # 1. Профиль и защита суставов
+    protections = []
+    if getattr(user, "protect_lower_back", True):
+        protections.append("поясницу")
+    if getattr(user, "protect_knees", True):
+        protections.append("колени")
+    if getattr(user, "protect_elbows", True):
+        protections.append("связки локтей")
+    if user.injury_notes:
+        protections.append(f"заметки: {user.injury_notes}")
+    protect_str = ", ".join(protections) if protections else "стандартный контроль техники"
+
+    profile_line = (
+        f"Профиль: вес {user.weight_kg or '?'} кг (цель {user.target_weight_kg or '?'} кг), "
+        f"рост {user.height_cm or '?'} см, цель — {goal_text}, график работы {user.work_schedule or '2/2'}, "
+        f"стаж {user.experience_years or 1.0} г. Беречь: {protect_str}."
+    )
+
+    # 2. Последние 18 записей тренировок с группировкой по дням (чтобы тренер видел время восстановления)
+    recent_rows = (
+        db.query(Workout)
+        .filter(Workout.user_id == user.id)
+        .order_by(Workout.created_at.desc())
+        .limit(18)
+        .all()
+    )
+    if recent_rows:
+        last_dt = recent_rows[0].created_at
+        hours_since = int((datetime.now() - last_dt).total_seconds() // 3600) if last_dt else None
+        recovery_note = f" (прошло ~{hours_since} ч после крайней сессии)" if hours_since is not None else ""
+
+        by_day: dict[str, dict[str, list[str]]] = {}
+        for w in recent_rows:
+            day_key = w.created_at.strftime("%d.%m") if w.created_at else "без даты"
+            ex_map = by_day.setdefault(day_key, {})
+            w_txt = f"{w.weight}кг" if w.weight else "св.вес"
+            ex_map.setdefault(w.exercise_name, []).append(f"{w.sets}x{w.reps}({w_txt})")
+
+        day_summaries = []
+        for day_key, ex_map in list(by_day.items())[:3]:
+            ex_parts = [f"{ex}: {', '.join(sets_list)}" for ex, sets_list in ex_map.items()]
+            day_summaries.append(f"[{day_key}] " + "; ".join(ex_parts))
+        workouts_line = f"Последние тренировки{recovery_note}: " + " | ".join(day_summaries)
+    else:
+        workouts_line = "Последние тренировки: записей в базе пока нет."
+
+    # 3. Питание за последние 3 дня из daily_nutrition_logs
+    nutri_rows = (
+        db.query(DailyNutritionLog)
+        .filter(DailyNutritionLog.user_id == user.id)
+        .order_by(DailyNutritionLog.log_date.desc())
+        .limit(3)
+        .all()
+    )
+    if nutri_rows:
+        n_parts = [
+            f"{n.log_date}: {n.consumed_kcal}/{n.target_kcal} ккал (Б:{n.protein_g} Ж:{n.fats_g} У:{n.carbs_g})"
+            for n in nutri_rows
+        ]
+        nutrition_line = "Питание (свежие дни): " + "; ".join(n_parts)
+    else:
+        nutrition_line = "Питание: логов КБЖУ за последние дни пока нет."
+
+    return f"{profile_line}\n{workouts_line}\n{nutrition_line}"
+
+
 def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn=None) -> dict:
 
     clean_msg = message.strip()
@@ -472,17 +552,8 @@ def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn
             "target_date": None
         }
 
-    # 5. Ускоренный диалог с GigaChat (кэшированный OAuth + сжатый контекст + парсинг предложенного плана)
-    recent_workouts = (
-        db.query(Workout)
-        .filter(Workout.user_id == user.id)
-        .order_by(Workout.created_at.desc())
-        .limit(5)
-        .all()
-    )
-    recent_summary = ", ".join(
-        f"{w.exercise_name} {w.sets}x{w.reps} ({w.weight} кг)" for w in recent_workouts
-    ) or "пока без записей"
+    # 5. Ускоренный диалог с GigaChat (живой контекст из PostgreSQL + сжатый буфер сессии)
+    db_context = _build_user_context(user, db)
 
     active_ex = _ACTIVE_EXERCISES.get(user.id)
     active_note = (
@@ -492,10 +563,11 @@ def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn
     compressed_note = _COMPRESSED_CONTEXT.get(user.id, "")
 
     system_prompt = (
-        f"Ты — персональный ИИ-тренер и нутрициолог в Workout Vault для атлета {first_name} "
-        f"(вес {user.weight_kg} кг, цель {user.target_weight_kg} кг). "
+        f"Ты — персональный ИИ-тренер и нутрициолог в Workout Vault для атлета {first_name}.\n"
+        f"{db_context}\n"
+        f"{active_note} {compressed_note}\n"
         f"Общайся живо, по-дружески на «ты», кратко и по делу (без воды и без символов ** или #). "
-        f"Недавние записи: {recent_summary}. {active_note} {compressed_note}\n"
+        f"Обязательно учитывай недавние тренировки, время восстановления (48-72 ч), питание и зоны защиты суставов.\n"
         f"Если атлет просит составить тренировку или программу, выведи её строго нумерованным списком:\n"
         f"1. Название упражнения — 3 подхода × 12 повторений | Вес: 15 кг\n"
         f"И в конце спроси: «Добавить эту тренировку в план?»"
