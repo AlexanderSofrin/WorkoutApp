@@ -7,7 +7,8 @@ import time
 import random
 import urllib.request
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from db_models import User, Workout, Exercise, DailyNutritionLog
@@ -40,6 +41,13 @@ FAST_SET_PRAISES = [
 ]
 
 
+def _now_msk() -> datetime:
+    try:
+        return datetime.now(ZoneInfo("Europe/Moscow"))
+    except Exception:
+        return datetime.now()
+
+
 def append_session_memory(user_id: int, role: str, content: str) -> None:
     """Уровень 1: Скользящее окно последних 8 реплик для живого непрерывного диалога."""
     history = _CHAT_WINDOWS.setdefault(user_id, [])
@@ -56,24 +64,32 @@ def compress_session_memory(user_id: int, summary_note: str) -> None:
 
 
 def _clean_markdown(text: str) -> str:
-    """Убирает звёздочки ** и служебные JSON-блоки из текста ответа для чистого отображения."""
+    """Убирает звёздочки **, решётки ### и служебные JSON-блоки для чистого отображения на экране."""
     text = re.sub(r"\[PLAN_JSON\].*?\[/PLAN_JSON\]", "", text, flags=re.DOTALL)
+    text = re.sub(r"(?m)^\s*#{1,6}\s*", "", text)
     text = text.replace("**", "").replace("__", "")
     return text.strip()
 
 
 def _extract_target_date(text: str) -> str | None:
-    """Извлекает дату вида '26 число', '26.11', '26 ноября', 'сегодня' и возвращает YYYY-MM-DD."""
-    now = datetime.now()
+    """Извлекает дату вида 'сегодня', 'вчера', '17 число', '1.11', '1 ноября' и возвращает YYYY-MM-DD."""
+    now = _now_msk()
     low = text.lower()
     if "сегодня" in low:
         return now.strftime("%Y-%m-%d")
+    if "позавчера" in low:
+        return (now - timedelta(days=2)).strftime("%Y-%m-%d")
+    if "вчера" in low:
+        return (now - timedelta(days=1)).strftime("%Y-%m-%d")
 
     months = {
         "январ": 1, "феврал": 2, "март": 3, "апрел": 4, "ма": 5, "июн": 6,
         "июл": 7, "август": 8, "сентябр": 9, "октябр": 10, "ноябр": 11, "декабр": 12
     }
-    m_word = re.search(r"\b(\d{1,2})\s+(январ|феврал|март|апрел|ма|июн|июл|август|сентябр|октябр|ноябр|декабр)[а-яё]*", low)
+    m_word = re.search(
+        r"\b(\d{1,2})\s+(январ|феврал|март|апрел|ма|июн|июл|август|сентябр|октябр|ноябр|декабр)[а-яё]*",
+        low
+    )
     if m_word:
         day = int(m_word.group(1))
         month = months[m_word.group(2)]
@@ -94,7 +110,10 @@ def _extract_target_date(text: str) -> str | None:
         except ValueError:
             pass
 
-    m_day = re.search(r"\bна\s+(\d{1,2})(?:\s*-?\s*(?:е|ое|го))?\s*(?:числ[оае]?)?\b", low)
+    m_day = re.search(
+        r"\b(?:на|за|от)\s+(\d{1,2})(?:\s*-?\s*(?:е|ое|го|му))?\s*(?:числ[оаеу]?)?\b",
+        low
+    )
     if m_day:
         day = int(m_day.group(1))
         try:
@@ -102,8 +121,6 @@ def _extract_target_date(text: str) -> str | None:
         except ValueError:
             pass
     return None
-
-
 def _match_catalog_exercise(raw_name: str, db: Session) -> str:
     """Подбирает точное название из каталога упражнений, чтобы не плодить дубли в БД."""
     if not raw_name:
@@ -121,8 +138,10 @@ def _match_catalog_exercise(raw_name: str, db: Session) -> str:
         if words and all(w[:4] in cat_low for w in words[:2]):
             return cat_name
     return raw_name
+
+
 def _extract_and_store_plan(user_id: int, llm_text: str, db: Session, target_date: str | None = None) -> str:
-    """Извлекает тренировочный план из ответа LLM (JSON, таблица или список) и кладёт в буфер."""
+    """Извлекает тренировочный план из ответа LLM (JSON или список) и кладёт в буфер."""
     items = []
     m = re.search(r"\[PLAN_JSON\](.*?)\[/PLAN_JSON\]", llm_text, flags=re.DOTALL)
     if m:
@@ -142,26 +161,7 @@ def _extract_and_store_plan(user_id: int, llm_text: str, db: Session, target_dat
         except Exception:
             items = []
 
-    if not items:
-        for line in llm_text.splitlines():
-            line_s = line.strip()
-            if not line_s.startswith("|") or line_s.startswith("|---") or "упражнен" in line_s.lower():
-                continue
-            cols = [c.strip(" *") for c in line_s.strip("|").split("|")]
-            if len(cols) >= 3 and cols[0]:
-                ex_name = _match_catalog_exercise(cols[0], db)
-                nums_sets = re.findall(r"\d+", cols[1])
-                nums_reps = re.findall(r"\d+", cols[2])
-                nums_w = re.findall(r"\d+(?:[.,]\d+)?", cols[3]) if len(cols) > 3 else []
-                items.append({
-                    "exercise_name": ex_name,
-                    "sets": int(nums_sets[0]) if nums_sets else 3,
-                    "reps": int(nums_reps[-1]) if nums_reps else 12,
-                    "weight": float(nums_w[0].replace(",", ".")) if nums_w else 0.0,
-                    "done": False
-                })
-
-    if not items:
+    if not items and "добавить эту тренировку в план" in llm_text.lower():
         for line in llm_text.splitlines():
             m_num = re.match(r"^\s*\d+[\.\)]\s+(.+)$", line.strip())
             if not m_num:
@@ -194,9 +194,9 @@ def _extract_and_store_plan(user_id: int, llm_text: str, db: Session, target_dat
 def _fast_parse_live_copilot(user_id: int, message: str, db: Session, first_name: str) -> dict | None:
     """
     МГНОВЕННЫЙ FAST-PATH (~20 мс, без обращения к LLM):
-    1) Старт/смена упражнения: 'начинаю тренировку, сейчас буду делать молотки 10 кг'
-    2) Серия подходов на лету: 'первый подход 10 кг на 15, второй 16, третий 18, четвёртый 24 на пампе'
-    3) Пошаговое добавление в черновик: 'добавь молотки 4 по 15, вес 15.5 кг'
+    1) Старт/смена упражнения
+    2) Серия подходов на лету
+    3) Пошаговое добавление в черновик плана
     """
     low = message.lower().strip()
     target_date = _extract_target_date(message)
@@ -227,7 +227,7 @@ def _fast_parse_live_copilot(user_id: int, message: str, db: Session, first_name
                 "target_date": target_date
             }
 
-    # 2. Серия подходов в реальном времени ('первый 15, второй 16, третий 18, четвёртый 24, вес 10 кг')
+    # 2. Серия подходов в реальном времени
     ordinals = re.findall(
         r"(?:перв\w+|втор\w+|трет\w+|четв[её]рт\w+|пят\w+|\d+-?[йм])\s*(?:подход)?\s*(?:в|на|по)?\s*(\d+)\s*(?:раз|повтор\w*|на\s*памп\w*)?",
         low
@@ -236,8 +236,9 @@ def _fast_parse_live_copilot(user_id: int, message: str, db: Session, first_name
         active = _ACTIVE_EXERCISES.get(user_id, {})
         ex_name = active.get("name", "")
         if not ex_name:
-            # Пробуем вытащить упражнение из фразы, если не объявляли заранее
-            cleaned_phrase = re.sub(r"(?:перв\w+|втор\w+|трет\w+|четв[её]рт\w+|пят\w+|\d+-?[йм]).*", "", low).strip(" .,-")
+            cleaned_phrase = re.sub(
+                r"(?:перв\w+|втор\w+|трет\w+|четв[её]рт\w+|пят\w+|\d+-?[йм]).*", "", low
+            ).strip(" .,-")
             if len(cleaned_phrase) >= 3:
                 ex_name = _match_catalog_exercise(cleaned_phrase, db)
         if not ex_name:
@@ -273,7 +274,7 @@ def _fast_parse_live_copilot(user_id: int, message: str, db: Session, first_name
             "target_date": target_date
         }
 
-    # 3. Пошаговое добавление упражнения в черновик плана ('добавь молотки 4 по 15, вес 15.5 кг')
+    # 3. Пошаговое добавление упражнения в черновик плана
     m_add = re.match(r"^(?:добавь|ещ[её]\s+добавь|поставь|закинь|плюс)\s+(.+)$", low)
     if m_add and not any(w in low for w in ("в план", "тренировку в бд", "в базу")):
         tail = m_add.group(1).strip()
@@ -314,8 +315,6 @@ def _fast_parse_live_copilot(user_id: int, message: str, db: Session, first_name
             }
 
     return None
-
-
 def _get_gigachat_token() -> str | None:
     """Получает и кэширует OAuth-токен GigaChat на 29 минут."""
     auth_key = os.getenv("GIGACHAT_AUTH_KEY", "").strip()
@@ -355,7 +354,7 @@ def _get_gigachat_token() -> str | None:
 
 
 def _call_gigachat_llm(messages: list[dict]) -> str | None:
-    """Быстрый вызов GigaChat API с ограниченным объёмом генерации (max_tokens=340)."""
+    """Быстрый вызов GigaChat API с оптимальным балансом глубины и скорости (max_tokens=420)."""
     token = _get_gigachat_token()
     if not token:
         return None
@@ -366,8 +365,8 @@ def _call_gigachat_llm(messages: list[dict]) -> str | None:
     body = json.dumps({
         "model": model_name,
         "messages": messages,
-        "temperature": 0.45,
-        "max_tokens": 340
+        "temperature": 0.55,
+        "max_tokens": 420
     }).encode("utf-8")
 
     req = urllib.request.Request(
@@ -391,11 +390,18 @@ def _call_gigachat_llm(messages: list[dict]) -> str | None:
         return None
     return None
 
-def _build_user_context(user: User, db: Session) -> str:
+
+def _build_user_context(user: User, db: Session, target_date: str | None = None) -> str:
     """
     Собирает живое досье атлета из PostgreSQL (users + workouts + daily_nutrition_logs)
-    для контекстного обогащения системного промпта GigaChat-Max.
+    + точный срез за запрошенную дату target_date из архива, если пользователь её назвал.
     """
+    now = _now_msk()
+    weekdays_ru = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"]
+    time_line = (
+        f"Текущее время (МСК): {now.strftime('%d.%m.%Y %H:%M')} ({weekdays_ru[now.weekday()]})."
+    )
+
     goal_map = {
         "cut": "сушка и рельеф",
         "recomp": "рекомпозиция (рост мышц при контроле жира)",
@@ -403,7 +409,6 @@ def _build_user_context(user: User, db: Session) -> str:
     }
     goal_text = goal_map.get(user.goal or "recomp", user.goal or "рекомпозиция")
 
-    # 1. Профиль и защита суставов
     protections = []
     if getattr(user, "protect_lower_back", True):
         protections.append("поясницу")
@@ -421,35 +426,74 @@ def _build_user_context(user: User, db: Session) -> str:
         f"стаж {user.experience_years or 1.0} г. Беречь: {protect_str}."
     )
 
-    # 2. Последние 18 записей тренировок с группировкой по дням (чтобы тренер видел время восстановления)
+    specific_date_line = ""
+    if target_date:
+        try:
+            dt_start = datetime.strptime(target_date, "%Y-%m-%d")
+            dt_end = dt_start + timedelta(days=1)
+            date_rows = (
+                db.query(Workout)
+                .filter(
+                    Workout.user_id == user.id,
+                    Workout.created_at >= dt_start,
+                    Workout.created_at < dt_end
+                )
+                .order_by(Workout.id.asc())
+                .all()
+            )
+            if date_rows:
+                total_tonnage = 0.0
+                ex_list = []
+                for w in date_rows:
+                    w_val = float(w.weight or 0.0)
+                    total_tonnage += w.sets * w.reps * w_val
+                    w_txt = f"{w_val} кг" if w_val > 0 else "свой вес"
+                    ex_list.append(f"{w.exercise_name}: {w.sets}×{w.reps} ({w_txt})")
+                specific_date_line = (
+                    f"\nАРХИВ ЗА ЗАПРОШЕННУЮ ДАТУ ({dt_start.strftime('%d.%m.%Y')}): "
+                    + "; ".join(ex_list)
+                    + f" | Общий тоннаж: {round(total_tonnage)} кг."
+                )
+            else:
+                specific_date_line = (
+                    f"\nАРХИВ ЗА ЗАПРОШЕННУЮ ДАТУ ({dt_start.strftime('%d.%m.%Y')}): "
+                    f"в базе за этот день тренировок не найдено."
+                )
+        except Exception:
+            pass
+
     recent_rows = (
         db.query(Workout)
         .filter(Workout.user_id == user.id)
         .order_by(Workout.created_at.desc())
-        .limit(18)
+        .limit(20)
         .all()
     )
     if recent_rows:
         last_dt = recent_rows[0].created_at
-        hours_since = int((datetime.now() - last_dt).total_seconds() // 3600) if last_dt else None
-        recovery_note = f" (прошло ~{hours_since} ч после крайней сессии)" if hours_since is not None else ""
+        if last_dt:
+            now_naive = now.replace(tzinfo=None)
+            hours_since = max(0, int((now_naive - last_dt).total_seconds() // 3600))
+            days_since = hours_since // 24
+            recovery_note = f" (прошло ~{hours_since} ч / {days_since} дн. с крайней сессии)"
+        else:
+            recovery_note = ""
 
         by_day: dict[str, dict[str, list[str]]] = {}
         for w in recent_rows:
-            day_key = w.created_at.strftime("%d.%m") if w.created_at else "без даты"
+            day_key = w.created_at.strftime("%d.%m.%Y") if w.created_at else "без даты"
             ex_map = by_day.setdefault(day_key, {})
             w_txt = f"{w.weight}кг" if w.weight else "св.вес"
-            ex_map.setdefault(w.exercise_name, []).append(f"{w.sets}x{w.reps}({w_txt})")
+            ex_map.setdefault(w.exercise_name, []).append(f"{w.sets}×{w.reps}({w_txt})")
 
         day_summaries = []
-        for day_key, ex_map in list(by_day.items())[:3]:
+        for day_key, ex_map in list(by_day.items())[:4]:
             ex_parts = [f"{ex}: {', '.join(sets_list)}" for ex, sets_list in ex_map.items()]
             day_summaries.append(f"[{day_key}] " + "; ".join(ex_parts))
         workouts_line = f"Последние тренировки{recovery_note}: " + " | ".join(day_summaries)
     else:
         workouts_line = "Последние тренировки: записей в базе пока нет."
 
-    # 3. Питание за последние 3 дня из daily_nutrition_logs
     nutri_rows = (
         db.query(DailyNutritionLog)
         .filter(DailyNutritionLog.user_id == user.id)
@@ -466,14 +510,13 @@ def _build_user_context(user: User, db: Session) -> str:
     else:
         nutrition_line = "Питание: логов КБЖУ за последние дни пока нет."
 
-    return f"{profile_line}\n{workouts_line}\n{nutrition_line}"
-
-
+    return f"{time_line}\n{profile_line}{specific_date_line}\n{workouts_line}\n{nutrition_line}"
 def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn=None) -> dict:
 
     clean_msg = message.strip()
     low_msg = clean_msg.lower()
     first_name = (user.full_name or "Атлет").split()[0]
+    target_date = _extract_target_date(clean_msg)
 
     # 1. Подтверждение переноса накопленного черновика / предложенного плана в "План тренировки"
     pending = _PENDING_PLANS.get(user.id)
@@ -484,7 +527,7 @@ def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn
     )
     if pending and pending.get("items") and is_confirm:
         items = pending["items"]
-        target_date = _extract_target_date(clean_msg) or pending.get("target_date")
+        final_date = target_date or pending.get("target_date")
         names_preview = ", ".join(i["exercise_name"] for i in items)
         compress_session_memory(user.id, f"Утверждён план: {names_preview}")
         reply = (
@@ -495,7 +538,7 @@ def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn
             "reply": reply,
             "mode": "plan_approved",
             "suggested_plan": items,
-            "target_date": target_date,
+            "target_date": final_date,
             "workout_entry": None,
             "updated_weight_kg": None
         }
@@ -541,8 +584,8 @@ def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn
         parts = [f"{e['sets']}×{e['reps']} ({e['weight']} кг)" for e in parsed["entries"]]
         summary = f"{matched_name}: " + ", ".join(parts)
         reply = random.choice(FAST_SET_PRAISES).format(name=first_name, summary=summary)
-        append_session_memory(user.id, "user", clean_msg)
-        append_session_memory(user.id, "assistant", reply)
+        append_session_memory(user_id=user.id, role="user", content=clean_msg)
+        append_session_memory(user_id=user.id, role="assistant", content=reply)
         return {
             "reply": reply,
             "mode": "live_set",
@@ -552,23 +595,27 @@ def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn
             "target_date": None
         }
 
-    # 5. Ускоренный диалог с GigaChat (живой контекст из PostgreSQL + сжатый буфер сессии)
-    db_context = _build_user_context(user, db)
+    # 5. Диалог с GigaChat-Max: живой характер напарника + спортивная физиология + контекст БД
+    db_context = _build_user_context(user, db, target_date=target_date)
 
     active_ex = _ACTIVE_EXERCISES.get(user.id)
     active_note = (
         f"Текущее упражнение в работе: {active_ex['name']} (вес {active_ex.get('weight', 0)} кг)."
-        if active_ex else "Активное упражнение сейчас не выбрано."
+        if active_ex else ""
     )
     compressed_note = _COMPRESSED_CONTEXT.get(user.id, "")
 
     system_prompt = (
-        f"Ты — персональный ИИ-тренер и нутрициолог в Workout Vault для атлета {first_name}.\n"
-        f"{db_context}\n"
-        f"{active_note} {compressed_note}\n"
-        f"Общайся живо, по-дружески на «ты», кратко и по делу (без воды и без символов ** или #). "
-        f"Обязательно учитывай недавние тренировки, время восстановления (48-72 ч), питание и зоны защиты суставов.\n"
-        f"Если атлет просит составить тренировку или программу, выведи её строго нумерованным списком:\n"
+        f"Ты — живой, прямой и максимально понимающий персональный ИИ-тренер, напарник у стойки со штангой и спортивный нутрициолог в Workout Vault. Общаешься с атлетом {first_name} на «ты», по-товарищески, уверенно и по делу.\n\n"
+        f"ДАННЫЕ АТЛЕТА ИЗ БАЗЫ:\n{db_context}\n{active_note} {compressed_note}\n\n"
+        f"ЖЕЛЕЗНЫЕ ПРАВИЛА СТИЛЯ И ПОВЕДЕНИЯ:\n"
+        f"1. НИКАКОЙ ВОДЫ И ШАБЛОНОВ: запрещены канцелярит, фразы «Понимаю тебя 😊», «Давай сразу перейдём к сути», символы **, ## и решётки. В обычном диалоге отвечай ёмко (2–4 предложения), как умный напарник между подходами.\n"
+        f"2. СТРОГО ПО ЗАПРОСУ (НЕ ВЫВАЛИВАЙ ПРОГРАММУ БЕЗ СПРОСА): если атлет просто делится впечатлениями, спрашивает оценку объёмов или болтает — поддержи разговор и ответь по существу с опорой на его реальные цифры из БД, НЕ расписывая план тренировок на неделю.\n"
+        f"3. ПОКАЗ ТРЕНИРОВКИ ЗА ДАТУ: если просят показать тренировку за конкретное число, выведи чистый список упражнений с подходами, повторениями, весом и общим тоннажем, и в конце дай ОДНУ короткую общую оценку (1–2 предложения). НЕ пиши непрошеные нотации и «Комментарий:» после каждого упражнения!\n"
+        f"4. СПОРТИВНАЯ БАЗА И НАУКА: опирайся на законы гипертрофии, двойной прогрессии (сначала чистые повторения, потом вес), защиты от катаболизма (не уходить в закисление и кортизол при большом объёме 16+ подходов), суперкомпенсацию (48–72 ч на группу), белок (1.6–2.2 г/кг) и защиту поясницы, коленей и локтей. Учитывай время суток (утром — предтренировочный заряд и углеводы, поздно вечером — восстановление и сон).\n"
+        f"5. РАСПОЗНАВАНИЕ ТЕХНИКИ И ДИАГНОСТИКА ПАУЗ: если атлет описывает движение словами («стою прямо, поднимаю гантели поочерёдно к противоположному плечу»), назови упражнение (кросс-боди молотки на брахиалис) и дай точный ориентир повторений под его форму. Если атлет пишет «устал, ничего не хочу», проверь паузу в БД: если тренировался вчера — поддержи законный отдых; если в базе тишина 3+ дня — дай точечный вдохновляющий импульс (в духе легенд спорта — Шварценеггера, Али, Тайсона — или «Протокола создателя Workout Vault» о силе ежедневной рутины и правиле первых 10 минут разминки: «аппетит приходит во время еды»).\n"
+        f"6. ГРАНИЦЫ КОМПЕТЕНЦИИ: ты отвечаешь ТОЛЬКО за спорт, тренировки, технику, питание, КБЖУ, режим дня, восстановление мышц/связок и спортивный настрой. Если вопрос про юриспруденцию, налоги, финансы, политику или программирование — тепло и с уважением ответь: «Извини, {first_name}, я твой персональный ИИ-тренер: разбираюсь в тренировках, прогрессии весов, питании и восстановлении мышц. В этих вопросах не подскажу, но по залу и режиму — всегда в строю!»\n"
+        f"7. СОСТАВЛЕНИЕ ПЛАНА (ТОЛЬКО КОГДА ЯВНО ПРОСЯТ СОСТАВИТЬ ТРЕНИРОВКУ): выведи нумерованный список в формате:\n"
         f"1. Название упражнения — 3 подхода × 12 повторений | Вес: 15 кг\n"
         f"И в конце спроси: «Добавить эту тренировку в план?»"
     )
@@ -580,7 +627,7 @@ def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn
 
     llm_raw = _call_gigachat_llm(messages)
     if llm_raw:
-        reply = _extract_and_store_plan(user.id, llm_raw, db, _extract_target_date(clean_msg))
+        reply = _extract_and_store_plan(user.id, llm_raw, db, target_date)
         append_session_memory(user.id, "user", clean_msg)
         append_session_memory(user.id, "assistant", reply)
         return {
@@ -607,7 +654,3 @@ def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn
         "suggested_plan": None,
         "target_date": None
     }
-
-
-
-
