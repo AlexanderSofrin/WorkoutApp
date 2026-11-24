@@ -1,4 +1,4 @@
-const CACHE_NAME = 'workout-vault-v29';
+const CACHE_NAME = 'workout-vault-v30';
 
 self.addEventListener('install', (event) => {
     self.skipWaiting();
@@ -22,6 +22,7 @@ self.addEventListener('fetch', (event) => {
         url.pathname.startsWith('/nutrition') ||
         url.pathname.startsWith('/exercises') ||
         url.pathname.startsWith('/auth')
+        url.pathname.startsWith('/api') ||
     ) {
         return;
     }

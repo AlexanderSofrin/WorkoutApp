@@ -351,10 +351,14 @@ function stopVoiceManual(shouldSend = false) {
         clearTimeout(voiceSilenceTimer);
         voiceSilenceTimer = null;
     }
-    if (activeRecognition) {
-        try { activeRecognition.stop(); } catch (e) {}
+        if (activeRecognition) {
+        try {
+            activeRecognition.onend = null;
+            activeRecognition.stop();
+        } catch (e) {}
         activeRecognition = null;
     }
+
     stopVoiceVisualizer();
     const input = document.getElementById("aiCoachInput");
     if (input) input.placeholder = "Спроси тренера или надиктуй подход...";
