@@ -160,7 +160,7 @@ if ("speechSynthesis" in window) {
     };
 }
 
-let currentTtsAudio = null;
+const sharedTtsAudio = new Audio(); let currentTtsAudio = sharedTtsAudio;
 
 function speakFallbackBrowser(cleanSpeech) {
     if (!("speechSynthesis" in window)) return;
@@ -208,7 +208,7 @@ async function speakText(text) {
 
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
+        const audio = sharedTtsAudio; audio.src = url;
         currentTtsAudio = audio;
         audio.onended = () => URL.revokeObjectURL(url);
         audio.onerror = () => {
@@ -224,7 +224,7 @@ async function speakText(text) {
 async function askAiCoach() {
     const inp = document.getElementById("aiCoachInput");
     const text = (inp ? inp.value : "").trim();
-    if (!text) return;
+    if (!text) return; try { sharedTtsAudio.play().then(()=>sharedTtsAudio.pause()).catch(()=>{}); } catch(e){}
 
     const now = Date.now();
     if (isSendingCoach || (text === lastCoachText && now - lastCoachTime < 3000)) {
@@ -453,7 +453,7 @@ function startAiVoice() {
 
         recog.onend = () => {
             activeRecognition = null;
-            if (isVoiceIntentionalActive) {
+            if (isVoiceIntentionalActive && !isSendingCoach) {
                 committedText = input.value.trim();
                 setTimeout(launchSession, 150);
             } else {
