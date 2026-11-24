@@ -131,17 +131,62 @@ function appendAiChat(sender, text, color = "#e2e8f0") {
 }
 
 
+let preferredRuVoice = null;
+
+function pickBestRussianVoice() {
+    if (!("speechSynthesis" in window)) return null;
+    const voices = window.speechSynthesis.getVoices() || [];
+    const ruVoices = voices.filter(v => (v.lang || "").toLowerCase().startsWith("ru"));
+    if (ruVoices.length === 0) return null;
+
+    const priorities = [
+        v => /dmitry.*online|natural|neural/i.test(v.name),
+        v => /svetlana.*online|irina.*online/i.test(v.name),
+        v => /google\s*русский/i.test(v.name),
+        v => /dmitry|yuri|maxim|pavel|milena|katya/i.test(v.name),
+        v => !v.localService
+    ];
+    for (const rule of priorities) {
+        const found = ruVoices.find(rule);
+        if (found) return found;
+    }
+    return ruVoices[0];
+}
+
+if ("speechSynthesis" in window) {
+    window.speechSynthesis.getVoices();
+    window.speechSynthesis.onvoiceschanged = () => {
+        preferredRuVoice = pickBestRussianVoice();
+    };
+}
+
 function speakText(text) {
     if (!document.getElementById("ttsToggle")?.checked) return;
     if (!("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(text);
+
+    const cleanSpeech = String(text || "")
+        .replace(/[*#_`~]/g, "")
+        .replace(/×/g, " на ")
+        .replace(/\|/g, ", ")
+        .replace(/•/g, ", ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    if (!cleanSpeech) return;
+    const utter = new SpeechSynthesisUtterance(cleanSpeech);
+    const voice = preferredRuVoice || pickBestRussianVoice();
+    if (voice) utter.voice = voice;
     utter.lang = "ru-RU";
-    utter.rate = 1.04;
+    utter.rate = 1.02;
+    utter.pitch = 0.94;
     window.speechSynthesis.speak(utter);
 }
 
 async function askAiCoach() {
+    if (typeof stopVoiceManual === "function") {
+        stopVoiceManual(false);
+    }
     const inp = document.getElementById("aiCoachInput");
     const text = inp.value.trim();
     if (!text) return;
@@ -169,7 +214,7 @@ async function askAiCoach() {
         appendAiChat("ИИ-тренер", d.reply, "#e2e8f0");
         speakText(d.reply);
 
-                        if (d.mode === "plan_approved" && Array.isArray(d.suggested_plan)) {
+        if (d.mode === "plan_approved" && Array.isArray(d.suggested_plan)) {
             if (d.target_date) {
                 const dateInp = document.getElementById("workoutDateInput");
                 if (dateInp) dateInp.value = d.target_date;
@@ -218,13 +263,10 @@ async function askAiCoach() {
             await Promise.all([loadSupport(), loadNutrition()]);
         }
 
-    }finally {
+    } finally {
         isSendingCoach = false;
     }
 }
-
-
-
 
 let activeRecognition = null;
 let voiceAnimFrame = null;
@@ -259,83 +301,134 @@ function startVoiceVisualizer() {
     tick();
 }
 
+let isVoiceIntentionalActive = false;
+let voiceSilenceTimer = null;
+
+function stopVoiceManual(shouldSend = false) {
+    isVoiceIntentionalActive = false;
+    if (voiceSilenceTimer) {
+        clearTimeout(voiceSilenceTimer);
+        voiceSilenceTimer = null;
+    }
+    if (activeRecognition) {
+        try { activeRecognition.stop(); } catch (e) {}
+        activeRecognition = null;
+    }
+    stopVoiceVisualizer();
+    const input = document.getElementById("aiCoachInput");
+    if (input) input.placeholder = "Спроси тренера или надиктуй подход...";
+    if (shouldSend && input && input.value.trim()) {
+        askAiCoach();
+    }
+}
+
+function isFillerPhrase(txt) {
+    const clean = txt.toLowerCase().replace(/[^\wа-яё\s]/g, "").trim();
+    const fillers = new Set([
+        "привет", "здравствуй", "слушай", "посмотри", "скажи",
+        "так", "ну", "короче", "тренер", "братан", "эй"
+    ]);
+    return clean.length < 3 || fillers.has(clean);
+}
+
 function startAiVoice() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
         appendAiChat("Система", "Используй микрофон на клавиатуре телефона для голосового ввода.", "#fbbf24");
         return;
     }
+
+    if (isVoiceIntentionalActive || activeRecognition) {
+        stopVoiceManual(true);
+        return;
+    }
+
     const capsule = document.getElementById("coachInputCapsule");
     const btn = document.getElementById("aiVoiceBtn");
     const input = document.getElementById("aiCoachInput");
 
-    if (activeRecognition) {
-        try { activeRecognition.stop(); } catch (e) {}
-        activeRecognition = null;
-        stopVoiceVisualizer();
-        return;
-    }
-
-    const oldPlaceholder = input.placeholder;
-    const prefix = input.value.trim() ? (input.value.trim() + " ") : "";
-    let silenceTimer = null;
-
-    const recog = new SpeechRecognition();
-    activeRecognition = recog;
-    recog.lang = "ru-RU";
-    recog.interimResults = true;
-    recog.continuous = true;
+    isVoiceIntentionalActive = true;
+    let committedText = input.value.trim();
 
     if (capsule) capsule.classList.add("listening");
     if (btn) btn.classList.add("active");
-    input.placeholder = "Слушаю тебя...";
+    input.placeholder = "Слушаю... говори спокойно, нажми ↑ для отправки";
     voiceEnergy = 0.45;
     startVoiceVisualizer();
 
     const resetSilenceTimer = () => {
-        if (silenceTimer) clearTimeout(silenceTimer);
-        silenceTimer = setTimeout(() => {
-            if (activeRecognition) {
-                try { activeRecognition.stop(); } catch (e) {}
+        if (voiceSilenceTimer) clearTimeout(voiceSilenceTimer);
+        voiceSilenceTimer = setTimeout(() => {
+            const currentVal = input.value.trim();
+            if (!currentVal || isFillerPhrase(currentVal)) {
+                resetSilenceTimer();
+                return;
             }
-        }, 2000);
+            stopVoiceManual(true);
+        }, 4200);
     };
 
-    recog.onresult = (e) => {
-        voiceEnergy = 1.0;
-        let fullSessionText = "";
-        for (let i = 0; i < e.results.length; i++) {
-            fullSessionText += e.results[i][0].transcript;
+    const launchSession = () => {
+        if (!isVoiceIntentionalActive) return;
+        const recog = new SpeechRecognition();
+        activeRecognition = recog;
+        recog.lang = "ru-RU";
+        recog.interimResults = true;
+        recog.continuous = true;
+
+        recog.onresult = (e) => {
+            voiceEnergy = 1.0;
+            let interim = "";
+            let sessionFinal = "";
+            for (let i = 0; i < e.results.length; i++) {
+                const part = e.results[i][0].transcript.trim();
+                if (!part) continue;
+                if (e.results[i].isFinal) {
+                    sessionFinal += (sessionFinal ? " " : "") + part;
+                } else {
+                    interim += (interim ? " " : "") + part;
+                }
+            }
+            const nextChunk = [sessionFinal, interim].filter(Boolean).join(" ").trim();
+            const combined = committedText && nextChunk.toLowerCase().startsWith(committedText.toLowerCase())
+                ? nextChunk
+                : [committedText, nextChunk].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+
+            input.value = combined;
+            resetSilenceTimer();
+        };
+
+        recog.onerror = (e) => {
+            if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+                isVoiceIntentionalActive = false;
+                stopVoiceVisualizer();
+                appendAiChat("Система", "Разреши доступ к микрофону в настройках браузера.", "#fb7185");
+            }
+        };
+
+        recog.onend = () => {
+            activeRecognition = null;
+            if (isVoiceIntentionalActive) {
+                committedText = input.value.trim();
+                setTimeout(launchSession, 150);
+            } else {
+                stopVoiceVisualizer();
+            }
+        };
+
+        try {
+            recog.start();
+            resetSilenceTimer();
+        } catch (err) {
+            isVoiceIntentionalActive = false;
+            stopVoiceVisualizer();
         }
-        input.value = (prefix + fullSessionText).trim();
-        resetSilenceTimer();
     };
 
-    recog.onerror = (e) => {
-        if (silenceTimer) clearTimeout(silenceTimer);
-        if (e.error === "not-allowed") {
-            appendAiChat("Система", "Разреши доступ к микрофону в настройках браузера.", "#fb7185");
-        }
-    };
-
-    recog.onend = () => {
-        if (silenceTimer) clearTimeout(silenceTimer);
-        activeRecognition = null;
-        stopVoiceVisualizer();
-        input.placeholder = oldPlaceholder;
-        if (input.value.trim()) {
-            askAiCoach();
-        }
-    };
-
-    try {
-        recog.start();
-        resetSilenceTimer();
-    } catch (err) {
-        activeRecognition = null;
-        stopVoiceVisualizer();
-    }
+    launchSession();
 }
+
+
 
 
 
@@ -531,6 +624,17 @@ function clearPlan() {
     renderPlan();
 }
 
+let draggedPlanIdx = null;
+
+function reorderPlanItems(fromIdx, toIdx) {
+    if (fromIdx === null || toIdx === null || fromIdx === toIdx) return;
+    const [moved] = workoutPlan.splice(fromIdx, 1);
+    workoutPlan.splice(toIdx, 0, moved);
+    savePlanStorage();
+    renderPlan();
+    if (navigator.vibrate) navigator.vibrate(25);
+}
+
 function renderPlan() {
     const box = document.getElementById("workoutPlanList");
     const saveBox = document.getElementById("savePlanBtnBox");
@@ -546,25 +650,88 @@ function renderPlan() {
         const safeName = item.name.replace(/'/g, "\\'");
         const row = document.createElement("div");
         row.className = "plan-row" + (item.done ? " done" : "");
+        row.dataset.planIdx = idx;
+        row.draggable = true;
         row.style.flexDirection = "column";
         row.style.alignItems = "stretch";
         row.style.gap = "8px";
+        row.style.transition = "transform 0.15s ease, border-color 0.15s ease";
+
+        row.addEventListener("dragstart", () => {
+            draggedPlanIdx = idx;
+            row.style.opacity = "0.55";
+        });
+        row.addEventListener("dragend", () => {
+            row.style.opacity = "1";
+            draggedPlanIdx = null;
+        });
+        row.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            row.style.borderColor = "#38bdf8";
+        });
+        row.addEventListener("dragleave", () => {
+            row.style.borderColor = "";
+        });
+        row.addEventListener("drop", (e) => {
+            e.preventDefault();
+            row.style.borderColor = "";
+            reorderPlanItems(draggedPlanIdx, idx);
+        });
+
         row.innerHTML =
             `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">` +
-            `<label style="display:flex; align-items:center; gap:10px; margin:0; cursor:pointer; flex:1; color:#e2e8f0; font-size:14px;">` +
-            `<input type="checkbox" ${item.done ? "checked" : ""} style="width:18px; height:18px;" onchange="togglePlanDone(${idx})">` +
-            `<strong onclick="selectExerciseForForm('${safeName}')">${idx + 1}. ${item.name}</strong>` +
-            `</label>` +
+            `<div style="display:flex; align-items:center; gap:8px; flex:1;">` +
+            `<span class="drag-handle" title="Потяни, чтобы поменять местами" style="cursor:grab; touch-action:none; color:#64748b; font-size:18px; padding:2px 4px; user-select:none;">⠿</span>` +
+            `<input type="checkbox" ${item.done ? "checked" : ""} style="width:18px; height:18px; cursor:pointer;" onchange="togglePlanDone(${idx})">` +
+            `<strong style="color:#e2e8f0; font-size:14px; cursor:pointer;" onclick="selectExerciseForForm('${safeName}')">${idx + 1}. ${item.name}</strong>` +
+            `</div>` +
             `<button class="icon-btn" style="color:#fb7185; min-width:32px; min-height:32px;" onclick="removePlanItem(${idx})">✕</button>` +
             `</div>` +
-            `<div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; padding-left:28px;">` +
+            `<div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; padding-left:34px;">` +
             `<div><span style="font-size:10px; color:#94a3b8;">Подходы</span><input type="number" value="${item.sets || 3}" min="1" style="margin:0; padding:6px; font-size:13px;" onchange="updatePlanField(${idx}, 'sets', this.value)"></div>` +
             `<div><span style="font-size:10px; color:#94a3b8;">Повторы</span><input type="number" value="${item.reps || 15}" min="1" style="margin:0; padding:6px; font-size:13px;" onchange="updatePlanField(${idx}, 'reps', this.value)"></div>` +
             `<div><span style="font-size:10px; color:#94a3b8;">Вес (кг)</span><input type="number" step="0.5" value="${item.weight ?? 0}" style="margin:0; padding:6px; font-size:13px;" onchange="updatePlanField(${idx}, 'weight', this.value)"></div>` +
             `</div>`;
+
+        const handle = row.querySelector(".drag-handle");
+        handle.addEventListener("touchstart", () => {
+            draggedPlanIdx = idx;
+            row.style.opacity = "0.65";
+            row.style.borderColor = "#38bdf8";
+            if (navigator.vibrate) navigator.vibrate(20);
+        }, { passive: true });
+
+        handle.addEventListener("touchmove", (e) => {
+            if (draggedPlanIdx === null) return;
+            const touch = e.touches[0];
+            const targetEl = document.elementFromPoint(touch.clientX, touch.clientY)?.closest(".plan-row");
+            document.querySelectorAll(".plan-row").forEach(el => {
+                if (el !== row) el.style.borderColor = "";
+            });
+            if (targetEl && targetEl !== row) {
+                targetEl.style.borderColor = "#34d399";
+            }
+        }, { passive: true });
+
+        handle.addEventListener("touchend", (e) => {
+            row.style.opacity = "1";
+            row.style.borderColor = "";
+            if (draggedPlanIdx === null) return;
+            const touch = e.changedTouches[0];
+            const targetEl = document.elementFromPoint(touch.clientX, touch.clientY)?.closest(".plan-row");
+            document.querySelectorAll(".plan-row").forEach(el => { el.style.borderColor = ""; });
+            const targetIdx = targetEl ? parseInt(targetEl.dataset.planIdx, 10) : null;
+            const from = draggedPlanIdx;
+            draggedPlanIdx = null;
+            if (targetIdx !== null && !Number.isNaN(targetIdx)) {
+                reorderPlanItems(from, targetIdx);
+            }
+        });
+
         box.appendChild(row);
     });
 }
+
 async function saveWholePlan() {
     if (workoutPlan.length === 0) return;
     const st = document.getElementById("planSaveStatus");
