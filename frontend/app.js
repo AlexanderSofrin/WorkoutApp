@@ -160,7 +160,17 @@ if ("speechSynthesis" in window) {
     };
 }
 
-let currentTtsAudio = null;
+let sharedTtsAudio = new Audio();
+let currentTtsUrl = null;
+
+function unlockTtsAudioOnGesture() {
+    try {
+        if (!sharedTtsAudio.src) {
+            sharedTtsAudio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
+            sharedTtsAudio.play().then(() => sharedTtsAudio.pause()).catch(() => {});
+        }
+    } catch (e) {}
+}
 
 function speakFallbackBrowser(cleanSpeech) {
     if (!("speechSynthesis" in window)) return;
@@ -187,13 +197,13 @@ async function speakText(text) {
 
     if (!cleanSpeech) return;
 
-    if (currentTtsAudio) {
-        try {
-            currentTtsAudio.pause();
-            currentTtsAudio.src = "";
-        } catch (e) {}
-        currentTtsAudio = null;
-    }
+    try {
+        sharedTtsAudio.pause();
+        if (currentTtsUrl) {
+            URL.revokeObjectURL(currentTtsUrl);
+            currentTtsUrl = null;
+        }
+    } catch (e) {}
     if ("speechSynthesis" in window) {
         window.speechSynthesis.cancel();
     }
@@ -208,28 +218,114 @@ async function speakText(text) {
 
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
-        currentTtsAudio = audio;
-        audio.onended = () => URL.revokeObjectURL(url);
-        audio.onerror = () => {
-            URL.revokeObjectURL(url);
+        currentTtsUrl = url;
+        sharedTtsAudio.src = url;
+        sharedTtsAudio.onended = () => {
+            if (currentTtsUrl === url) {
+                URL.revokeObjectURL(url);
+                currentTtsUrl = null;
+            }
+        };
+        sharedTtsAudio.onerror = () => {
+            if (currentTtsUrl === url) {
+                URL.revokeObjectURL(url);
+                currentTtsUrl = null;
+            }
             speakFallbackBrowser(cleanSpeech);
         };
-        await audio.play();
+        await sharedTtsAudio.play();
     } catch (err) {
         speakFallbackBrowser(cleanSpeech);
     }
 }
 
 async function askAiCoach() {
+    unlockTtsAudioOnGesture();
     const inp = document.getElementById("aiCoachInput");
     const text = (inp ? inp.value : "").trim();
     if (!text) return;
 
     const now = Date.now();
-    if (isSendingCoach || (text === lastCoachText && now - lastCoachTime < 3000)) {
+    if (isSendingCoach || (text === lastCoachText && now - lastCoachTime < 4000)) {
         return;
     }
+
+    isSendingCoach = true;
+    lastCoachText = text;
+    lastCoachTime = now;
+    if (inp) inp.value = "";
+
+    if (typeof stopVoiceManual === "function") {
+        stopVoiceManual(false);
+    }
+    if (inp) inp.value = "";
+
+    appendAiChat("Ты", text);
+
+    try {
+        const res = await fetch("/coach/ask", {
+            method: "POST",
+            headers: authHeaders(),
+            body: JSON.stringify({ message: text })
+        });
+        if (!res.ok) return;
+        const d = await res.json();
+
+        appendAiChat("ИИ-тренер", d.reply, "#e2e8f0");
+        speakText(d.reply);
+
+        if (d.mode === "plan_approved" && Array.isArray(d.suggested_plan)) {
+            if (d.target_date) {
+                const dateInp = document.getElementById("workoutDateInput");
+                if (dateInp) dateInp.value = d.target_date;
+            }
+            workoutPlan = [];
+            d.suggested_plan.forEach(item => {
+                workoutPlan.push({
+                    name: item.exercise_name,
+                    done: Boolean(item.done),
+                    sets: item.sets || 3,
+                    reps: item.reps || 12,
+                    weight: item.weight || 0
+                });
+            });
+            savePlanStorage();
+            renderPlan();
+            appendAiChat("Система", `✓ План (${d.suggested_plan.length} поз.) перенесён в «План тренировки» ниже.`, "#34d399");
+            if (navigator.vibrate) navigator.vibrate([40, 40, 40]);
+
+            const card = document.getElementById("coachCard");
+            if (card && card.classList.contains("coach-fullscreen")) {
+                toggleCoachFullscreen();
+            }
+            const planEl = document.getElementById("workoutPlanList");
+            if (planEl) {
+                planEl.scrollIntoView({ behavior: "smooth", block: "center" });
+            }
+
+        } else if (d.mode === "live_set" && d.workout_entry) {
+            const entry = d.workout_entry;
+            entry.entries.forEach(item => {
+                workoutPlan.push({
+                    name: entry.exercise_name,
+                    done: true,
+                    sets: item.sets || 1,
+                    reps: item.reps || 1,
+                    weight: item.weight || 0
+                });
+            });
+            savePlanStorage();
+            renderPlan();
+            appendAiChat("Система", `✓ Подход (${entry.exercise_name}) добавлен в текущий план.`, "#34d399");
+
+        } else if (d.mode === "weight_updated") {
+            await Promise.all([loadSupport(), loadNutrition()]);
+        }
+    } finally {
+        isSendingCoach = false;
+    }
+}
+
 
     isSendingCoach = true;
     lastCoachText = text;
