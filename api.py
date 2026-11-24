@@ -970,6 +970,7 @@ def claim_legacy_workouts(
 
 class ChatMessageRequest(BaseModel):
     message: str = Field(min_length=1, max_length=1000)
+    current_plan: list[dict] | None = None
 
 
 class WorkoutCommitRequest(BaseModel):
@@ -1080,7 +1081,7 @@ def ask_personal_ai_coach(
     db: Session = Depends(get_db)
 ):
     """Персональный ИИ-тренер: живое ведение тренировки, трёхуровневая память и аналитика из PostgreSQL 17."""
-    result = generate_coach_reply(req.message, current_user, db, _detect_muscle_group)
+    result = generate_coach_reply(req.message, current_user, db, _detect_muscle_group, current_plan=req.current_plan)
     return {
         "athlete": current_user.full_name or current_user.username,
         "mode": result["mode"],

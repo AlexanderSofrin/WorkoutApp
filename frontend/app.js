@@ -85,7 +85,7 @@ function escapeHtml(str) {
 function appendAiChat(sender, text, color = "#e2e8f0") {
     const box = document.getElementById("aiCoachBox");
     const div = document.createElement("div");
-    const cleanText = escapeHtml(text);
+    const cleanText = escapeHtml(String(text || "").replace(/\r/g, "").replace(/\n{2,}/g, "\n").trim());
     const formatted = cleanText.replace(/\n/g, "<br>");
 
     if (sender === "Ты") {
@@ -174,10 +174,31 @@ function speakFallbackBrowser(cleanSpeech) {
     window.speechSynthesis.speak(utter);
 }
 
+function stopAllSpeech() {
+    if (currentTtsAudio) {
+        try {
+            currentTtsAudio.pause();
+            currentTtsAudio.src = "";
+        } catch (e) {}
+    }
+    if ("speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+    }
+}
+
+function toggleCoachVoice(isEnabled) {
+    localStorage.setItem("wv_tts_enabled", isEnabled ? "1" : "0");
+    if (!isEnabled) {
+        stopAllSpeech();
+    } else {
+        try { sharedTtsAudio.play().then(() => sharedTtsAudio.pause()).catch(() => {}); } catch (e) {}
+    }
+}
+
 async function speakText(text) {
     if (!document.getElementById("ttsToggle")?.checked) return;
 
-    const cleanSpeech = String(text || "")
+    let cleanSpeech = String(text || "")
         .replace(/[*#_`~]/g, "")
         .replace(/×/g, " на ")
         .replace(/\|/g, ", ")
@@ -186,17 +207,13 @@ async function speakText(text) {
         .trim();
 
     if (!cleanSpeech) return;
+    if (cleanSpeech.length > 220) {
+        const cut = cleanSpeech.slice(0, 220);
+        const lastDot = Math.max(cut.lastIndexOf("."), cut.lastIndexOf("!"), cut.lastIndexOf("?"));
+        cleanSpeech = lastDot > 60 ? cut.slice(0, lastDot + 1) : (cut + "...");
+    }
 
-    if (currentTtsAudio) {
-        try {
-            currentTtsAudio.pause();
-            currentTtsAudio.src = "";
-        } catch (e) {}
-        currentTtsAudio = null;
-    }
-    if ("speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-    }
+    stopAllSpeech();
 
     try {
         const res = await fetch("/api/tts", {
@@ -247,7 +264,7 @@ async function askAiCoach() {
         const res = await fetch("/coach/ask", {
             method: "POST",
             headers: authHeaders(),
-            body: JSON.stringify({ message: text })
+            body: JSON.stringify({ message: text, current_plan: workoutPlan })
         });
         if (!res.ok) return;
         const d = await res.json();
@@ -255,7 +272,24 @@ async function askAiCoach() {
         appendAiChat("ИИ-тренер", d.reply, "#e2e8f0");
         speakText(d.reply);
 
-        if (d.mode === "plan_approved" && Array.isArray(d.suggested_plan)) {
+        if (d.mode === "plan_scheduled" && Array.isArray(d.suggested_plan) && d.target_date) {
+            const schedMap = JSON.parse(localStorage.getItem("wv_scheduled_plans") || "{}");
+            schedMap[d.target_date] = d.suggested_plan.map(item => ({
+                name: item.exercise_name,
+                done: false,
+                sets: item.sets || 3,
+                reps: item.reps || 12,
+                weight: item.weight || 0
+            }));
+            localStorage.setItem("wv_scheduled_plans", JSON.stringify(schedMap));
+            workoutPlan = [];
+            savePlanStorage();
+            renderPlan();
+            selectedDateStr = d.target_date;
+            renderCalendar();
+            renderCalDayDetails(d.target_date);
+            appendAiChat("Система", `✓ Тренировка сохранена в календарь на ${d.target_date} и убрана из текущего списка.`, "#c084fc");
+        } else if (d.mode === "plan_approved" && Array.isArray(d.suggested_plan)) {
             if (d.target_date) {
                 const dateInp = document.getElementById("workoutDateInput");
                 if (dateInp) dateInp.value = d.target_date;
@@ -992,8 +1026,9 @@ function renderCalendar() {
         const dStr = `${calYear}-${String(calMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
         const dayItems = workoutsByDate[dStr];
         const hasWorkout = Boolean(dayItems);
+        const schedMap = JSON.parse(localStorage.getItem("wv_scheduled_plans") || "{}");
         const plannedDate = localStorage.getItem("wv_plan_date") || "";
-        const isPlanned = !hasWorkout && workoutPlan.length > 0 && dStr === plannedDate;
+        const isPlanned = !hasWorkout && ((Array.isArray(schedMap[dStr]) && schedMap[dStr].length > 0) || (workoutPlan.length > 0 && dStr === plannedDate));
 
         const isSelected = dStr === selectedDateStr;
                 const isToday = dStr === todayStr;
@@ -1058,10 +1093,14 @@ function renderCalDayDetails(dateStr) {
     const dayItems = allWorkoutsCache.filter(w => w.created_at && new Date(w.created_at).toLocaleDateString("sv-SE") === dateStr);
 
     if (dayItems.length === 0) {
+        const schedMap = JSON.parse(localStorage.getItem("wv_scheduled_plans") || "{}");
         const plannedDate = localStorage.getItem("wv_plan_date") || "";
-        if (workoutPlan.length > 0 && dateStr === plannedDate) {
+        const schedItems = (Array.isArray(schedMap[dateStr]) && schedMap[dateStr].length > 0)
+            ? schedMap[dateStr]
+            : ((workoutPlan.length > 0 && dateStr === plannedDate) ? workoutPlan : []);
+        if (schedItems.length > 0) {
             let planHtml = "";
-            workoutPlan.forEach((p, idx) => {
+            schedItems.forEach((p, idx) => {
                 planHtml +=
                     `<div style="display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid #1e293b; font-size:12px;">` +
                     `<span style="color:#e2e8f0;"><strong>${idx + 1}. ${p.name}</strong></span>` +
@@ -1071,9 +1110,10 @@ function renderCalDayDetails(dateStr) {
             box.innerHTML =
                 `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">` +
                 `<strong style="color:#c084fc;">Запланировано на ${niceDate}</strong>` +
-                `<span class="badge" style="background:rgba(168,85,247,0.18); color:#d8b4fe;">План (${workoutPlan.length} поз.)</span>` +
+                `<span class="badge" style="background:rgba(168,85,247,0.18); color:#d8b4fe;">План (${schedItems.length} поз.)</span>` +
                 `</div>` +
-                planHtml;
+                planHtml +
+                `<button onclick="loadScheduledToToday('${dateStr}')" class="btn-primary" style="margin-top:10px; padding:8px; font-size:12px; background:linear-gradient(135deg,#9333ea,#6366f1);">Загрузить в «План тренировки» на сегодня</button>`;
             return;
         }
 
@@ -1171,4 +1211,16 @@ async function loadAnalytics() {
             }
         }
     }
+}
+
+function loadScheduledToToday(dateStr) {
+    const schedMap = JSON.parse(localStorage.getItem("wv_scheduled_plans") || "{}");
+    const items = schedMap[dateStr];
+    if (!Array.isArray(items) || items.length === 0) return;
+    workoutPlan = items.map(it => ({ ...it }));
+    const dateInp = document.getElementById("workoutDateInput");
+    if (dateInp) dateInp.value = dateStr;
+    savePlanStorage();
+    renderPlan();
+    switchTab("workout");
 }

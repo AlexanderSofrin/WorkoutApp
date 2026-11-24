@@ -511,34 +511,59 @@ def _build_user_context(user: User, db: Session, target_date: str | None = None)
         nutrition_line = "Питание: логов КБЖУ за последние дни пока нет."
 
     return f"{time_line}\n{profile_line}{specific_date_line}\n{workouts_line}\n{nutrition_line}"
-def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn=None) -> dict:
+def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn=None, current_plan: list | None = None) -> dict:
 
     clean_msg = message.strip()
     low_msg = clean_msg.lower()
     first_name = (user.full_name or "Атлет").split()[0]
     target_date = _extract_target_date(clean_msg)
 
-    # 1. Подтверждение переноса накопленного черновика / предложенного плана в "План тренировки"
+    # 1. Подтверждение переноса черновика или текущего плана на выбранную дату
     pending = _PENDING_PLANS.get(user.id)
     cleaned_confirm = re.sub(r"[^\w\sа-яё]", "", low_msg).strip()
     is_confirm = (
         cleaned_confirm in CONFIRM_WORDS
-        or any(phrase in low_msg for phrase in ("в план", "добавь план", "перенеси план", "сохрани план"))
+        or any(phrase in low_msg for phrase in ("в план", "добавь план", "перенеси план", "сохрани план", "запиши её", "запиши ее", "запиши тренировку", "перенеси на", "запиши на"))
     )
-    if pending and pending.get("items") and is_confirm:
-        items = pending["items"]
-        final_date = target_date or pending.get("target_date")
-        names_preview = ", ".join(i["exercise_name"] for i in items)
+    active_items = (pending.get("items") if pending and pending.get("items") else None) or (current_plan if current_plan else None)
+    if active_items and is_confirm:
+        norm_items = []
+        for it in active_items:
+            ex_n = it.get("exercise_name") or it.get("name") or ""
+            if ex_n:
+                norm_items.append({
+                    "exercise_name": ex_n,
+                    "sets": int(it.get("sets") or 3),
+                    "reps": int(it.get("reps") or 12),
+                    "weight": float(it.get("weight") or 0),
+                    "done": False
+                })
+        final_date = target_date or (pending.get("target_date") if pending else None)
+        names_preview = ", ".join(i["exercise_name"] for i in norm_items)
         compress_session_memory(user.id, f"Утверждён план: {names_preview}")
+        if final_date:
+            d_fmt = datetime.strptime(final_date, "%Y-%m-%d").strftime("%d.%m.%Y")
+            reply = (
+                f"Готово, {first_name}! Записал тренировку ({names_preview}) в календарь на {d_fmt} "
+                f"и очистил текущий верстак на сегодня. В календаре этот день отмечен фиолетовым — нажми на него, чтобы посмотреть состав."
+            )
+            return {
+                "reply": reply,
+                "mode": "plan_scheduled",
+                "suggested_plan": norm_items,
+                "target_date": final_date,
+                "workout_entry": None,
+                "updated_weight_kg": None
+            }
         reply = (
             f"Принято, {first_name}! Перенёс всё в «План тренировки» ({names_preview}). "
-            f"Проверь позиции ниже и жми «Записать всю тренировку в БД», когда будешь готов."
+            f"Проверь порядок карточек ниже и жми «Записать всю тренировку в БД», когда выполнишь."
         )
         return {
             "reply": reply,
             "mode": "plan_approved",
-            "suggested_plan": items,
-            "target_date": final_date,
+            "suggested_plan": norm_items,
+            "target_date": None,
             "workout_entry": None,
             "updated_weight_kg": None
         }
@@ -609,7 +634,7 @@ def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn
         f"Ты — живой, прямой и максимально понимающий персональный ИИ-тренер, напарник у стойки со штангой и спортивный нутрициолог в Workout Vault. Общаешься с атлетом {first_name} на «ты», по-товарищески, уверенно и по делу.\n\n"
         f"ДАННЫЕ АТЛЕТА ИЗ БАЗЫ:\n{db_context}\n{active_note} {compressed_note}\n\n"
         f"ЖЕЛЕЗНЫЕ ПРАВИЛА СТИЛЯ И ПОВЕДЕНИЯ:\n"
-        f"1. НИКАКОЙ ВОДЫ И ШАБЛОНОВ: запрещены канцелярит, фразы «Понимаю тебя 😊», «Давай сразу перейдём к сути», символы **, ## и решётки. В обычном диалоге отвечай ёмко (2–3 предложения), как умный напарник между подходами.\n"
+        f"1. НИКАКОЙ ВОДЫ, ШАБЛОНОВ И ПУСТЫХ СТРОК: запрещены канцелярит, символы **, ## и пустые строки между пунктами списков (пиши списки плотно, каждый пункт с новой строки без пустого абзаца между ними). запрещены канцелярит, фразы «Понимаю тебя 😊», «Давай сразу перейдём к сути», символы **, ## и решётки. В обычном диалоге отвечай ёмко (2–3 предложения), как умный напарник между подходами.\n"
         f"2. СТРОГО ПО ЗАПРОСУ (БЕЗ ЛИШНИХ ПРЕДЛОЖЕНИЙ): если атлет просто делится впечатлениями, спрашивает оценку объёмов или болтает — поддержи разговор и ответь строго по существу с опорой на его цифры из БД. НЕ предлагай в конце составить программу, расписать план на неделю или добавить упражнения, если тебя об этом не просили!\n"
         f"3. ПОКАЗ ТРЕНИРОВКИ ЗА ДАТУ: если просят показать тренировку за конкретное число, выведи чистый список упражнений с подходами, повторениями, весом и общим тоннажем, и в конце дай ОДНУ короткую общую оценку (1–2 предложения). НЕ пиши непрошеные нотации и «Комментарий:» после каждого упражнения!\n"
         f"4. СПОРТИВНАЯ БАЗА И НАУКА: опирайся на законы гипертрофии, двойной прогрессии (сначала чистые повторения, потом вес), защиты от катаболизма (не уходить в кортизол при объёме 16+ подходов), суперкомпенсацию (48–72 ч на группу), белок (1.6–2.2 г/кг) и защиту поясницы, коленей и локтей. Учитывай время суток (утром — предтренировочный заряд и углеводы, поздно вечером — восстановление и сон).\n"

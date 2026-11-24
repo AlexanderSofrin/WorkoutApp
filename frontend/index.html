@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0b0f19">
     <link rel="manifest" href="manifest.json">
     <title>Workout Vault</title>
-    <link rel="stylesheet" href="style.css?v=31">
+    <link rel="stylesheet" href="style.css?v=32">
 </head>
 <body>
 <div class="container">
@@ -131,7 +131,7 @@
                         </div>
                         <div style="display:flex; align-items:center; gap:8px;">
                             <label class="coach-hide-fs" style="display:flex; align-items:center; gap:4px; font-size:11px; color:#94a3b8; margin:0; cursor:pointer;">
-                                <input id="ttsToggle" type="checkbox" checked>
+                                <input id="ttsToggle" type="checkbox" onchange="toggleCoachVoice(this.checked)">
                                 <span>🔊 Голос</span>
                             </label>
                             <button id="fullscreenCoachBtn" onclick="toggleCoachFullscreen()" class="icon-btn" style="width:auto; padding:0 10px; font-size:12px; color:#c084fc;" title="Развернуть на весь экран">⤢ Весь экран</button>
@@ -318,7 +318,7 @@
         </section>
     </main>
 </div>
-<script src="app.js?v=31"></script>
+<script src="app.js?v=32"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/app/sw.js');
