@@ -184,23 +184,24 @@ function speakText(text) {
 }
 
 async function askAiCoach() {
-    if (typeof stopVoiceManual === "function") {
-        stopVoiceManual(false);
-    }
     const inp = document.getElementById("aiCoachInput");
-    const text = inp.value.trim();
+    const text = (inp ? inp.value : "").trim();
     if (!text) return;
 
     const now = Date.now();
-    if (isSendingCoach || (text === lastCoachText && now - lastCoachTime < 1500)) {
+    if (isSendingCoach || (text === lastCoachText && now - lastCoachTime < 3000)) {
         return;
     }
 
     isSendingCoach = true;
     lastCoachText = text;
     lastCoachTime = now;
-    inp.value = "";
-    appendAiChat("Ты", text, "#c084fc");
+    if (inp) inp.value = "";
+
+    if (typeof stopVoiceManual === "function") {
+        stopVoiceManual(false);
+    }
+
 
     try {
         const res = await fetch("/coach/ask", {
