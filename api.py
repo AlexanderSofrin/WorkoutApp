@@ -971,6 +971,7 @@ def claim_legacy_workouts(
 class ChatMessageRequest(BaseModel):
     message: str = Field(min_length=1, max_length=1000)
     current_plan: list[dict] | None = None
+    scheduled_plans: dict[str, list[dict]] | None = None
 
 
 class WorkoutCommitRequest(BaseModel):
@@ -1081,7 +1082,7 @@ def ask_personal_ai_coach(
     db: Session = Depends(get_db)
 ):
     """Персональный ИИ-тренер: живое ведение тренировки, трёхуровневая память и аналитика из PostgreSQL 17."""
-    result = generate_coach_reply(req.message, current_user, db, _detect_muscle_group, current_plan=req.current_plan)
+    result = generate_coach_reply(req.message, current_user, db, _detect_muscle_group, current_plan=req.current_plan, scheduled_plans=req.scheduled_plans)
     return {
         "athlete": current_user.full_name or current_user.username,
         "mode": result["mode"],
@@ -1089,6 +1090,7 @@ def ask_personal_ai_coach(
         "workout_entry": result.get("workout_entry"),
         "suggested_plan": result.get("suggested_plan"),
         "target_date": result.get("target_date"),
+        "from_date": result.get("from_date"),
         "auto_timer_sec": result.get("auto_timer_sec"),
         "weight_kg": result.get("weight_kg")
     }
@@ -1163,25 +1165,50 @@ class TTSRequest(BaseModel):
     text: str = Field(min_length=1, max_length=2500)
 
 
+_TTS_CACHE: dict[str, bytes] = {}
+
 @app.post("/api/tts")
 async def generate_tts(req: TTSRequest):
-    """Озвучка ответов ИИ-тренера студийным мужским голосом DmitryNeural."""
+    """Мгновенная озвучка тренера с кэшем в RAM, жёстким таймаутом 2.5с и резервным студийным потоком."""
+    import asyncio, urllib.request, urllib.parse
     clean_text = re.sub(r"[*#_`~>|•\-]+", " ", req.text)
-    clean_text = re.sub(r"\s+", " ", clean_text).strip()
+    clean_text = re.sub(r"\s+", " ", clean_text).strip()[:240]
     if not clean_text:
         raise HTTPException(status_code=400, detail="Пустой текст для озвучки")
 
-    communicate = edge_tts.Communicate(
-        text=clean_text,
-        voice="ru-RU-DmitryNeural",
-        rate="+4%",
-        pitch="-2Hz"
-    )
-    audio_stream = io.BytesIO()
-    async for chunk in communicate.stream():
-        if chunk["type"] == "audio":
-            audio_stream.write(chunk["data"])
-    audio_stream.seek(0)
-    return StreamingResponse(audio_stream, media_type="audio/mpeg")
+    if clean_text in _TTS_CACHE:
+        return StreamingResponse(io.BytesIO(_TTS_CACHE[clean_text]), media_type="audio/mpeg")
+
+    audio_bytes = b""
+    try:
+        async def _synth_edge():
+            comm = edge_tts.Communicate(text=clean_text, voice="ru-RU-DmitryNeural", rate="+5%", pitch="-2Hz")
+            buf = io.BytesIO()
+            async for ch in comm.stream():
+                if ch["type"] == "audio":
+                    buf.write(ch["data"])
+            return buf.getvalue()
+
+        audio_bytes = await asyncio.wait_for(_synth_edge(), timeout=2.5)
+    except Exception:
+        audio_bytes = b""
+
+    if not audio_bytes:
+        try:
+            q = urllib.parse.quote(clean_text)
+            tts_url = f"https://google.com{q}"
+            req_g = urllib.request.Request(tts_url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req_g, timeout=3) as r:
+                audio_bytes = r.read()
+        except Exception:
+            audio_bytes = b""
+
+    if not audio_bytes:
+        raise HTTPException(status_code=503, detail="TTS unavailable")
+
+    if len(_TTS_CACHE) > 80:
+        _TTS_CACHE.clear()
+    _TTS_CACHE[clean_text] = audio_bytes
+    return StreamingResponse(io.BytesIO(audio_bytes), media_type="audio/mpeg")
 
 

@@ -264,7 +264,7 @@ async function askAiCoach() {
         const res = await fetch("/coach/ask", {
             method: "POST",
             headers: authHeaders(),
-            body: JSON.stringify({ message: text, current_plan: workoutPlan })
+            body: JSON.stringify({ message: text, current_plan: workoutPlan, scheduled_plans: JSON.parse(localStorage.getItem("wv_scheduled_plans") || "{}") })
         });
         if (!res.ok) return;
         const d = await res.json();
@@ -272,7 +272,27 @@ async function askAiCoach() {
         appendAiChat("ИИ-тренер", d.reply, "#e2e8f0");
         speakText(d.reply);
 
-        if (d.mode === "plan_scheduled" && Array.isArray(d.suggested_plan) && d.target_date) {
+        if (d.mode === "plan_moved" && d.from_date && d.target_date && Array.isArray(d.suggested_plan)) {
+            const schedMap = JSON.parse(localStorage.getItem("wv_scheduled_plans") || "{}");
+            delete schedMap[d.from_date];
+            schedMap[d.target_date] = d.suggested_plan.map(item => ({
+                name: item.name || item.exercise_name,
+                done: false,
+                sets: item.sets || 3,
+                reps: item.reps || 12,
+                weight: item.weight || 0
+            }));
+            localStorage.setItem("wv_scheduled_plans", JSON.stringify(schedMap));
+            selectedDateStr = d.target_date;
+            renderCalendar();
+            renderCalDayDetails(d.target_date);
+        } else if (d.mode === "plan_cancelled" && d.target_date) {
+            const schedMap = JSON.parse(localStorage.getItem("wv_scheduled_plans") || "{}");
+            delete schedMap[d.target_date];
+            localStorage.setItem("wv_scheduled_plans", JSON.stringify(schedMap));
+            renderCalendar();
+            renderCalDayDetails(d.target_date);
+        } else if (d.mode === "plan_scheduled" && Array.isArray(d.suggested_plan) && d.target_date) {
             const schedMap = JSON.parse(localStorage.getItem("wv_scheduled_plans") || "{}");
             schedMap[d.target_date] = d.suggested_plan.map(item => ({
                 name: item.exercise_name,
@@ -1133,9 +1153,10 @@ function renderCalDayDetails(dateStr) {
         const ton = Math.round(w.sets * w.reps * wt * 10) / 10;
         totalTon += ton;
         rowsHtml +=
-            `<div style="display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid #1e293b; font-size:12px;">` +
-            `<span style="color:#e2e8f0;"><strong>${w.exercise_name}</strong></span>` +
-            `<span style="color:#34d399;">${w.sets}×${w.reps} • ${wt} кг (${ton} кг)</span>` +
+            `<div style="display:flex; justify-content:space-between; align-items:center; gap:6px; padding:5px 0; border-bottom:1px solid #1e293b; font-size:12px;">` +
+            `<span style="color:#e2e8f0; flex:1;"><strong>${w.exercise_name}</strong></span>` +
+            `<span style="color:#34d399;">${w.sets}×${w.reps} • ${wt} кг</span>` +
+            `<button onclick="deleteCalWorkout(${w.id})" title="Удалить запись" style="background:none; border:none; color:#fb7185; cursor:pointer; font-size:13px; padding:2px 4px;">✕</button>` +
             `</div>`;
     });
 
@@ -1223,4 +1244,11 @@ function loadScheduledToToday(dateStr) {
     savePlanStorage();
     renderPlan();
     switchTab("workout");
+}
+
+async function deleteCalWorkout(workoutId) {
+    const res = await fetch("/workouts/" + workoutId, { method: "DELETE", headers: authHeaders() });
+    if (res.ok) {
+        await Promise.all([loadSupport(), loadNutrition(), loadAnalytics()]);
+    }
 }
