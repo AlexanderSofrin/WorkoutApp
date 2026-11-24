@@ -1168,6 +1168,41 @@ class TTSRequest(BaseModel):
 
 _TTS_CACHE: dict[str, bytes] = {}
 
+async def _synth_salute_speech(text: str) -> bytes:
+    """Синтез речи через Sber SaluteSpeech (голос Bys_24000) при наличии SALUTE_AUTH_KEY."""
+    import os, uuid, json, ssl, urllib.request, urllib.parse
+    auth_key = os.getenv("SALUTE_AUTH_KEY", "").strip()
+    if not auth_key:
+        return b""
+    ctx = ssl._create_unverified_context()
+    tok_req = urllib.request.Request(
+        "https://sberbank.ru",
+        data=urllib.parse.urlencode({"scope": "SALUTE_SPEECH_PERS"}).encode("utf-8"),
+        headers={
+            "Authorization": f"Basic {auth_key}",
+            "RqUID": str(uuid.uuid4()),
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json"
+        },
+        method="POST"
+    )
+    with urllib.request.urlopen(tok_req, context=ctx, timeout=4) as r:
+        access_token = json.loads(r.read().decode("utf-8")).get("access_token", "")
+    if not access_token:
+        return b""
+    tts_req = urllib.request.Request(
+        "https://sber.ru",
+        data=text.encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/text"
+        },
+        method="POST"
+    )
+    with urllib.request.urlopen(tts_req, context=ctx, timeout=5) as r:
+        return r.read()
+
+
 @app.post("/api/tts")
 async def generate_tts(req: TTSRequest):
     """Мгновенная озвучка тренера с кэшем в RAM, жёстким таймаутом 2.5с и резервным студийным потоком."""
@@ -1179,6 +1214,16 @@ async def generate_tts(req: TTSRequest):
 
     if clean_text in _TTS_CACHE:
         return StreamingResponse(io.BytesIO(_TTS_CACHE[clean_text]), media_type="audio/mpeg")
+
+    try:
+        salute_bytes = await _synth_salute_speech(clean_text)
+        if salute_bytes:
+            if len(_TTS_CACHE) > 80:
+                _TTS_CACHE.clear()
+            _TTS_CACHE[clean_text] = salute_bytes
+            return StreamingResponse(io.BytesIO(salute_bytes), media_type="audio/ogg")
+    except Exception:
+        pass
 
     audio_bytes = b""
     try:
