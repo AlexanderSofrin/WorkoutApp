@@ -191,7 +191,7 @@ def _extract_and_store_plan(user_id: int, llm_text: str, db: Session, target_dat
     return _clean_markdown(llm_text)
 
 
-def _fast_parse_live_copilot(user_id: int, message: str, db: Session, first_name: str) -> dict | None:
+def _fast_parse_live_copilot(user_id: int, message: str, db: Session, first_name: str) -> Optional[dict]:
     """
     МГНОВЕННЫЙ FAST-PATH (~20 мс, без обращения к LLM):
     1) Старт/смена упражнения
@@ -511,7 +511,7 @@ def _build_user_context(user: User, db: Session, target_date: str | None = None)
         nutrition_line = "Питание: логов КБЖУ за последние дни пока нет."
 
     return f"{time_line}\n{profile_line}{specific_date_line}\n{workouts_line}\n{nutrition_line}"
-def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn=None, current_plan: list | None = None) -> dict:
+def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn=None, current_plan: Optional[list] = None) -> dict:
 
     clean_msg = message.strip()
     low_msg = clean_msg.lower()

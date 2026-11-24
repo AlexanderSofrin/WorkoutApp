@@ -970,8 +970,8 @@ def claim_legacy_workouts(
 
 class ChatMessageRequest(BaseModel):
     message: str = Field(min_length=1, max_length=1000)
-    current_plan: list[dict] | None = None
-    scheduled_plans: dict[str, list[dict]] | None = None
+    current_plan: Optional[list] = None
+    scheduled_plans: Optional[dict] = None
 
 
 class WorkoutCommitRequest(BaseModel):
