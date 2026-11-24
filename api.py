@@ -1,3 +1,4 @@
+from typing import Optional
 import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException, status
