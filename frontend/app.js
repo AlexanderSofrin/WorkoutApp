@@ -160,10 +160,22 @@ if ("speechSynthesis" in window) {
     };
 }
 
-function speakText(text) {
-    if (!document.getElementById("ttsToggle")?.checked) return;
+let currentTtsAudio = null;
+
+function speakFallbackBrowser(cleanSpeech) {
     if (!("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(cleanSpeech);
+    const voice = preferredRuVoice || pickBestRussianVoice();
+    if (voice) utter.voice = voice;
+    utter.lang = "ru-RU";
+    utter.rate = 1.02;
+    utter.pitch = 0.94;
+    window.speechSynthesis.speak(utter);
+}
+
+async function speakText(text) {
+    if (!document.getElementById("ttsToggle")?.checked) return;
 
     const cleanSpeech = String(text || "")
         .replace(/[*#_`~]/g, "")
@@ -174,13 +186,39 @@ function speakText(text) {
         .trim();
 
     if (!cleanSpeech) return;
-    const utter = new SpeechSynthesisUtterance(cleanSpeech);
-    const voice = preferredRuVoice || pickBestRussianVoice();
-    if (voice) utter.voice = voice;
-    utter.lang = "ru-RU";
-    utter.rate = 1.02;
-    utter.pitch = 0.94;
-    window.speechSynthesis.speak(utter);
+
+    if (currentTtsAudio) {
+        try {
+            currentTtsAudio.pause();
+            currentTtsAudio.src = "";
+        } catch (e) {}
+        currentTtsAudio = null;
+    }
+    if ("speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+    }
+
+    try {
+        const res = await fetch("/api/tts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: cleanSpeech })
+        });
+        if (!res.ok) throw new Error("TTS API error");
+
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        currentTtsAudio = audio;
+        audio.onended = () => URL.revokeObjectURL(url);
+        audio.onerror = () => {
+            URL.revokeObjectURL(url);
+            speakFallbackBrowser(cleanSpeech);
+        };
+        await audio.play();
+    } catch (err) {
+        speakFallbackBrowser(cleanSpeech);
+    }
 }
 
 async function askAiCoach() {
@@ -200,8 +238,10 @@ async function askAiCoach() {
 
     if (typeof stopVoiceManual === "function") {
         stopVoiceManual(false);
-    }
 
+
+    }
+        appendAiChat("Ты", text);
 
     try {
         const res = await fetch("/coach/ask", {

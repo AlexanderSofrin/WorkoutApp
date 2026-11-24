@@ -15,6 +15,10 @@ from fastapi.responses import RedirectResponse
 
 from datetime import datetime, timedelta
 from db_models import User, Workout, Exercise, DailyNutritionLog
+import io
+import re
+import edge_tts
+from fastapi.responses import StreamingResponse
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -1150,5 +1154,33 @@ def save_nutrition_log(
     row.checked_meals_json = data.checked_meals_json
     db.commit()
     return {"status": "saved", "log_date": data.log_date}
+
+
+
+
+class TTSRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=2500)
+
+
+@app.post("/api/tts")
+async def generate_tts(req: TTSRequest):
+    """Озвучка ответов ИИ-тренера студийным мужским голосом DmitryNeural."""
+    clean_text = re.sub(r"[*#_`~>|•\-]+", " ", req.text)
+    clean_text = re.sub(r"\s+", " ", clean_text).strip()
+    if not clean_text:
+        raise HTTPException(status_code=400, detail="Пустой текст для озвучки")
+
+    communicate = edge_tts.Communicate(
+        text=clean_text,
+        voice="ru-RU-DmitryNeural",
+        rate="+4%",
+        pitch="-2Hz"
+    )
+    audio_stream = io.BytesIO()
+    async for chunk in communicate.stream():
+        if chunk["type"] == "audio":
+            audio_stream.write(chunk["data"])
+    audio_stream.seek(0)
+    return StreamingResponse(audio_stream, media_type="audio/mpeg")
 
 
