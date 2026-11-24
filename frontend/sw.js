@@ -1,4 +1,4 @@
-const CACHE_NAME = 'workout-vault-v35';
+const CACHE_NAME = 'workout-vault-v36';
 
 self.addEventListener('install', (event) => {
     self.skipWaiting();

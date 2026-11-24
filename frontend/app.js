@@ -238,9 +238,16 @@ async function speakText(text) {
     }
 }
 
-async function askAiCoach() {
+let _lastCoachSentText = "";
+let _lastCoachSentAt = 0;
+async function askAiCoach(customText = null) {
+    if (isSendingCoach) return;
     const inp = document.getElementById("aiCoachInput");
     const text = (inp ? inp.value : "").trim();
+    const nowTs = Date.now();
+    if (text && text === _lastCoachSentText && (nowTs - _lastCoachSentAt) < 3500) return;
+    _lastCoachSentText = text;
+    _lastCoachSentAt = nowTs;
     if (!text) return; try { sharedTtsAudio.play().then(()=>sharedTtsAudio.pause()).catch(()=>{}); } catch(e){}
 
     const now = Date.now();
