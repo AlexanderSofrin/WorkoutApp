@@ -266,7 +266,7 @@ async function askAiCoach() {
             headers: authHeaders(),
             body: JSON.stringify({ message: text, current_plan: workoutPlan, scheduled_plans: JSON.parse(localStorage.getItem("wv_scheduled_plans") || "{}") })
         });
-        if (!res.ok) return;
+        if (!res.ok) { const errTxt = await res.text().catch(() => ""); appendAiChat("Система", `Ошибка (${res.status}): ${errTxt.slice(0, 120)}`, "#fb7185"); return; }
         const d = await res.json();
 
         appendAiChat("ИИ-тренер", d.reply, "#e2e8f0");
