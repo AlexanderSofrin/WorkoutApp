@@ -512,12 +512,131 @@ def _build_user_context(user: User, db: Session, target_date: str | None = None)
         nutrition_line = "Питание: логов КБЖУ за последние дни пока нет."
 
     return f"{time_line}\n{profile_line}{specific_date_line}\n{workouts_line}\n{nutrition_line}"
-def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn=None, current_plan: Optional[list] = None) -> dict:
+def _extract_all_dates(text: str) -> list:
+    now = _now_msk()
+    low = text.lower()
+    found = []
+    if "сегодня" in low:
+        found.append(now.strftime("%Y-%m-%d"))
+    if "завтра" in low and "послезавтра" not in low:
+        found.append((now + timedelta(days=1)).strftime("%Y-%m-%d"))
+    if "послезавтра" in low:
+        found.append((now + timedelta(days=2)).strftime("%Y-%m-%d"))
+    months = {
+        "январ": 1, "феврал": 2, "март": 3, "апрел": 4, "ма": 5, "июн": 6,
+        "июл": 7, "август": 8, "сентябр": 9, "октябр": 10, "ноябр": 11, "декабр": 12
+    }
+    for m in re.finditer(r"\b(\d{1,2})\s+(январ|феврал|март|апрел|ма|июн|июл|август|сентябр|октябр|ноябр|декабр)[а-яё]*", low):
+        day, month = int(m.group(1)), months[m.group(2)]
+        year = now.year + (1 if month < now.month - 6 else 0)
+        try:
+            d_s = datetime(year, month, day).strftime("%Y-%m-%d")
+            if d_s not in found:
+                found.append(d_s)
+        except ValueError:
+            pass
+    for m in re.finditer(r"\b(?:с|со|на|за|от)\s+(\d{1,2})(?:\s*-?\s*(?:е|ое|го|му))?\s*(?:числ[оаеу]?)?\b", low):
+        day = int(m.group(1))
+        try:
+            d_s = datetime(now.year, now.month, day).strftime("%Y-%m-%d")
+            if d_s not in found:
+                found.append(d_s)
+        except ValueError:
+            pass
+    return found
+
+
+def _handle_schedule_dialog(user_id: int, message: str, scheduled_plans: Optional[dict], first_name: str) -> Optional[dict]:
+    sched = scheduled_plans or {}
+    low = message.lower().strip()
+    dates = _extract_all_dates(message)
+
+    if any(w in low for w in ("перенес", "сдвин", "перестав")) and dates:
+        src_date = None
+        dst_date = None
+        if len(dates) >= 2:
+            src_date, dst_date = dates, dates
+        elif len(dates) == 1:
+            dst_date = dates
+            for k in sorted(sched.keys()):
+                if sched.get(k) and k != dst_date:
+                    src_date = k
+                    break
+        if src_date and dst_date and sched.get(src_date):
+            items = sched[src_date]
+            s_fmt = datetime.strptime(src_date, "%Y-%m-%d").strftime("%d.%m.%Y")
+            d_fmt = datetime.strptime(dst_date, "%Y-%m-%d").strftime("%d.%m.%Y")
+            names = ", ".join(it.get("name") or it.get("exercise_name") or "" for it in items)
+            reply = f"Перенёс тренировку ({names}) с {s_fmt} на {d_fmt}. В календаре {d_fmt} теперь отмечено фиолетовым!"
+            append_session_memory(user_id, "user", message)
+            append_session_memory(user_id, "assistant", reply)
+            return {
+                "reply": reply,
+                "mode": "plan_moved",
+                "from_date": src_date,
+                "target_date": dst_date,
+                "suggested_plan": items,
+                "workout_entry": None,
+                "updated_weight_kg": None
+            }
+
+    if any(w in low for w in ("отмен", "удал", "убер", "сним")) and any(w in low for w in ("тренировк", "план", "запис", "числ", "завтра", "сегодня")):
+        target_d = dates if dates else next((k for k in sorted(sched.keys()) if sched.get(k)), None)
+        if target_d and sched.get(target_d):
+            d_fmt = datetime.strptime(target_d, "%Y-%m-%d").strftime("%d.%m.%Y")
+            reply = f"Снял запланированную тренировку на {d_fmt} и очистил фиолетовую отметку в календаре. Если решишь поставить её на другой день — просто скажи!"
+            append_session_memory(user_id, "user", message)
+            append_session_memory(user_id, "assistant", reply)
+            return {
+                "reply": reply,
+                "mode": "plan_cancelled",
+                "target_date": target_d,
+                "suggested_plan": None,
+                "workout_entry": None,
+                "updated_weight_kg": None
+            }
+
+    is_asking_plan = any(p in low for p in ("что у нас", "что запланировано", "что намечено", "какая тренировка на", "какой план на", "покажи план на"))
+    if is_asking_plan and dates:
+        q_date = dates
+        d_fmt = datetime.strptime(q_date, "%Y-%m-%d").strftime("%d.%m.%Y")
+        items = sched.get(q_date) or []
+        if items:
+            lines = [
+                f"{idx + 1}. {it.get('name') or it.get('exercise_name')} — {it.get('sets', 3)}×{it.get('reps', 12)} ({it.get('weight', 0)} кг)"
+                for idx, it in enumerate(items)
+            ]
+            reply = (
+                f"На {d_fmt} у нас намечена тренировка:\n" + "\n".join(lines) +
+                f"\nОставляем в силе, отменяем или переносим на другую дату?"
+            )
+        else:
+            reply = f"На {d_fmt} в календаре пока пусто, {first_name}. Составить и поставить тренировку на этот день?"
+        append_session_memory(user_id, "user", message)
+        append_session_memory(user_id, "assistant", reply)
+        return {
+            "reply": reply,
+            "mode": "chat",
+            "target_date": q_date,
+            "suggested_plan": None,
+            "workout_entry": None,
+            "updated_weight_kg": None
+        }
+
+    return None
+
+
+def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn=None, current_plan: Optional[list] = None, scheduled_plans: Optional[dict] = None) -> dict:
 
     clean_msg = message.strip()
     low_msg = clean_msg.lower()
     first_name = (user.full_name or "Атлет").split()[0]
     target_date = _extract_target_date(clean_msg)
+
+    # 0. Живое управление расписанием в календаре (просмотр, отмена, перенос между датами)
+    sched_res = _handle_schedule_dialog(user.id, clean_msg, scheduled_plans, first_name)
+    if sched_res:
+        return sched_res
 
     # 1. Подтверждение переноса черновика или текущего плана на выбранную дату
     pending = _PENDING_PLANS.get(user.id)
@@ -631,9 +750,17 @@ def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn
     )
     compressed_note = _COMPRESSED_CONTEXT.get(user.id, "")
 
+    sched_lines = []
+    if scheduled_plans:
+        for d_k, d_items in sorted(scheduled_plans.items()):
+            if d_items:
+                d_f = datetime.strptime(d_k, "%Y-%m-%d").strftime("%d.%m.%Y")
+                ex_s = ", ".join(it.get("name") or it.get("exercise_name") or "" for it in d_items)
+                sched_lines.append(f"{d_f}: {ex_s}")
+    sched_note = ("ЗАПЛАНИРОВАННЫЕ ТРЕНИРОВКИ В КАЛЕНДАРЕ: " + " | ".join(sched_lines) + "\n") if sched_lines else ""
     system_prompt = (
         f"Ты — живой, прямой и максимально понимающий персональный ИИ-тренер, напарник у стойки со штангой и спортивный нутрициолог в Workout Vault. Общаешься с атлетом {first_name} на «ты», по-товарищески, уверенно и по делу.\n\n"
-        f"ДАННЫЕ АТЛЕТА ИЗ БАЗЫ:\n{db_context}\n{active_note} {compressed_note}\n\n"
+        f"ДАННЫЕ АТЛЕТА ИЗ БАЗЫ:\n{db_context}\n{sched_note}{active_note} {compressed_note}\n\n"
         f"ЖЕЛЕЗНЫЕ ПРАВИЛА СТИЛЯ И ПОВЕДЕНИЯ:\n"
         f"1. НИКАКОЙ ВОДЫ, ШАБЛОНОВ И ПУСТЫХ СТРОК: запрещены канцелярит, символы **, ## и пустые строки между пунктами списков (пиши списки плотно, каждый пункт с новой строки без пустого абзаца между ними). запрещены канцелярит, фразы «Понимаю тебя 😊», «Давай сразу перейдём к сути», символы **, ## и решётки. В обычном диалоге отвечай ёмко (2–3 предложения), как умный напарник между подходами.\n"
         f"2. СТРОГО ПО ЗАПРОСУ (БЕЗ ЛИШНИХ ПРЕДЛОЖЕНИЙ): если атлет просто делится впечатлениями, спрашивает оценку объёмов или болтает — поддержи разговор и ответь строго по существу с опорой на его цифры из БД. НЕ предлагай в конце составить программу, расписать план на неделю или добавить упражнения, если тебя об этом не просили!\n"
