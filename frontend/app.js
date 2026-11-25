@@ -1545,3 +1545,247 @@ if (typeof renderGifLibrary === "function") renderGifLibrary();
         });
     };
 })();
+// === ЗЕЛЁНЫЙ КОРИДОР / БИРЖЕВОЙ ТЕРМИНАЛ ВЕСА ТЕЛА ===
+let _wtTimeframeDays = 30;
+
+function openWeightModal() {
+    const m = document.getElementById("weightTerminalModal");
+    if (!m) return;
+    m.classList.remove("hidden");
+    m.style.display = "flex";
+    requestAnimationFrame(() => renderWeightTerminal());
+}
+
+function closeWeightModal() {
+    const m = document.getElementById("weightTerminalModal");
+    if (!m) return;
+    m.classList.add("hidden");
+    m.style.display = "none";
+}
+
+function _getWeightHistoryList(currentW) {
+    const raw = localStorage.getItem("wv_weight_history");
+    let list = [];
+    try { list = raw ? JSON.parse(raw) : []; } catch (_) { list = []; }
+    if (!Array.isArray(list)) list = [];
+    const todayIso = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Moscow" });
+    if (currentW && currentW > 0) {
+        if (!list.length) {
+            list.push({ date: todayIso, weight: Number(currentW) });
+        } else if (list[list.length - 1].date === todayIso) {
+            list[list.length - 1].weight = Number(currentW);
+        } else {
+            list.push({ date: todayIso, weight: Number(currentW) });
+        }
+        localStorage.setItem("wv_weight_history", JSON.stringify(list.slice(-180)));
+    }
+    return list;
+}
+
+function setWeightTimeframe(days) {
+    _wtTimeframeDays = days;
+    document.querySelectorAll(".wt-tf-btn").forEach(btn => {
+        const active = Number(btn.dataset.days) === days;
+        btn.style.borderColor = active ? "#34d399" : "";
+        btn.style.color = active ? "#34d399" : "";
+    });
+    renderWeightTerminal();
+}
+
+function submitNewWeightPoint() {
+    const inp = document.getElementById("wtNewWeightInput");
+    if (!inp || !inp.value) return;
+    const num = parseFloat(inp.value.replace(",", "."));
+    if (isNaN(num) || num < 35 || num > 250) return;
+    inp.value = "";
+    _saveWeightToSystem(num);
+}
+
+async function _saveWeightToSystem(newWeight) {
+    const todayIso = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Moscow" });
+    const list = _getWeightHistoryList(null);
+    if (list.length && list[list.length - 1].date === todayIso) {
+        list[list.length - 1].weight = newWeight;
+    } else {
+        list.push({ date: todayIso, weight: newWeight });
+    }
+    localStorage.setItem("wv_weight_history", JSON.stringify(list.slice(-180)));
+    if (window._currentUserProfile) window._currentUserProfile.weight_kg = newWeight;
+    renderWeightTerminal();
+    try {
+        await apiFetch("/coach/ask", {
+            method: "POST",
+            body: JSON.stringify({ message: `мой вес ${newWeight}` })
+        });
+    } catch (_) {}
+}
+function renderWeightTerminal() {
+    const prof = window._currentUserProfile || {};
+    const curW = Number(prof.weight_kg || 67.0);
+    const targetW = Number(prof.target_weight_kg || 67.0);
+    const allPts = _getWeightHistoryList(curW);
+    const pts = allPts.slice(-Math.max(2, _wtTimeframeDays));
+
+    const isCut = targetW < curW - 0.2;
+    const isBulk = targetW > curW + 0.2;
+
+    const baseLevel = Math.round(curW * 2) / 2;
+    let support = Number((baseLevel - 0.5).toFixed(1));
+    let resistance = Number((baseLevel + 0.5).toFixed(1));
+    let breakoutState = "В КОРИДОРЕ";
+
+    if (pts.length >= 2) {
+        const p1 = pts[pts.length - 2].weight;
+        const p2 = pts[pts.length - 1].weight;
+        if (isBulk && p1 >= resistance && p2 >= resistance) {
+            support = resistance;
+            resistance = Number((resistance + 0.5).toFixed(1));
+            breakoutState = "ПРОБОЙ ВВЕРХ ↗";
+        } else if (isCut && p1 <= support && p2 <= support) {
+            resistance = support;
+            support = Number((support - 0.5).toFixed(1));
+            breakoutState = "ПРОБОЙ ВНИЗ ↘";
+        }
+    }
+
+    const prevW = pts.length >= 2 ? pts[pts.length - 2].weight : curW;
+    const delta = Number((curW - prevW).toFixed(2));
+    const arrow = delta > 0.02 ? "↗" : (delta < -0.02 ? "↘" : (isBulk ? "↗" : (isCut ? "↘" : "→")));
+    const goodTrend = (isBulk && delta >= 0) || (isCut && delta <= 0) || (!isBulk && !isCut && Math.abs(delta) <= 0.3);
+    const trendColor = goodTrend ? "#34d399" : "#fbbf24";
+
+    let hintText = "";
+    if (isCut) {
+        const distKg = Math.max(0, Number((curW - support).toFixed(2)));
+        const kcalLeft = Math.round(distKg * 7700);
+        hintText = distKg > 0
+            ? `До пробоя поддержки ${support.toFixed(1)} кг осталось ${distKg.toFixed(1)} кг (≈ ${kcalLeft.toLocaleString("ru-RU")} ккал дефицита)`
+            : `Уровень ${support.toFixed(1)} кг пробит! Закрепись ещё 1 замером для сдвига коридора вниз.`;
+    } else if (isBulk) {
+        const distKg = Math.max(0, Number((resistance - curW).toFixed(2)));
+        const kcalLeft = Math.round(distKg * 7700);
+        hintText = distKg > 0
+            ? `До пробоя сопротивления ${resistance.toFixed(1)} кг осталось ${distKg.toFixed(1)} кг (≈ ${kcalLeft.toLocaleString("ru-RU")} ккал профицита)`
+            : `Уровень ${resistance.toFixed(1)} кг пробит! Закрепись ещё 1 замером — он станет новой поддержкой.`;
+    } else {
+        hintText = `Идеальное удержание в зелёном коридоре ${support.toFixed(1)} – ${resistance.toFixed(1)} кг (цель ${targetW.toFixed(1)} кг).`;
+    }
+
+    const elArrowBox = document.getElementById("heroTrendArrowBox");
+    if (elArrowBox) {
+        elArrowBox.textContent = arrow;
+        elArrowBox.style.color = trendColor;
+        elArrowBox.style.borderColor = trendColor;
+        elArrowBox.style.boxShadow = `0 0 12px ${goodTrend ? "rgba(52,211,153,0.4)" : "rgba(251,191,36,0.4)"}`;
+    }
+    const elCorridor = document.getElementById("heroCorridorRange");
+    const elCurInfo = document.getElementById("heroCurrentWeightInfo");
+    if (elCorridor) {
+        elCorridor.textContent = `${support.toFixed(1)} – ${resistance.toFixed(1)} кг`;
+        elCorridor.style.color = trendColor;
+    }
+    if (elCurInfo) {
+        elCurInfo.innerHTML = `Сейчас: <strong style="color:#f8fafc">${curW.toFixed(1)} кг</strong> · цель ${targetW.toFixed(1)} кг`;
+    }
+
+    const elBadge = document.getElementById("wtBreakoutBadge");
+    const elTicker = document.getElementById("wtTickerLine");
+    const elRes = document.getElementById("wtResistanceVal");
+    const elSup = document.getElementById("wtSupportVal");
+    const elCor = document.getElementById("wtCorridorVal");
+    const elProg = document.getElementById("wtEnergyProgressBox");
+    if (elBadge) { elBadge.textContent = breakoutState; elBadge.style.color = trendColor; }
+    if (elTicker) {
+        const sign = delta > 0 ? "+" : "";
+        elTicker.innerHTML = `${curW.toFixed(2)} кг <span style="color:${trendColor}">${arrow} ${sign}${delta.toFixed(2)}</span> · Цель: ${targetW.toFixed(1)} кг`;
+    }
+    if (elRes) elRes.textContent = `${resistance.toFixed(1)} кг`;
+    if (elSup) elSup.textContent = `${support.toFixed(1)} кг`;
+    if (elCor) elCor.textContent = `${support.toFixed(1)} ↔ ${resistance.toFixed(1)}`;
+    if (elProg) elProg.innerHTML = `<strong style="color:${trendColor}">${arrow} Статус уровня:</strong> ${hintText}`;
+
+    const canvas = document.getElementById("weightTerminalCanvas");
+    if (!canvas) return;
+    const parentW = canvas.parentElement ? canvas.parentElement.clientWidth - 16 : 0;
+    const w = Math.max(260, parentW || Math.min(410, window.innerWidth - 60));
+    const h = 230;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    const ctx = canvas.getContext("2d");
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, w, h);
+
+    const drawPts = pts.length >= 2 ? pts : [{ date: "Старт", weight: curW }, { date: "Сегодня", weight: curW }];
+    const vals = drawPts.map(p => p.weight).concat([support - 0.3, resistance + 0.3]);
+    const minV = Math.min(...vals);
+    const maxV = Math.max(...vals);
+    const padL = 12, padR = 48, padT = 18, padB = 24;
+    const plotW = w - padL - padR;
+    const plotH = h - padT - padB;
+    const yOf = v => padT + plotH - ((v - minV) / Math.max(0.2, maxV - minV)) * plotH;
+
+    ctx.strokeStyle = "rgba(148,163,184,0.08)";
+    ctx.lineWidth = 1;
+    for (let g = 0; g <= 4; g++) {
+        const gy = padT + (plotH / 4) * g;
+        ctx.beginPath(); ctx.moveTo(padL, gy); ctx.lineTo(padL + plotW, gy); ctx.stroke();
+    }
+
+    const yRes = yOf(resistance);
+    const ySup = yOf(support);
+    ctx.fillStyle = "rgba(52, 211, 153, 0.13)";
+    ctx.fillRect(padL, Math.min(yRes, ySup), plotW, Math.abs(ySup - yRes));
+
+    ctx.save();
+    ctx.setLineDash();
+    ctx.strokeStyle = "#38bdf8";
+    ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(padL, yRes); ctx.lineTo(padL + plotW, yRes); ctx.stroke();
+    ctx.fillStyle = "#38bdf8"; ctx.font = "bold 11px sans-serif";
+    ctx.fillText(resistance.toFixed(1), padL + plotW + 6, yRes + 4);
+
+    ctx.strokeStyle = "#fbbf24";
+    ctx.beginPath(); ctx.moveTo(padL, ySup); ctx.lineTo(padL + plotW, ySup); ctx.stroke();
+    ctx.fillStyle = "#fbbf24";
+    ctx.fillText(support.toFixed(1), padL + plotW + 6, ySup + 4);
+    ctx.restore();
+
+    const stepX = plotW / Math.max(1, drawPts.length - 1);
+    const grad = ctx.createLinearGradient(0, padT, 0, padT + plotH);
+    grad.addColorStop(0, "rgba(163, 230, 53, 0.36)");
+    grad.addColorStop(1, "rgba(163, 230, 53, 0.0)");
+
+    ctx.beginPath();
+    drawPts.forEach((p, i) => {
+        const x = padL + i * stepX;
+        const y = yOf(p.weight);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = "#a3e635";
+    ctx.lineWidth = 2.6;
+    ctx.stroke();
+
+    ctx.lineTo(padL + (drawPts.length - 1) * stepX, padT + plotH);
+    ctx.lineTo(padL, padT + plotH);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    drawPts.forEach((p, i) => {
+        const x = padL + i * stepX;
+        const y = yOf(p.weight);
+        ctx.beginPath();
+        ctx.arc(x, y, i === drawPts.length - 1 ? 5 : 3, 0, Math.PI * 2);
+        ctx.fillStyle = i === drawPts.length - 1 ? "#ffffff" : "#a3e635";
+        ctx.fill();
+        if (i === drawPts.length - 1) {
+            ctx.fillStyle = "#a3e635";
+            ctx.fillRect(padL + plotW + 4, y - 9, 42, 18);
+            ctx.fillStyle = "#080c15";
+            ctx.font = "bold 11px sans-serif";
+            ctx.fillText(p.weight.toFixed(1), padL + plotW + 8, y + 4);
+        }
+    });
+}
+setTimeout(() => { if (typeof renderWeightTerminal === "function") renderWeightTerminal(); }, 500);
