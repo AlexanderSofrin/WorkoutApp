@@ -1738,7 +1738,8 @@ function renderWeightTerminal() {
     ctx.fillRect(padL, Math.min(yRes, ySup), plotW, Math.abs(ySup - yRes));
 
     ctx.save();
-    ctx.setLineDash();
+    ctx.setLineDash([5, 4]);
+
     ctx.strokeStyle = "#38bdf8";
     ctx.lineWidth = 1.4;
     ctx.beginPath(); ctx.moveTo(padL, yRes); ctx.lineTo(padL + plotW, yRes); ctx.stroke();
