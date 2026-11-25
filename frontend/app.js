@@ -225,7 +225,7 @@ async function speakText(text) {
 
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
-        const audio = sharedTtsAudio; audio.src = url;
+        const audio = new Audio(url);
         currentTtsAudio = audio;
         audio.onended = () => URL.revokeObjectURL(url);
         audio.onerror = () => {
@@ -234,6 +234,7 @@ async function speakText(text) {
         };
         await audio.play();
     } catch (err) {
+        console.warn("SaluteSpeech fallback:", err);
         speakFallbackBrowser(cleanSpeech);
     }
 }
@@ -243,17 +244,12 @@ let _lastCoachSentAt = 0;
 async function askAiCoach(customText = null) {
     if (isSendingCoach) return;
     const inp = document.getElementById("aiCoachInput");
-    const text = (inp ? inp.value : "").trim();
-    const nowTs = Date.now();
-    if (text && text === _lastCoachSentText && (nowTs - _lastCoachSentAt) < 3500) return;
-    _lastCoachSentText = text;
-    _lastCoachSentAt = nowTs;
-    if (!text) return; try { sharedTtsAudio.play().then(()=>sharedTtsAudio.pause()).catch(()=>{}); } catch(e){}
-
+    const text = (customText !== null ? String(customText) : (inp ? inp.value : "")).trim();
+    if (!text) return;
     const now = Date.now();
-    if (isSendingCoach || (text === lastCoachText && now - lastCoachTime < 3000)) {
-        return;
-    }
+    if (text === _lastCoachSentText && (now - _lastCoachSentAt) < 5000) return;
+    _lastCoachSentText = text;
+    _lastCoachSentAt = now;
 
     isSendingCoach = true;
     lastCoachText = text;

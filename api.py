@@ -1232,7 +1232,7 @@ async def _synth_salute_speech(text: str) -> bytes:
     if not access_token:
         return b""
     ctx = ssl._create_unverified_context()
-    synth_url = "".join(["https://", "smartspeech.", "sber.ru", "/rest/v1/text:synthesize?voice=Bys_24000&format=opus"])
+    synth_url = "".join(["https://", "smartspeech.", "sber.ru", "/rest/v1/text:synthesize?voice=Bys_24000&format=wav16"])
     tts_req = urllib.request.Request(
         synth_url,
         data=text.encode("utf-8"),
@@ -1264,8 +1264,8 @@ async def generate_tts(req: TTSRequest):
         if salute_bytes:
             if len(_TTS_CACHE) > 80:
                 _TTS_CACHE.clear()
-            _TTS_CACHE[clean_text] = (salute_bytes, "audio/ogg")
-            return StreamingResponse(io.BytesIO(salute_bytes), media_type="audio/ogg")
+            _TTS_CACHE[clean_text] = (salute_bytes, "audio/wav")
+            return StreamingResponse(io.BytesIO(salute_bytes), media_type="audio/wav", headers={"X-TTS-Engine": "salute"})
     except Exception as e:
         print("SaluteSpeech error:", e)
 
