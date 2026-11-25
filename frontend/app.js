@@ -852,8 +852,7 @@ async function saveWorkout() {
 }
 
 async function loadSupport() {
-    const tired = document.getElementById("tiredCheckbox").checked;
-    const res = await fetch("/coach/support?tired_after_shift=" + tired, { headers: authHeaders() });
+    const res = await fetch("/coach/support?tired_after_shift=false", { headers: authHeaders() });
     if (res.status === 401) return logout();
     const d = await res.json();
     document.getElementById("athleteName").textContent = "Атлет: " + d.athlete;
@@ -888,19 +887,33 @@ async function loadNutrition() {
         }
     }
 
-    document.getElementById("goalLabel").textContent = d.goal_ru;
-    document.getElementById("dailyBurnVal").textContent = d.tdee_maintenance_kcal + " ккал";
-    document.getElementById("kcalTargetSub").textContent = "Цель на день: " + d.daily_target.calories_kcal + " ккал";
+    const goalEl = document.getElementById("goalLabel");
+    if (goalEl) goalEl.textContent = d.goal_ru;
+
+    const mainGoalEl = document.getElementById("mainGoalTitle");
+    if (mainGoalEl) mainGoalEl.textContent = d.goal_ru;
+    const mainGoalSubEl = document.getElementById("mainGoalSub");
+    if (mainGoalSubEl) mainGoalSubEl.textContent = `Цель: ${d.daily_target.calories_kcal} ккал/день`;
+
+    const heroBurnEl = document.getElementById("heroDailyBurnVal");
+    if (heroBurnEl) heroBurnEl.textContent = d.tdee_maintenance_kcal + " ккал";
+    const heroTargetEl = document.getElementById("heroKcalTargetSub");
+    if (heroTargetEl) heroTargetEl.textContent = "Цель на день: " + d.daily_target.calories_kcal + " ккал";
+
+    const heroCorrEl = document.getElementById("heroCorridorRange");
+    if (heroCorrEl) heroCorrEl.textContent = d.green_corridor.safe_range_kg;
+    const heroWeightEl = document.getElementById("heroCurrentWeightInfo");
+    if (heroWeightEl) heroWeightEl.textContent = "Сейчас: " + d.green_corridor.current_weight_kg + " кг";
+
     document.getElementById("macrosInfo").textContent = `${d.daily_target.protein_g}г / ${d.daily_target.fats_g}г / ${d.daily_target.carbs_g}г`;
     document.getElementById("kcalShiftInfo").textContent = `Смена: ${d.schedule_adaptation.work_day_kcal} • Отдых: ${d.schedule_adaptation.rest_day_kcal}`;
-    document.getElementById("corridorRange").textContent = d.green_corridor.safe_range_kg;
-    document.getElementById("currentWeightInfo").textContent = "Сейчас: " + d.green_corridor.current_weight_kg + " кг";
     document.getElementById("waterInfo").textContent = d.hydration_and_electrolytes.water_ml_per_day + " мл";
     document.getElementById("saltInfo").textContent = "Соль: ~" + d.hydration_and_electrolytes.salt_g_per_day + " г/день";
     document.getElementById("scheduleCoachTip").textContent = d.schedule_adaptation.coach_tip;
 
     renderSampleMenu();
 }
+
 
 function renderSampleMenu() {
     const list = document.getElementById("sampleMenuList");
@@ -1185,6 +1198,16 @@ async function loadAnalytics() {
     if (histRes.ok) {
         const histData = await histRes.json();
         allWorkoutsCache = histData.workouts || [];
+        const weekAgo = new Date();
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        const uniqueDays7 = new Set(
+            allWorkoutsCache
+                .filter(w => w.created_at && new Date(w.created_at) >= weekAgo)
+                .map(w => new Date(w.created_at).toLocaleDateString("sv-SE"))
+        );
+        const streakEl = document.getElementById("weeklyStreakVal");
+        if (streakEl) streakEl.textContent = `${uniqueDays7.size} / 4`;
+
         renderCalendar();
         renderCalDayDetails(selectedDateStr);
 
