@@ -362,7 +362,7 @@ def _call_gigachat_llm(messages: list[dict]) -> str | None:
     if not token:
         return None
 
-    model_name = os.getenv("GIGACHAT_MODEL", "GigaChat").strip()
+    model_name = os.getenv("GIGACHAT_MODEL", "GigaChat-Max").strip()
     chat_url = "".join(["https://", "gigachat.devices.", "sberbank.ru", "/api/v1/chat/completions"])
 
     body = json.dumps({
@@ -640,11 +640,38 @@ def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn
     if sched_res:
         return sched_res
 
-    # 1. Прямая запись выполненной тренировки в блокнот (PostgreSQL) одной фразой
-    is_log_completed = any(
-        phrase in low_msg for phrase in (
-            "тренировка выполнена", "записывай в блокнот", "запиши в блокнот",
-            "в дневник", "в журнал", "в историю", "запиши всю тренировку", "закрыли тренировку"
+    # 0.5. МГНОВЕННЫЙ ПЕРЕХВАТ ВВОДНЫХ ФРАЗ ("сейчас дам/скину тренировку, прими к сведению и запиши")
+    has_numbers = bool(re.search(r"\d", clean_msg))
+    is_prep_phrase = (
+        not has_numbers
+        and any(w in low_msg for w in ("сейчас", "готов", "скину", "дам", "прими к сведению", "выстрой"))
+        and any(w in low_msg for w in ("тренировк", "запис", "блокнот", "журнал", "список", "подход"))
+    )
+    if is_prep_phrase:
+        reply = (
+            f"**Готов, {first_name}! На связи и жду твой список.**\n\n"
+            f"Вставляй или надиктуй упражнения с подходами, повторениями и весом — я сразу выстрою всё в чёткий ряд, "
+            f"запишу в блокнот и календарь, а потом разберу объём и нагрузку."
+        )
+        append_session_memory(user.id, "user", clean_msg)
+        append_session_memory(user.id, "assistant", reply)
+        return {
+            "reply": reply,
+            "mode": "chat",
+            "suggested_plan": None,
+            "target_date": target_date,
+            "workout_entry": None,
+            "updated_weight_kg": None
+        }
+
+    # 1. Прямая запись выполненной тренировки из ТЕКУЩЕГО плана в блокнот одной фразой
+    is_log_completed = (
+        not is_prep_phrase
+        and any(
+            phrase in low_msg for phrase in (
+                "тренировка выполнена", "записывай в блокнот", "запиши в блокнот",
+                "в дневник", "в журнал", "в историю", "запиши всю тренировку", "закрыли тренировку"
+            )
         )
     )
     pending = _PENDING_PLANS.get(user.id)
@@ -666,7 +693,7 @@ def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn
         names_preview = ", ".join(i["exercise_name"] for i in norm_items)
         compress_session_memory(user.id, f"Выполнена и записана в блокнот: {names_preview}")
         reply = (
-            f"Мощно отработал, {first_name}! Записал всю выполненную тренировку ({names_preview}) "
+            f"**Мощно отработал, {first_name}!** Записал всю выполненную тренировку ({names_preview}) "
             f"прямо в твой блокнот и обновил средний расход калорий на главной."
         )
         return {
@@ -677,6 +704,7 @@ def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn
             "workout_entry": None,
             "updated_weight_kg": None
         }
+
     # 1.5. ПАКЕТНАЯ ЗАПИСЬ ВСЕЙ ТРЕНИРОВКИ ОДНИМ СПИСКОМ (многострочный отчёт)
     batch_items = parse_batch_workout_log(clean_msg)
     if batch_items:
