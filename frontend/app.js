@@ -1367,22 +1367,24 @@ if (typeof renderGifLibrary === "function") renderGifLibrary();
 
 // === SHARP ATHLETIC EMBLEM & STRICT MISSED-DAY GRAY ===
 (function() {
-    const sharpSvg = `<svg width="230" height="250" viewBox="0 0 230 250" fill="none" xmlns="http://w3.org" style="opacity:0.18; filter:drop-shadow(0 0 26px rgba(168,85,247,0.55));">
+      const sharpSvg = `<svg width="290" height="270" viewBox="0 0 300 280" fill="none" xmlns="http://w3.org" style="opacity:0.20; filter:drop-shadow(0 0 28px rgba(168,85,247,0.65));">
       <defs>
-        <linearGradient id="sharpV" x1="115" y1="12" x2="115" y2="240" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stop-color="#d8b4fe"/>
-          <stop offset="50%" stop-color="#9333ea"/>
+        <linearGradient id="brutalSteel" x1="150" y1="15" x2="150" y2="265" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="#e879f9"/>
+          <stop offset="45%" stop-color="#9333ea"/>
           <stop offset="100%" stop-color="#1e1b4b" stop-opacity="0.05"/>
         </linearGradient>
       </defs>
-      <polygon points="115,16 129,24 127,44 115,52 103,44 101,24" stroke="url(#sharpV)" stroke-width="2.6" fill="url(#sharpV)" fill-opacity="0.18"/>
-      <polygon points="99,60 131,60 158,72 198,92 210,130 194,174 180,170 188,132 176,110 160,156 146,238 84,238 70,156 54,110 42,132 50,170 36,174 20,130 32,92 72,72" stroke="url(#sharpV)" stroke-width="2.6" stroke-linejoin="miter" fill="url(#sharpV)" fill-opacity="0.20"/>
-      <polyline points="70,102 100,120 115,112 130,120 160,102" stroke="url(#sharpV)" stroke-width="2.4" fill="none"/>
-      <line x1="115" y1="80" x2="115" y2="222" stroke="url(#sharpV)" stroke-width="2"/>
-      <polyline points="92,146 115,154 138,146" stroke="url(#sharpV)" stroke-width="2" fill="none"/>
-      <polyline points="95,172 115,180 135,172" stroke="url(#sharpV)" stroke-width="2" fill="none"/>
-      <polyline points="98,198 115,206 132,198" stroke="url(#sharpV)" stroke-width="2" fill="none"/>
+      <!-- Брутальный силуэт: Двойной бицепс спереди -->
+      <path d="M150 28 C161 28 168 36 167 48 C166 57 161 63 157 66 L176 74 C194 76 212 85 224 98 C236 90 252 92 262 104 C272 116 272 134 264 146 L278 108 L292 114 L276 164 C269 178 254 182 240 174 C228 168 219 156 212 142 L192 184 L182 252 L118 252 L108 184 L88 142 C81 156 72 168 60 174 C46 182 31 178 24 164 L8 114 L22 108 L36 146 C28 134 28 116 38 104 C48 92 64 90 76 98 C88 85 106 76 124 74 L143 66 C139 63 134 57 133 48 C132 36 139 28 150 28 Z" fill="url(#brutalSteel)" fill-opacity="0.22" stroke="url(#brutalSteel)" stroke-width="3" stroke-linejoin="round"/>
+      <!-- Рельеф грудных мышц, дельт и пресса -->
+      <path d="M96 108 Q123 128 150 116 Q177 128 204 108" stroke="url(#brutalSteel)" stroke-width="2.8" stroke-linecap="round"/>
+      <path d="M150 86 L150 236" stroke="url(#brutalSteel)" stroke-width="2.4" stroke-linecap="round"/>
+      <path d="M124 148 Q150 156 176 148 M126 174 Q150 182 174 174 M128 200 Q150 208 172 200" stroke="url(#brutalSteel)" stroke-width="2.4" stroke-linecap="round"/>
+      <!-- Контур пиков бицепсов и предплечий -->
+      <path d="M74 104 C62 112 58 128 66 138 M226 104 C238 112 242 128 234 138" stroke="url(#brutalSteel)" stroke-width="2.4" stroke-linecap="round"/>
     </svg>`;
+
 
     const origToggleFs = window.toggleCoachFullscreen;
     window.toggleCoachFullscreen = function() {
