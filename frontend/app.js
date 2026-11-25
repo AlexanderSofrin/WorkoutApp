@@ -199,9 +199,9 @@ function speakText(text) {
     if (!document.getElementById("ttsToggle")?.checked) return;
     let cleanSpeech = String(text || "")
         .replace(/[*#_`~]/g, "")
-        .replace(/?/g, " ?? ")
+        .replace(/×/g, " на ")
         .replace(/\|/g, ", ")
-        .replace(/?/g, ", ")
+        .replace(/•/g, ", ")
         .replace(/\s+/g, " ")
         .trim();
     if (!cleanSpeech) return;
@@ -213,6 +213,7 @@ function speakText(text) {
     stopAllSpeech();
     speakFallbackBrowser(cleanSpeech);
 }
+
 
 let _lastCoachSentText = "";
 let _lastCoachSentAt = 0;
