@@ -167,8 +167,13 @@ function appendAiChat(sender, text, color = "#e2e8f0") {
     }
 
     box.appendChild(div);
-    box.scrollTop = box.scrollHeight;
+    if (sender === "Ты" || sender === "Система") {
+        box.scrollTop = box.scrollHeight;
+    } else {
+        box.scrollTop = Math.max(0, div.offsetTop - 10);
+    }
 }
+
 
 
 
@@ -374,9 +379,35 @@ async function askAiCoach(customText = null) {
             renderPlan();
             appendAiChat("Система", `✓ Подход (${entry.exercise_name}) добавлен в текущий план.`, "#34d399");
 
+                } else if (d.mode === "workout_logged" && Array.isArray(d.suggested_plan)) {
+            const logDate = d.target_date || document.getElementById("workoutDateInput")?.value || new Date().toLocaleDateString("sv-SE");
+            for (const item of d.suggested_plan) {
+                await fetch("/workouts/", {
+                    method: "POST",
+                    headers: authHeaders(),
+                    body: JSON.stringify({
+                        exercise_name: item.exercise_name || item.name,
+                        sets: parseInt(item.sets) || 3,
+                        reps: parseInt(item.reps) || 12,
+                        weight: parseFloat(item.weight) || 0,
+                        workout_date: logDate
+                    })
+                });
+            }
+            const schedMap = JSON.parse(localStorage.getItem("wv_scheduled_plans") || "{}");
+            if (schedMap[logDate]) {
+                delete schedMap[logDate];
+                localStorage.setItem("wv_scheduled_plans", JSON.stringify(schedMap));
+            }
+            selectedDateStr = logDate;
+            await Promise.all([loadSupport(), loadNutrition(), loadAnalytics()]);
+            appendAiChat("Система", `✓ Тренировка (${d.suggested_plan.length} поз.) сохранена в блокнот и календарь за ${logDate}.`, "#34d399");
+            if (navigator.vibrate) navigator.vibrate([40, 40, 40]);
+
         } else if (d.mode === "weight_updated") {
             await Promise.all([loadSupport(), loadNutrition()]);
         }
+
 
     } finally {
         isSendingCoach = false;
@@ -559,109 +590,6 @@ function startAiVoice() {
 
     launchSession();
 }
-
-
-function startAiVoice() {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-        appendAiChat("Система", "Используй микрофон на клавиатуре телефона для голосового ввода.", "#fbbf24");
-        return;
-    }
-
-    if (isVoiceIntentionalActive || activeRecognition) {
-        stopVoiceManual(true);
-        return;
-    }
-
-    const capsule = document.getElementById("coachInputCapsule");
-    const btn = document.getElementById("aiVoiceBtn");
-    const input = document.getElementById("aiCoachInput");
-
-    isVoiceIntentionalActive = true;
-    let committedText = input.value.trim();
-
-    if (capsule) capsule.classList.add("listening");
-    if (btn) btn.classList.add("active");
-    input.placeholder = "Слушаю... говори спокойно, нажми ↑ для отправки";
-    voiceEnergy = 0.45;
-    startVoiceVisualizer();
-
-    const resetSilenceTimer = () => {
-        if (voiceSilenceTimer) clearTimeout(voiceSilenceTimer);
-        voiceSilenceTimer = setTimeout(() => {
-            const currentVal = input.value.trim();
-            if (!currentVal || isFillerPhrase(currentVal)) {
-                resetSilenceTimer();
-                return;
-            }
-            stopVoiceManual(true);
-        }, 4200);
-    };
-
-    const launchSession = () => {
-        if (!isVoiceIntentionalActive) return;
-        const recog = new SpeechRecognition();
-        activeRecognition = recog;
-        recog.lang = "ru-RU";
-        recog.interimResults = true;
-        recog.continuous = true;
-
-        recog.onresult = (e) => {
-            voiceEnergy = 1.0;
-            let interim = "";
-            let sessionFinal = "";
-            for (let i = 0; i < e.results.length; i++) {
-                const part = e.results[i][0].transcript.trim();
-                if (!part) continue;
-                if (e.results[i].isFinal) {
-                    sessionFinal += (sessionFinal ? " " : "") + part;
-                } else {
-                    interim += (interim ? " " : "") + part;
-                }
-            }
-            const nextChunk = [sessionFinal, interim].filter(Boolean).join(" ").trim();
-            const combined = committedText && nextChunk.toLowerCase().startsWith(committedText.toLowerCase())
-                ? nextChunk
-                : [committedText, nextChunk].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
-
-            input.value = combined;
-            resetSilenceTimer();
-        };
-
-        recog.onerror = (e) => {
-            if (e.error === "not-allowed" || e.error === "service-not-allowed") {
-                isVoiceIntentionalActive = false;
-                stopVoiceVisualizer();
-                appendAiChat("Система", "Разреши доступ к микрофону в настройках браузера.", "#fb7185");
-            }
-        };
-
-        recog.onend = () => {
-            activeRecognition = null;
-            if (isVoiceIntentionalActive && !isSendingCoach) {
-                committedText = input.value.trim();
-                setTimeout(launchSession, 150);
-            } else {
-                stopVoiceVisualizer();
-            }
-        };
-
-        try {
-            recog.start();
-            resetSilenceTimer();
-        } catch (err) {
-            isVoiceIntentionalActive = false;
-            stopVoiceVisualizer();
-        }
-    };
-
-    launchSession();
-}
-
-
-
-
-
 
 
 

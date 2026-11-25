@@ -1089,9 +1089,9 @@ def ask_personal_ai_coach(
         scheduled_plans=req.scheduled_plans
     )
 
-    # Прямое сохранение выполненной тренировки в PostgreSQL одной фразой
+    # Прямое сохранение выполненной тренировки в PostgreSQL по московскому времени
     if result["mode"] == "workout_logged" and result.get("suggested_plan"):
-        custom_dt = datetime.utcnow()
+        custom_dt = datetime.utcnow() + timedelta(hours=3)
         if result.get("target_date"):
             try:
                 parsed_d = datetime.strptime(result["target_date"], "%Y-%m-%d")
@@ -1121,6 +1121,7 @@ def ask_personal_ai_coach(
         "auto_timer_sec": result.get("auto_timer_sec"),
         "updated_weight_kg": result.get("updated_weight_kg")
     }
+
 
 
 class NutritionLogUpsert(BaseModel):

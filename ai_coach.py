@@ -891,32 +891,14 @@ def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn
                 "updated_weight_kg": None
             }
 
-        # Иначе сохраняем в память сессии и делаем живой тренерский разбор БЕЗ записи в базу!
+        # Иначе сохраняем в память сессии и выводим аккуратный список с коротким тактичным вопросом
         _PENDING_PLANS[user.id] = {"items": norm_batch, "target_date": target_date}
         _SESSION_DRAFT[user.id] = list(norm_batch)
-        review_reply = ""
-        try:
-            eval_prompt = (
-                    f"Ты — персональный ИИ-тренер атлета {first_name} (вес {user.weight_kg or 67} кг, цель: {user.target_weight_kg or 67} кг). "
-                    f"Атлет прислал свою тренировку посмотреть и оценить (НЕ записывать без команды):\n"
-                    + "\n".join(lines)
-                    + f"\nИтого: {len(norm_batch)} упражнений, {total_sets} подходов{tonnage_note}.\n"
-                      f"Напиши живой, структурированный тренерский разбор: начинай с жирного главного вывода **...**, "
-                      f"затем коротко разбери баланс нагрузки по мышечным группам, защиту суставов (плечи/поясница/колени) и ориентировочный расход ккал. "
-                      f"В самом конце спроси: «Записать эту тренировку в блокнот или добавить в план?»"
-            )
-            llm_eval = _call_gigachat_llm([{"role": "system", "content": eval_prompt}])
-            if llm_eval:
-                review_reply = _clean_markdown(llm_eval)
-        except Exception:
-            review_reply = ""
-
-        if not review_reply:
-            review_reply = (
-                    f"**Отличный, сбалансированный объём, {first_name} — {len(norm_batch)} упражнений и {total_sets} рабочих подходов{tonnage_note}.**\n\n"
-                    + "\n".join(lines)
-                    + "\n\nНагрузка распределена грамотно, без осевой перегрузки поясницы. Записать эту тренировку в блокнот или добавить в план?"
-            )
+        review_reply = (
+                f"**Отличная работа, {first_name}! Принял и выстроил твою тренировку ({len(norm_batch)} поз., {total_sets} подх.{tonnage_note}):**\n\n"
+                + "\n".join(lines)
+                + "\n\nЗаписать её в блокнот, добавить в план или разобрать по мышцам и нагрузке?"
+        )
         append_session_memory(user.id, "user", clean_msg)
         append_session_memory(user.id, "assistant", review_reply)
         return {
