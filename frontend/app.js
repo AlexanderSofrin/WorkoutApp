@@ -82,53 +82,94 @@ function escapeHtml(str) {
         .replace(/>/g, "&gt;");
 }
 
+function formatCoachRichText(rawText) {
+    const lines = String(rawText || "").replace(/\r/g, "").split("\n");
+    const htmlParts = [];
+
+    for (let i = 0; i < lines.length; i++) {
+        let line = lines[i].trim();
+        if (!line) continue;
+
+        // Заголовки ###
+        const headingMatch = line.match(/^#{1,4}\s+(.+)$/);
+        if (headingMatch) {
+            const hText = escapeHtml(headingMatch[1].replace(/\*\*/g, ""));
+            htmlParts.push(`<div class="coach-heading">${hText}</div>`);
+            continue;
+        }
+
+        // Маркированные пункты (- или • или *)
+        const bulletMatch = line.match(/^(?:[-•*])\s+(.+)$/);
+        if (bulletMatch) {
+            let bContent = escapeHtml(bulletMatch[1]).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+            htmlParts.push(`<div class="coach-bullet"><span class="coach-bullet-dot">•</span><div>${bContent}</div></div>`);
+            continue;
+        }
+
+        // Нумерованные пункты (1. ...)
+        const numMatch = line.match(/^(\d+[\.\)])\s+(.+)$/);
+        if (numMatch) {
+            let nContent = escapeHtml(numMatch[2]).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+            htmlParts.push(`<div class="coach-bullet"><span class="coach-bullet-num">${escapeHtml(numMatch[1])}</span><div>${nContent}</div></div>`);
+            continue;
+        }
+
+        // Обычный абзац или подзаголовок (если вся строка в **...:**)
+        let pHtml = escapeHtml(line).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+        if (/^<strong>[^<]+:<\/strong>$/.test(pHtml)) {
+            htmlParts.push(`<div class="coach-heading">${pHtml.replace(/<\/?strong>/g, "")}</div>`);
+        } else {
+            htmlParts.push(`<p class="coach-p">${pHtml}</p>`);
+        }
+    }
+
+    return htmlParts.join("");
+}
+
 function appendAiChat(sender, text, color = "#e2e8f0") {
     const box = document.getElementById("aiCoachBox");
     const div = document.createElement("div");
-    const cleanText = escapeHtml(String(text || "").replace(/\r/g, "").replace(/\n{2,}/g, "\n").trim());
-    const formatted = cleanText.replace(/\n/g, "<br>");
 
     if (sender === "Ты") {
         div.className = "coach-msg coach-msg-user";
-        const preview = String(text || "").replace(/\s+/g, " ").trim();
+        const cleanUser = escapeHtml(String(text || "").replace(/\r/g, "").trim()).replace(/\n/g, "<br>");
+        const isLong = String(text || "").trim().length > 85;
+
         div.innerHTML = `
-            <div class="coach-user-toggle" style="display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;padding:6px 10px;border-radius:10px;background:rgba(192,132,252,0.12);border:1px solid rgba(192,132,252,0.25);color:#d8b4fe;font-size:13px;">
-                <span class="coach-user-preview" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><strong>Ты:</strong> ${escapeHtml(preview)}</span>
-                <span class="coach-user-arrow" style="flex-shrink:0;font-size:12px;">▸</span>
+            <div class="wv-user-bubble ${isLong ? "is-collapsible" : ""}">
+                <div class="wv-user-text">${cleanUser}</div>
+                <button type="button" class="wv-user-chevron" title="Свернуть / развернуть">⌄</button>
             </div>
-            <div class="coach-user-full" style="display:none;padding:8px 10px 4px;color:#e9d5ff;font-size:14px;line-height:1.45;">${formatted}</div>
         `;
-        const toggle = div.querySelector(".coach-user-toggle");
-        const full = div.querySelector(".coach-user-full");
-        const arrow = div.querySelector(".coach-user-arrow");
-        const prevEl = div.querySelector(".coach-user-preview");
-        toggle.addEventListener("click", () => {
-            const isOpen = full.style.display === "block";
-            full.style.display = isOpen ? "none" : "block";
-            prevEl.style.display = isOpen ? "block" : "none";
-            if (isOpen) {
-                toggle.firstElementChild.innerHTML = `<strong>Ты:</strong> ${escapeHtml(preview)}`;
+
+        const bubble = div.querySelector(".wv-user-bubble");
+        const chevron = div.querySelector(".wv-user-chevron");
+        if (bubble && chevron) {
+            bubble.addEventListener("click", () => {
+                const collapsed = bubble.classList.toggle("collapsed");
+                chevron.textContent = collapsed ? "⌄" : "⌃";
+            });
+            // По умолчанию длинные сообщения компактны (2 строки), короткие видны целиком
+            if (isLong) {
+                bubble.classList.add("collapsed");
+                chevron.textContent = "⌄";
             } else {
-                toggle.firstElementChild.innerHTML = `<strong>Ты</strong>`;
+                chevron.textContent = "⌃";
             }
-            arrow.textContent = isOpen ? "▸" : "▾";
-        });
+        }
+    } else if (sender === "Система") {
+        div.className = "coach-msg coach-msg-sys";
+        div.style.cssText = `margin: 10px 0; padding: 8px 12px; border-radius: 10px; background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(56, 189, 248, 0.25); font-size: 13px; color: ${color};`;
+        div.textContent = String(text || "").trim();
     } else {
         div.className = "coach-msg coach-msg-ai";
-        div.style.marginTop = "12px";
-        div.style.padding = "10px 12px";
-        div.style.borderRadius = "12px";
-        div.style.background = "rgba(30, 41, 59, 0.55)";
-        div.style.fontSize = "16px";
-        div.style.lineHeight = "1.55";
-        div.style.color = color;
-        div.innerHTML = `<div style="font-size:12px;text-transform:uppercase;letter-spacing:0.04em;color:#38bdf8;margin-bottom:4px;font-weight:600;">${escapeHtml(sender)}</div><div>${formatted}</div>`;
+        div.innerHTML = formatCoachRichText(text);
     }
 
-    div.style.marginTop = "10px";
     box.appendChild(div);
     box.scrollTop = box.scrollHeight;
 }
+
 
 
 let preferredRuVoice = null;
@@ -1367,23 +1408,58 @@ if (typeof renderGifLibrary === "function") renderGifLibrary();
 
 // === SHARP ATHLETIC EMBLEM & STRICT MISSED-DAY GRAY ===
 (function() {
-      const sharpSvg = `<svg width="290" height="270" viewBox="0 0 300 280" fill="none" xmlns="http://w3.org" style="opacity:0.20; filter:drop-shadow(0 0 28px rgba(168,85,247,0.65));">
+          const sharpSvg = `<svg width="280" height="310" viewBox="0 0 280 310" fill="none" xmlns="http://w3.org" style="opacity:0.26; filter:drop-shadow(0 0 32px rgba(168,85,247,0.45));">
       <defs>
-        <linearGradient id="brutalSteel" x1="150" y1="15" x2="150" y2="265" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stop-color="#e879f9"/>
-          <stop offset="45%" stop-color="#9333ea"/>
-          <stop offset="100%" stop-color="#1e1b4b" stop-opacity="0.05"/>
+        <linearGradient id="wvShieldGrad" x1="25" y1="15" x2="255" y2="295" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="#c084fc"/>
+          <stop offset="52%" stop-color="#8b5cf6"/>
+          <stop offset="100%" stop-color="#a3e635"/>
+        </linearGradient>
+        <linearGradient id="wvCoreFill" x1="140" y1="20" x2="140" y2="290" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="#a855f7" stop-opacity="0.24"/>
+          <stop offset="65%" stop-color="#0f172a" stop-opacity="0.12"/>
+          <stop offset="100%" stop-color="#a3e635" stop-opacity="0.18"/>
+        </linearGradient>
+        <linearGradient id="wvBladeGrad" x1="55" y1="85" x2="225" y2="215" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="#f8fafc"/>
+          <stop offset="45%" stop-color="#c084fc"/>
+          <stop offset="100%" stop-color="#a3e635"/>
         </linearGradient>
       </defs>
-      <!-- Брутальный силуэт: Двойной бицепс спереди -->
-      <path d="M150 28 C161 28 168 36 167 48 C166 57 161 63 157 66 L176 74 C194 76 212 85 224 98 C236 90 252 92 262 104 C272 116 272 134 264 146 L278 108 L292 114 L276 164 C269 178 254 182 240 174 C228 168 219 156 212 142 L192 184 L182 252 L118 252 L108 184 L88 142 C81 156 72 168 60 174 C46 182 31 178 24 164 L8 114 L22 108 L36 146 C28 134 28 116 38 104 C48 92 64 90 76 98 C88 85 106 76 124 74 L143 66 C139 63 134 57 133 48 C132 36 139 28 150 28 Z" fill="url(#brutalSteel)" fill-opacity="0.22" stroke="url(#brutalSteel)" stroke-width="3" stroke-linejoin="round"/>
-      <!-- Рельеф грудных мышц, дельт и пресса -->
-      <path d="M96 108 Q123 128 150 116 Q177 128 204 108" stroke="url(#brutalSteel)" stroke-width="2.8" stroke-linecap="round"/>
-      <path d="M150 86 L150 236" stroke="url(#brutalSteel)" stroke-width="2.4" stroke-linecap="round"/>
-      <path d="M124 148 Q150 156 176 148 M126 174 Q150 182 174 174 M128 200 Q150 208 172 200" stroke="url(#brutalSteel)" stroke-width="2.4" stroke-linecap="round"/>
-      <!-- Контур пиков бицепсов и предплечий -->
-      <path d="M74 104 C62 112 58 128 66 138 M226 104 C238 112 242 128 234 138" stroke="url(#brutalSteel)" stroke-width="2.4" stroke-linecap="round"/>
+
+      <!-- Внешний рубленый титановый шестиугольный щит -->
+      <path d="M140 14 L250 58 L236 196 L140 294 L44 196 L30 58 Z"
+            fill="url(#wvCoreFill)" stroke="url(#wvShieldGrad)" stroke-width="3.5" stroke-linejoin="miter"/>
+
+      <!-- Внутренняя броневая грань щита -->
+      <path d="M140 28 L236 67 L224 189 L140 276 L56 189 L44 67 Z"
+            stroke="url(#wvShieldGrad)" stroke-width="1.4" stroke-opacity="0.65"/>
+
+      <!-- Верхняя корона-клинок -->
+      <path d="M108 46 L140 34 L172 46 L158 54 L140 47 L122 54 Z" fill="url(#wvBladeGrad)" fill-opacity="0.85"/>
+
+      <!-- Стилизованный силовой гриф с дисками на заднем плане -->
+      <rect x="56" y="136" width="168" height="4" rx="2" fill="url(#wvShieldGrad)" fill-opacity="0.55"/>
+      <rect x="64" y="122" width="6" height="32" rx="1.5" fill="url(#wvShieldGrad)" fill-opacity="0.7"/>
+      <rect x="73" y="127" width="5" height="22" rx="1.5" fill="url(#wvShieldGrad)" fill-opacity="0.55"/>
+      <rect x="210" y="122" width="6" height="32" rx="1.5" fill="url(#wvShieldGrad)" fill-opacity="0.7"/>
+      <rect x="202" y="127" width="5" height="22" rx="1.5" fill="url(#wvShieldGrad)" fill-opacity="0.55"/>
+
+      <!-- Агрессивная остроугольная монограмма W (крылья/клинки) -->
+      <path d="M68 88 L92 88 L112 146 L140 102 L168 146 L188 88 L212 88 L176 176 L158 176 L140 142 L122 176 L104 176 Z"
+            fill="url(#wvBladeGrad)" stroke="#0b0f19" stroke-width="1.5" stroke-linejoin="miter"/>
+
+      <!-- Нижнее остриё монограммы V (наконечник копья) -->
+      <path d="M104 184 L126 184 L140 222 L154 184 L176 184 L140 258 Z"
+            fill="url(#wvShieldGrad)" stroke="#0b0f19" stroke-width="1.5" stroke-linejoin="miter"/>
+
+      <!-- Клубная надпись WORKOUT VAULT -->
+      <text x="140" y="271" text-anchor="middle" fill="#e2e8f0" fill-opacity="0.8"
+            font-family="system-ui, -apple-system, sans-serif" font-size="9.5" font-weight="800" letter-spacing="3.2">
+        WORKOUT VAULT
+      </text>
     </svg>`;
+
 
 
     const origToggleFs = window.toggleCoachFullscreen;
