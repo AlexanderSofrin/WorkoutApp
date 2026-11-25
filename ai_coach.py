@@ -14,7 +14,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 from db_models import User, Workout, Exercise, DailyNutritionLog
 
-from coach_parser import parse_workout_command, parse_weight_update
+from coach_parser import parse_workout_command, parse_weight_update, parse_batch_workout_log
+
 
 # ==============================================================================================
 # ТРЁХУРОВНЕВАЯ БЫСТРАЯ ПАМЯТЬ + ЖИВАЯ СЕССИЯ ТРЕНИРОВКИ (Live Copilot + Черновик плана)
@@ -676,6 +677,46 @@ def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn
             "workout_entry": None,
             "updated_weight_kg": None
         }
+    # 1.5. ПАКЕТНАЯ ЗАПИСЬ ВСЕЙ ТРЕНИРОВКИ ОДНИМ СПИСКОМ (многострочный отчёт)
+    batch_items = parse_batch_workout_log(clean_msg)
+    if batch_items:
+        norm_batch = []
+        total_sets = 0
+        total_tonnage = 0.0
+        summary_lines = []
+        for it in batch_items:
+            matched_ex = _match_catalog_exercise(it["exercise_name"], db)
+            s_cnt = int(it["sets"])
+            r_cnt = int(it["reps"])
+            w_val = float(it["weight"])
+            total_sets += s_cnt
+            total_tonnage += s_cnt * r_cnt * w_val
+            norm_batch.append({
+                "exercise_name": matched_ex,
+                "sets": s_cnt,
+                "reps": r_cnt,
+                "weight": w_val,
+                "done": True
+            })
+            w_label = f" ({w_val} кг)" if w_val > 0 else " (свой вес / резинка)"
+            summary_lines.append(f"• **{matched_ex}**: {s_cnt}×{r_cnt}{w_label}")
+
+        tonnage_note = f", общий тоннаж — **{round(total_tonnage)} кг**" if total_tonnage > 0 else ""
+        reply = (
+            f"**Отличная работа, {first_name}! Записал всю тренировку ({len(norm_batch)} поз., {total_sets} подх.{tonnage_note}) в блокнот и календарь.**\n\n"
+            + "\n".join(summary_lines)
+            + "\n\nВсе подходы зафиксированы в журнале. Как самочувствие после сессии?"
+        )
+        compress_session_memory(user.id, f"Пакетно записана тренировка: {len(norm_batch)} упражнений, {total_sets} подходов")
+        return {
+            "reply": reply,
+            "mode": "workout_logged",
+            "suggested_plan": norm_batch,
+            "target_date": target_date,
+            "workout_entry": None,
+            "updated_weight_kg": None
+        }
+
 
     # 2. МГНОВЕННЫЙ FAST-PATH (Live Copilot + Черновик плана — отклик ~20 мс без ожидания нейросети)
     fast_res = _fast_parse_live_copilot(user.id, clean_msg, db, first_name)
