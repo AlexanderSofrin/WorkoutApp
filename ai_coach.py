@@ -645,6 +645,7 @@ def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn
             "в дневник", "в журнал", "в историю", "запиши всю тренировку", "закрыли тренировку"
         )
     )
+    pending = _PENDING_PLANS.get(user.id)
     active_items = (pending.get("items") if pending and pending.get("items") else None) or (
         current_plan if current_plan else None)
     if active_items and is_log_completed:
