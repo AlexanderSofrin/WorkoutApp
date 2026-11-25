@@ -16,9 +16,7 @@ from fastapi.responses import RedirectResponse
 
 from datetime import datetime, timedelta
 from db_models import User, Workout, Exercise, DailyNutritionLog
-import io
 import re
-from fastapi.responses import StreamingResponse
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -1184,86 +1182,3 @@ def save_nutrition_log(
     row.checked_meals_json = data.checked_meals_json
     db.commit()
     return {"status": "saved", "log_date": data.log_date}
-
-
-class TTSRequest(BaseModel):
-    text: str = Field(min_length=1, max_length=2500)
-
-
-_TTS_CACHE: dict[str, tuple[bytes, str]] = {}
-_SALUTE_TOKEN_CACHE: dict[str, object] = {"token": "", "expires_at": 0.0}
-
-
-def _get_salute_token() -> str:
-    import uuid, json, ssl, time, urllib.request, urllib.parse
-    auth_key = os.getenv("SALUTE_AUTH_KEY", "").strip()
-    if not auth_key:
-        return ""
-    now = time.time()
-    if _SALUTE_TOKEN_CACHE["token"] and now < float(_SALUTE_TOKEN_CACHE["expires_at"]):
-        return str(_SALUTE_TOKEN_CACHE["token"])
-
-    ctx = ssl._create_unverified_context()
-    oauth_url = "".join(["https://", "ngw.devices.", "sberbank.ru:9443", "/api/v2/oauth"])
-    tok_req = urllib.request.Request(
-        oauth_url,
-        data=urllib.parse.urlencode({"scope": "SALUTE_SPEECH_PERS"}).encode("utf-8"),
-        headers={
-            "Authorization": f"Basic {auth_key}",
-            "RqUID": str(uuid.uuid4()),
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Accept": "application/json"
-        },
-        method="POST"
-    )
-    with urllib.request.urlopen(tok_req, context=ctx, timeout=5) as r:
-        access_token = json.loads(r.read().decode("utf-8")).get("access_token", "")
-        if access_token:
-            _SALUTE_TOKEN_CACHE["token"] = access_token
-            _SALUTE_TOKEN_CACHE["expires_at"] = now + 1700
-        return access_token
-
-
-@app.post("/api/tts")
-async def generate_tts(req: TTSRequest):
-    """Озвучка тренера студийным баритоном Сбера (Bys_24000) с кэшем и резервным синтезатором."""
-    import asyncio
-    clean_text = re.sub(r"[*#_`~>|•\-]+", " ", req.text)
-    clean_text = re.sub(r"\s+", " ", clean_text).strip()[:320]
-    if not clean_text:
-        raise HTTPException(status_code=400, detail="Пустой текст для озвучки")
-
-    if clean_text in _TTS_CACHE:
-        cached_bytes, cached_mime = _TTS_CACHE[clean_text]
-        return StreamingResponse(io.BytesIO(cached_bytes), media_type=cached_mime)
-
-    try:
-        salute_bytes = await _synth_salute_speech(clean_text)
-        if salute_bytes:
-            if len(_TTS_CACHE) > 80:
-                _TTS_CACHE.clear()
-            _TTS_CACHE[clean_text] = (salute_bytes, "audio/wav")
-            return StreamingResponse(io.BytesIO(salute_bytes), media_type="audio/wav", headers={"X-TTS-Engine": "salute"})
-    except Exception as e:
-        print("SaluteSpeech error:", e)
-
-    audio_bytes = b""
-    try:
-        async def _synth_edge():
-            buf = io.BytesIO()
-            async for ch in comm.stream():
-                if ch["type"] == "audio":
-                    buf.write(ch["data"])
-            return buf.getvalue()
-
-        audio_bytes = await asyncio.wait_for(_synth_edge(), timeout=3.0)
-    except Exception:
-        audio_bytes = b""
-
-    if not audio_bytes:
-        raise HTTPException(status_code=503, detail="TTS unavailable")
-
-    if len(_TTS_CACHE) > 80:
-        _TTS_CACHE.clear()
-    _TTS_CACHE[clean_text] = (audio_bytes, "audio/mpeg")
-    return StreamingResponse(io.BytesIO(audio_bytes), media_type="audio/mpeg")
