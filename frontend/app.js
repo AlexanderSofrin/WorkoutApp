@@ -195,48 +195,23 @@ function toggleCoachVoice(isEnabled) {
     }
 }
 
-async function speakText(text) {
+function speakText(text) {
     if (!document.getElementById("ttsToggle")?.checked) return;
-
     let cleanSpeech = String(text || "")
         .replace(/[*#_`~]/g, "")
-        .replace(/×/g, " на ")
+        .replace(/?/g, " ?? ")
         .replace(/\|/g, ", ")
-        .replace(/•/g, ", ")
+        .replace(/?/g, ", ")
         .replace(/\s+/g, " ")
         .trim();
-
     if (!cleanSpeech) return;
     if (cleanSpeech.length > 220) {
         const cut = cleanSpeech.slice(0, 220);
         const lastDot = Math.max(cut.lastIndexOf("."), cut.lastIndexOf("!"), cut.lastIndexOf("?"));
         cleanSpeech = lastDot > 60 ? cut.slice(0, lastDot + 1) : (cut + "...");
     }
-
     stopAllSpeech();
-
-    try {
-        const res = await fetch("/api/tts", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text: cleanSpeech })
-        });
-        if (!res.ok) throw new Error("TTS API error");
-
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
-        currentTtsAudio = audio;
-        audio.onended = () => URL.revokeObjectURL(url);
-        audio.onerror = () => {
-            URL.revokeObjectURL(url);
-            speakFallbackBrowser(cleanSpeech);
-        };
-        await audio.play();
-    } catch (err) {
-        console.warn("SaluteSpeech fallback:", err);
-        speakFallbackBrowser(cleanSpeech);
-    }
+    speakFallbackBrowser(cleanSpeech);
 }
 
 let _lastCoachSentText = "";
@@ -1365,19 +1340,67 @@ function renderGifLibrary(group) {
 }
 if (typeof renderGifLibrary === "function") renderGifLibrary();
 
-// === PURPLE ATHLETIC EMBLEM IN FULLSCREEN CHAT ===
 
-    if (!document.getElementById("coachBgWatermark")) {
-        const wm = document.createElement("div");
-        wm.id = "coachBgWatermark";
-        wm.style.cssText = "position:fixed; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; z-index:0; overflow:hidden;";
-        wm.innerHTML = `<svg width="260" height="290" viewBox="0 0 260 290" fill="none" xmlns="http://w3.org" style="opacity:0.15; filter:drop-shadow(0 0 28px rgba(139,92,246,0.45));"><defs><linearGradient id="muscleGrad" x1="130" y1="15" x2="130" y2="275" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#c084fc"/><stop offset="55%" stop-color="#7c3aed"/><stop offset="100%" stop-color="#312e81" stop-opacity="0.1"/></linearGradient></defs><circle cx="130" cy="40" r="19" stroke="url(#muscleGrad)" stroke-width="3.2" fill="url(#muscleGrad)" fill-opacity="0.18"/><path d="M118 58 L113 72 L147 72 L142 58" stroke="url(#muscleGrad)" stroke-width="2.8" stroke-linecap="round"/><path d="M113 72 C92 75, 62 82, 46 102 C34 117, 30 144, 34 176 C36 192, 44 205, 53 204 C61 203, 63 185, 64 166 C66 146, 70 130, 77 124 L86 175 C90 198, 96 226, 98 258 L162 258 C164 226, 170 198, 174 175 L183 124 C190 130, 194 146, 196 166 C197 185, 199 203, 207 204 C216 205, 224 192, 226 176 C230 144, 226 117, 214 102 C198 82, 168 75, 147 72 Z" fill="url(#muscleGrad)" fill-opacity="0.22" stroke="url(#muscleGrad)" stroke-width="3.2" stroke-linejoin="round"/><path d="M84 114 Q107 132 130 124 Q153 132 176 114" stroke="url(#muscleGrad)" stroke-width="2.6" stroke-linecap="round"/><path d="M130 92 L130 232" stroke="url(#muscleGrad)" stroke-width="2.2" stroke-linecap="round"/><path d="M108 154 Q130 160 152 154 M110 180 Q130 186 150 180 M113 206 Q130 212 147 206" stroke="url(#muscleGrad)" stroke-width="2.2" stroke-linecap="round"/></svg>`;
-        const target = document.getElementById("coachFullscreenOverlay") || document.getElementById("coachChatCard") || document.body;
-        target.appendChild(wm);
-    }
+// === SHARP ATHLETIC EMBLEM & STRICT MISSED-DAY GRAY ===
+(function() {
+    const sharpSvg = `<svg width="230" height="250" viewBox="0 0 230 250" fill="none" xmlns="http://w3.org" style="opacity:0.18; filter:drop-shadow(0 0 26px rgba(168,85,247,0.55));">
+      <defs>
+        <linearGradient id="sharpV" x1="115" y1="12" x2="115" y2="240" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="#d8b4fe"/>
+          <stop offset="50%" stop-color="#9333ea"/>
+          <stop offset="100%" stop-color="#1e1b4b" stop-opacity="0.05"/>
+        </linearGradient>
+      </defs>
+      <polygon points="115,16 129,24 127,44 115,52 103,44 101,24" stroke="url(#sharpV)" stroke-width="2.6" fill="url(#sharpV)" fill-opacity="0.18"/>
+      <polygon points="99,60 131,60 158,72 198,92 210,130 194,174 180,170 188,132 176,110 160,156 146,238 84,238 70,156 54,110 42,132 50,170 36,174 20,130 32,92 72,72" stroke="url(#sharpV)" stroke-width="2.6" stroke-linejoin="miter" fill="url(#sharpV)" fill-opacity="0.20"/>
+      <polyline points="70,102 100,120 115,112 130,120 160,102" stroke="url(#sharpV)" stroke-width="2.4" fill="none"/>
+      <line x1="115" y1="80" x2="115" y2="222" stroke="url(#sharpV)" stroke-width="2"/>
+      <polyline points="92,146 115,154 138,146" stroke="url(#sharpV)" stroke-width="2" fill="none"/>
+      <polyline points="95,172 115,180 135,172" stroke="url(#sharpV)" stroke-width="2" fill="none"/>
+      <polyline points="98,198 115,206 132,198" stroke="url(#sharpV)" stroke-width="2" fill="none"/>
+    </svg>`;
 
-setInterval(() => {
-    const wm = document.getElementById("coachBgWatermark");
-    const fs = document.querySelector(".coach-fullscreen, #coachFullscreenOverlay, [data-coach-fullscreen='1']");
-    if (wm) wm.style.display = (fs || document.body.classList.contains("chat-open")) ? "flex" : "none";
-}, 400);
+    const origToggleFs = window.toggleCoachFullscreen;
+    window.toggleCoachFullscreen = function() {
+        if (typeof origToggleFs === "function") origToggleFs();
+        const card = document.getElementById("coachCard");
+        const box = document.getElementById("aiCoachBox");
+        if (!card || !box) return;
+        let wm = document.getElementById("coachBgWatermark");
+        if (!wm) {
+            wm = document.createElement("div");
+            wm.id = "coachBgWatermark";
+            wm.style.cssText = "position:absolute; inset:0; display:none; align-items:center; justify-content:center; pointer-events:none; z-index:0;";
+            wm.innerHTML = sharpSvg;
+            card.style.position = "relative";
+            card.appendChild(wm);
+        }
+        const isFull = card.classList.contains("coach-fullscreen");
+        wm.style.display = isFull ? "flex" : "none";
+        box.style.background = isFull ? "rgba(15, 23, 42, 0.62)" : "#0f172a";
+        box.style.position = "relative";
+        box.style.zIndex = "1";
+    };
+
+    const prevRenderCal = window.renderCalendar;
+    window.renderCalendar = function() {
+        if (typeof prevRenderCal === "function") prevRenderCal();
+        const todayStr = new Date().toLocaleDateString("sv-SE");
+        const schedMap = JSON.parse(localStorage.getItem("wv_scheduled_plans") || "{}");
+        const grid = document.getElementById("calendarGrid");
+        if (!grid) return;
+        grid.querySelectorAll("button").forEach(btn => {
+            const m = (btn.getAttribute("onclick") || "").match(/selectCalDay\('(\d{4}-\d{2}-\d{2})'\)/);
+            if (!m) return;
+            const dStr = m[1];
+            const hasWorkout = Array.isArray(allWorkoutsCache) && allWorkoutsCache.some(w => w.created_at && new Date(w.created_at).toLocaleDateString("sv-SE") === dStr);
+            if (!hasWorkout && dStr < todayStr && Array.isArray(schedMap[dStr]) && schedMap[dStr].length > 0) {
+                btn.style.setProperty("background", "rgba(148, 163, 184, 0.16)", "important");
+                btn.style.setProperty("border", dStr === selectedDateStr ? "2px solid #cbd5e1" : "1px solid rgba(148, 163, 184, 0.45)", "important");
+                btn.style.setProperty("color", "#cbd5e1", "important");
+                const dot = btn.querySelector("div:last-child");
+                if (dot) dot.style.setProperty("background", "#94a3b8", "important");
+            }
+        });
+    };
+})();
