@@ -1089,25 +1089,44 @@ def ask_personal_ai_coach(
         scheduled_plans=req.scheduled_plans
     )
 
-    # Прямое сохранение выполненной тренировки в PostgreSQL по московскому времени
+    # Прямое сохранение выполненной тренировки в PostgreSQL по московскому времени (с защитой от дублей)
     if result["mode"] == "workout_logged" and result.get("suggested_plan"):
-        custom_dt = datetime.utcnow() + timedelta(hours=3)
+        now_msk = datetime.utcnow() + timedelta(hours=3)
+        custom_dt = now_msk
         if result.get("target_date"):
             try:
                 parsed_d = datetime.strptime(result["target_date"], "%Y-%m-%d")
-                custom_dt = parsed_d.replace(hour=12, minute=0, second=0)
+                custom_dt = parsed_d.replace(hour=now_msk.hour, minute=now_msk.minute, second=now_msk.second)
             except ValueError:
                 pass
+        recent_cutoff = datetime.utcnow() - timedelta(seconds=20)
         for item in result["suggested_plan"]:
-            w = Workout(
-                user_id=current_user.id,
-                exercise_name=item["exercise_name"],
-                sets=int(item.get("sets") or 3),
-                reps=int(item.get("reps") or 12),
-                weight=float(item.get("weight") or 0),
-                created_at=custom_dt
+            ex_name = item["exercise_name"]
+            s_val = int(item.get("sets") or 3)
+            r_val = int(item.get("reps") or 12)
+            w_val = float(item.get("weight") or 0)
+            dup = (
+                db.query(Workout)
+                .filter(
+                    Workout.user_id == current_user.id,
+                    Workout.exercise_name == ex_name,
+                    Workout.sets == s_val,
+                    Workout.reps == r_val,
+                    Workout.weight == w_val,
+                    Workout.created_at >= recent_cutoff
+                )
+                .first()
             )
-            db.add(w)
+            if not dup:
+                w = Workout(
+                    user_id=current_user.id,
+                    exercise_name=ex_name,
+                    sets=s_val,
+                    reps=r_val,
+                    weight=w_val,
+                    created_at=custom_dt
+                )
+                db.add(w)
         db.commit()
 
     return {

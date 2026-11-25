@@ -44,10 +44,8 @@ FAST_SET_PRAISES = [
 
 
 def _now_msk() -> datetime:
-    try:
-        return datetime.now(ZoneInfo("Europe/Moscow"))
-    except Exception:
-        return datetime.now()
+    """Точное московское время (UTC+3), не зависящее от системного часового пояса контейнера."""
+    return datetime.utcnow() + timedelta(hours=3)
 
 
 def append_session_memory(user_id: int, role: str, content: str) -> None:
@@ -72,10 +70,8 @@ def _clean_markdown(text: str) -> str:
     return text.strip()
 
 
-
-
 def _extract_target_date(text: str) -> str | None:
-    """Извлекает дату вида 'сегодня', 'вчера', '17 число', '1.11', '1 ноября' и возвращает YYYY-MM-DD."""
+    """Извлекает дату вида 'сегодня', 'вчера', '17 число', '24.11', '24 ноября' и возвращает YYYY-MM-DD."""
     now = _now_msk()
     low = text.lower()
     if "сегодня" in low:
@@ -86,17 +82,18 @@ def _extract_target_date(text: str) -> str | None:
         return (now - timedelta(days=1)).strftime("%Y-%m-%d")
 
     months = {
-        "январ": 1, "феврал": 2, "март": 3, "апрел": 4, "ма": 5, "июн": 6,
-        "июл": 7, "август": 8, "сентябр": 9, "октябр": 10, "ноябр": 11, "декабр": 12
+        "январ": 1, "феврал": 2, "март": 3, "апрел": 4, "мая": 5, "май": 5, "мае": 5,
+        "июн": 6, "июл": 7, "август": 8, "сентябр": 9, "октябр": 10, "ноябр": 11, "декабр": 12
     }
     m_word = re.search(
-        r"\b(\d{1,2})\s+(январ|феврал|март|апрел|ма|июн|июл|август|сентябр|октябр|ноябр|декабр)[а-яё]*",
+        r"\b(\d{1,2})\s+(январ[яь]|феврал[яь]|март[а]?|апрел[яь]|мая|май|мае|июн[яь]|июл[яь]|август[а]?|сентябр[яь]|октябр[яь]|ноябр[яь]|декабр[яь])\b",
         low
     )
     if m_word:
         day = int(m_word.group(1))
-        month = months[m_word.group(2)]
-        year = now.year + (1 if month < now.month - 6 else 0)
+        raw_m = m_word.group(2)
+        month = next((v for k, v in months.items() if raw_m.startswith(k)), now.month)
+        year = now.year
         try:
             return datetime(year, month, day).strftime("%Y-%m-%d")
         except ValueError:
@@ -105,16 +102,17 @@ def _extract_target_date(text: str) -> str | None:
     m_dot = re.search(r"\b(\d{1,2})\.(\d{1,2})(?:\.(\d{2,4}))?\b", text)
     if m_dot:
         day, month = int(m_dot.group(1)), int(m_dot.group(2))
-        year = int(m_dot.group(3)) if m_dot.group(3) else now.year
-        if year < 100:
-            year += 2000
-        try:
-            return datetime(year, month, day).strftime("%Y-%m-%d")
-        except ValueError:
-            pass
+        if 1 <= day <= 31 and 1 <= month <= 12:
+            year = int(m_dot.group(3)) if m_dot.group(3) else now.year
+            if year < 100:
+                year += 2000
+            try:
+                return datetime(year, month, day).strftime("%Y-%m-%d")
+            except ValueError:
+                pass
 
     m_day = re.search(
-        r"\b(?:на|за|от)\s+(\d{1,2})(?:\s*-?\s*(?:е|ое|го|му))?\s*(?:числ[оаеу]?)?\b",
+        r"\b(?:на|за|от)\s+(\d{1,2})(?:\s*-?\s*(?:е|ое|го|му))?\s+числ[оаеу]?\b",
         low
     )
     if m_day:
@@ -124,6 +122,7 @@ def _extract_target_date(text: str) -> str | None:
         except ValueError:
             pass
     return None
+
 def _match_catalog_exercise(raw_name: str, db: Session) -> str:
     """Подбирает точное название из каталога упражнений, чтобы не плодить дубли в БД."""
     if not raw_name:
