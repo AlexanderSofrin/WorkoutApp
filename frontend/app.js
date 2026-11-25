@@ -1364,3 +1364,20 @@ function renderGifLibrary(group) {
     });
 }
 if (typeof renderGifLibrary === "function") renderGifLibrary();
+
+// === PURPLE ATHLETIC EMBLEM IN FULLSCREEN CHAT ===
+
+    if (!document.getElementById("coachBgWatermark")) {
+        const wm = document.createElement("div");
+        wm.id = "coachBgWatermark";
+        wm.style.cssText = "position:fixed; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; z-index:0; overflow:hidden;";
+        wm.innerHTML = `<svg width="260" height="290" viewBox="0 0 260 290" fill="none" xmlns="http://w3.org" style="opacity:0.15; filter:drop-shadow(0 0 28px rgba(139,92,246,0.45));"><defs><linearGradient id="muscleGrad" x1="130" y1="15" x2="130" y2="275" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#c084fc"/><stop offset="55%" stop-color="#7c3aed"/><stop offset="100%" stop-color="#312e81" stop-opacity="0.1"/></linearGradient></defs><circle cx="130" cy="40" r="19" stroke="url(#muscleGrad)" stroke-width="3.2" fill="url(#muscleGrad)" fill-opacity="0.18"/><path d="M118 58 L113 72 L147 72 L142 58" stroke="url(#muscleGrad)" stroke-width="2.8" stroke-linecap="round"/><path d="M113 72 C92 75, 62 82, 46 102 C34 117, 30 144, 34 176 C36 192, 44 205, 53 204 C61 203, 63 185, 64 166 C66 146, 70 130, 77 124 L86 175 C90 198, 96 226, 98 258 L162 258 C164 226, 170 198, 174 175 L183 124 C190 130, 194 146, 196 166 C197 185, 199 203, 207 204 C216 205, 224 192, 226 176 C230 144, 226 117, 214 102 C198 82, 168 75, 147 72 Z" fill="url(#muscleGrad)" fill-opacity="0.22" stroke="url(#muscleGrad)" stroke-width="3.2" stroke-linejoin="round"/><path d="M84 114 Q107 132 130 124 Q153 132 176 114" stroke="url(#muscleGrad)" stroke-width="2.6" stroke-linecap="round"/><path d="M130 92 L130 232" stroke="url(#muscleGrad)" stroke-width="2.2" stroke-linecap="round"/><path d="M108 154 Q130 160 152 154 M110 180 Q130 186 150 180 M113 206 Q130 212 147 206" stroke="url(#muscleGrad)" stroke-width="2.2" stroke-linecap="round"/></svg>`;
+        const target = document.getElementById("coachFullscreenOverlay") || document.getElementById("coachChatCard") || document.body;
+        target.appendChild(wm);
+    }
+
+setInterval(() => {
+    const wm = document.getElementById("coachBgWatermark");
+    const fs = document.querySelector(".coach-fullscreen, #coachFullscreenOverlay, [data-coach-fullscreen='1']");
+    if (wm) wm.style.display = (fs || document.body.classList.contains("chat-open")) ? "flex" : "none";
+}, 400);
