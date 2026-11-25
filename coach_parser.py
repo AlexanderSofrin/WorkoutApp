@@ -74,13 +74,17 @@ def _parse_single_line_item(line: str) -> Optional[dict]:
 
 def parse_batch_workout_log(text: str) -> Optional[list]:
     """
-    Пакетный парсер многострочного отчёта о тренировке.
-    Возвращает список упражнений, если распознано >= 2 позиций (или 1 позиция в многострочном вводе).
+    Пакетный парсер отчёта о тренировке.
+    Работает как с многострочным списком, так и со сплошной строкой, где браузер склеил переносы строк.
     """
-    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
-    if len(lines) < 2:
-        return None
+    # Если браузер склеил переносы строк в пробелы — восстанавливаем границы после 'повторений' или 'кг'
+    normalized_text = re.sub(
+        r"(\b\d+(?:[.,]\d+)?\s*кг|\b\d+\s*(?:повтор[а-я]*|раз\b))\s+(?=[А-ЯЁA-Zа-яёa-z]{3,})",
+        r"\1\n",
+        text.strip()
+    )
 
+    lines = [ln.strip() for ln in normalized_text.splitlines() if ln.strip()]
     parsed_items = []
     for ln in lines:
         item = _parse_single_line_item(ln)
@@ -89,7 +93,10 @@ def parse_batch_workout_log(text: str) -> Optional[list]:
 
     if len(parsed_items) >= 2:
         return parsed_items
+    if len(parsed_items) == 1 and len(lines) >= 2:
+        return parsed_items
     return None
+
 
 
 def parse_workout_command(text: str) -> Optional[dict]:
