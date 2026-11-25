@@ -1,4 +1,4 @@
-const CACHE_NAME = 'workout-vault-v37';
+const CACHE_NAME = 'workout-vault-v38';
 
 self.addEventListener('install', (event) => {
     self.skipWaiting();
@@ -14,15 +14,14 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
-    // API-запросы (тренировки, аналитика, тренер) всегда берём только с сервера, без кэша SW
     if (
         event.request.method !== 'GET' ||
         url.pathname.startsWith('/workouts') ||
         url.pathname.startsWith('/coach') ||
         url.pathname.startsWith('/nutrition') ||
         url.pathname.startsWith('/exercises') ||
-        url.pathname.startsWith('/auth')
-        url.pathname.startsWith('/api') ||
+        url.pathname.startsWith('/auth') ||
+        url.pathname.startsWith('/api')
     ) {
         return;
     }
