@@ -1225,27 +1225,6 @@ def _get_salute_token() -> str:
         return access_token
 
 
-async def _synth_salute_speech(text: str) -> bytes:
-    """Синтез речи через Sber SaluteSpeech (студийный баритон Bys_24000)."""
-    import ssl, urllib.request
-    access_token = _get_salute_token()
-    if not access_token:
-        return b""
-    ctx = ssl._create_unverified_context()
-    synth_url = "".join(["https://", "smartspeech.", "sber.ru", "/rest/v1/text:synthesize?voice=Bys_24000&format=wav16"])
-    tts_req = urllib.request.Request(
-        synth_url,
-        data=text.encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/text"
-        },
-        method="POST"
-    )
-    with urllib.request.urlopen(tts_req, context=ctx, timeout=6) as r:
-        return r.read()
-
-
 @app.post("/api/tts")
 async def generate_tts(req: TTSRequest):
     """Озвучка тренера студийным баритоном Сбера (Bys_24000) с кэшем и резервным синтезатором."""
