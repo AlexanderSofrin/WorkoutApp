@@ -1082,8 +1082,37 @@ def ask_personal_ai_coach(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Персональный ИИ-тренер: живое ведение тренировки, трёхуровневая память и аналитика из PostgreSQL 17."""
-    result = generate_coach_reply(req.message, current_user, db, _detect_muscle_group, current_plan=req.current_plan, scheduled_plans=req.scheduled_plans)
+    """Персональный ИИ-тренер: живое ведение тренировки, трёхуровневая память и прямое управление БД."""
+    result = generate_coach_reply(
+        req.message,
+        current_user,
+        db,
+        _detect_muscle_group,
+        current_plan=req.current_plan,
+        scheduled_plans=req.scheduled_plans
+    )
+
+    # Прямое сохранение выполненной тренировки в PostgreSQL одной фразой
+    if result["mode"] == "workout_logged" and result.get("suggested_plan"):
+        custom_dt = datetime.utcnow()
+        if result.get("target_date"):
+            try:
+                parsed_d = datetime.strptime(result["target_date"], "%Y-%m-%d")
+                custom_dt = parsed_d.replace(hour=12, minute=0, second=0)
+            except ValueError:
+                pass
+        for item in result["suggested_plan"]:
+            w = Workout(
+                user_id=current_user.id,
+                exercise_name=item["exercise_name"],
+                sets=int(item.get("sets") or 3),
+                reps=int(item.get("reps") or 12),
+                weight=float(item.get("weight") or 0),
+                created_at=custom_dt
+            )
+            db.add(w)
+        db.commit()
+
     return {
         "athlete": current_user.full_name or current_user.username,
         "mode": result["mode"],
@@ -1093,8 +1122,175 @@ def ask_personal_ai_coach(
         "target_date": result.get("target_date"),
         "from_date": result.get("from_date"),
         "auto_timer_sec": result.get("auto_timer_sec"),
-        "weight_kg": result.get("weight_kg")
+        "updated_weight_kg": result.get("updated_weight_kg")
     }
+
+
+class NutritionLogUpsert(BaseModel):
+    log_date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    target_kcal: int = 0
+    consumed_kcal: int = 0
+    protein_g: int = 0
+    fats_g: int = 0
+    carbs_g: int = 0
+    weight_kg: float | None = None
+    checked_meals_json: str = "[]"
+
+
+@app.get("/nutrition/logs/{log_date}")
+def get_nutrition_log_by_date(
+    log_date: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    row = db.query(DailyNutritionLog).filter(
+        DailyNutritionLog.user_id == current_user.id,
+        DailyNutritionLog.log_date == log_date
+    ).first()
+    if not row:
+        return {"exists": False, "log_date": log_date, "checked_meals_json": "[]", "consumed_kcal": 0}
+    return {
+        "exists": True,
+        "log_date": row.log_date,
+        "target_kcal": row.target_kcal,
+        "consumed_kcal": row.consumed_kcal,
+        "protein_g": row.protein_g,
+        "fats_g": row.fats_g,
+        "carbs_g": row.carbs_g,
+        "weight_kg": row.weight_kg,
+        "checked_meals_json": row.checked_meals_json or "[]"
+    }
+
+
+@app.post("/nutrition/logs")
+def save_nutrition_log(
+    data: NutritionLogUpsert,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    row = db.query(DailyNutritionLog).filter(
+        DailyNutritionLog.user_id == current_user.id,
+        DailyNutritionLog.log_date == data.log_date
+    ).first()
+    if not row:
+        row = DailyNutritionLog(user_id=current_user.id, log_date=data.log_date)
+        db.add(row)
+
+    row.target_kcal = data.target_kcal
+    row.consumed_kcal = data.consumed_kcal
+    row.protein_g = data.protein_g
+    row.fats_g = data.fats_g
+    row.carbs_g = data.carbs_g
+    row.weight_kg = data.weight_kg
+    row.checked_meals_json = data.checked_meals_json
+    db.commit()
+    return {"status": "saved", "log_date": data.log_date}
+
+
+class TTSRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=2500)
+
+
+_TTS_CACHE: dict[str, tuple[bytes, str]] = {}
+_SALUTE_TOKEN_CACHE: dict[str, object] = {"token": "", "expires_at": 0.0}
+
+
+def _get_salute_token() -> str:
+    import uuid, json, ssl, time, urllib.request, urllib.parse
+    auth_key = os.getenv("SALUTE_AUTH_KEY", "").strip()
+    if not auth_key:
+        return ""
+    now = time.time()
+    if _SALUTE_TOKEN_CACHE["token"] and now < float(_SALUTE_TOKEN_CACHE["expires_at"]):
+        return str(_SALUTE_TOKEN_CACHE["token"])
+
+    ctx = ssl._create_unverified_context()
+    oauth_url = "".join(["https://", "ngw.devices.", "sberbank.ru:9443", "/api/v2/oauth"])
+    tok_req = urllib.request.Request(
+        oauth_url,
+        data=urllib.parse.urlencode({"scope": "SALUTE_SPEECH_PERS"}).encode("utf-8"),
+        headers={
+            "Authorization": f"Basic {auth_key}",
+            "RqUID": str(uuid.uuid4()),
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json"
+        },
+        method="POST"
+    )
+    with urllib.request.urlopen(tok_req, context=ctx, timeout=5) as r:
+        access_token = json.loads(r.read().decode("utf-8")).get("access_token", "")
+        if access_token:
+            _SALUTE_TOKEN_CACHE["token"] = access_token
+            _SALUTE_TOKEN_CACHE["expires_at"] = now + 1700
+        return access_token
+
+
+async def _synth_salute_speech(text: str) -> bytes:
+    """Синтез речи через Sber SaluteSpeech (студийный баритон Bys_24000)."""
+    import ssl, urllib.request
+    access_token = _get_salute_token()
+    if not access_token:
+        return b""
+    ctx = ssl._create_unverified_context()
+    synth_url = "".join(["https://", "smartspeech.", "sber.ru", "/rest/v1/text:synthesize?voice=Bys_24000&format=opus"])
+    tts_req = urllib.request.Request(
+        synth_url,
+        data=text.encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/text"
+        },
+        method="POST"
+    )
+    with urllib.request.urlopen(tts_req, context=ctx, timeout=6) as r:
+        return r.read()
+
+
+@app.post("/api/tts")
+async def generate_tts(req: TTSRequest):
+    """Озвучка тренера студийным баритоном Сбера (Bys_24000) с кэшем и резервным синтезатором."""
+    import asyncio
+    clean_text = re.sub(r"[*#_`~>|•\-]+", " ", req.text)
+    clean_text = re.sub(r"\s+", " ", clean_text).strip()[:320]
+    if not clean_text:
+        raise HTTPException(status_code=400, detail="Пустой текст для озвучки")
+
+    if clean_text in _TTS_CACHE:
+        cached_bytes, cached_mime = _TTS_CACHE[clean_text]
+        return StreamingResponse(io.BytesIO(cached_bytes), media_type=cached_mime)
+
+    try:
+        salute_bytes = await _synth_salute_speech(clean_text)
+        if salute_bytes:
+            if len(_TTS_CACHE) > 80:
+                _TTS_CACHE.clear()
+            _TTS_CACHE[clean_text] = (salute_bytes, "audio/ogg")
+            return StreamingResponse(io.BytesIO(salute_bytes), media_type="audio/ogg")
+    except Exception as e:
+        print("SaluteSpeech error:", e)
+
+    audio_bytes = b""
+    try:
+        async def _synth_edge():
+            comm = edge_tts.Communicate(text=clean_text, voice="ru-RU-DmitryNeural", rate="+5%", pitch="-2Hz")
+            buf = io.BytesIO()
+            async for ch in comm.stream():
+                if ch["type"] == "audio":
+                    buf.write(ch["data"])
+            return buf.getvalue()
+
+        audio_bytes = await asyncio.wait_for(_synth_edge(), timeout=3.0)
+    except Exception:
+        audio_bytes = b""
+
+    if not audio_bytes:
+        raise HTTPException(status_code=503, detail="TTS unavailable")
+
+    if len(_TTS_CACHE) > 80:
+        _TTS_CACHE.clear()
+    _TTS_CACHE[clean_text] = (audio_bytes, "audio/mpeg")
+    return StreamingResponse(io.BytesIO(audio_bytes), media_type="audio/mpeg")
+
 
 
 class NutritionLogUpsert(BaseModel):

@@ -638,15 +638,16 @@ def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn
     if sched_res:
         return sched_res
 
-    # 1. Подтверждение переноса черновика или текущего плана на выбранную дату
-    pending = _PENDING_PLANS.get(user.id)
-    cleaned_confirm = re.sub(r"[^\w\sа-яё]", "", low_msg).strip()
-    is_confirm = (
-        cleaned_confirm in CONFIRM_WORDS
-        or any(phrase in low_msg for phrase in ("в план", "добавь план", "перенеси план", "сохрани план", "запиши её", "запиши ее", "запиши тренировку", "перенеси на", "запиши на"))
+    # 1. Прямая запись выполненной тренировки в блокнот (PostgreSQL) одной фразой
+    is_log_completed = any(
+        phrase in low_msg for phrase in (
+            "тренировка выполнена", "записывай в блокнот", "запиши в блокнот",
+            "в дневник", "в журнал", "в историю", "запиши всю тренировку", "закрыли тренировку"
+        )
     )
-    active_items = (pending.get("items") if pending and pending.get("items") else None) or (current_plan if current_plan else None)
-    if active_items and is_confirm:
+    active_items = (pending.get("items") if pending and pending.get("items") else None) or (
+        current_plan if current_plan else None)
+    if active_items and is_log_completed:
         norm_items = []
         for it in active_items:
             ex_n = it.get("exercise_name") or it.get("name") or ""
@@ -656,34 +657,20 @@ def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn
                     "sets": int(it.get("sets") or 3),
                     "reps": int(it.get("reps") or 12),
                     "weight": float(it.get("weight") or 0),
-                    "done": False
+                    "done": True
                 })
         final_date = target_date or (pending.get("target_date") if pending else None)
         names_preview = ", ".join(i["exercise_name"] for i in norm_items)
-        compress_session_memory(user.id, f"Утверждён план: {names_preview}")
-        if final_date:
-            d_fmt = datetime.strptime(final_date, "%Y-%m-%d").strftime("%d.%m.%Y")
-            reply = (
-                f"Готово, {first_name}! Записал тренировку ({names_preview}) в календарь на {d_fmt} "
-                f"и очистил текущий верстак на сегодня. В календаре этот день отмечен фиолетовым — нажми на него, чтобы посмотреть состав."
-            )
-            return {
-                "reply": reply,
-                "mode": "plan_scheduled",
-                "suggested_plan": norm_items,
-                "target_date": final_date,
-                "workout_entry": None,
-                "updated_weight_kg": None
-            }
+        compress_session_memory(user.id, f"Выполнена и записана в блокнот: {names_preview}")
         reply = (
-            f"Принято, {first_name}! Перенёс всё в «План тренировки» ({names_preview}). "
-            f"Проверь порядок карточек ниже и жми «Записать всю тренировку в БД», когда выполнишь."
+            f"Мощно отработал, {first_name}! Записал всю выполненную тренировку ({names_preview}) "
+            f"прямо в твой блокнот и обновил средний расход калорий на главной."
         )
         return {
             "reply": reply,
-            "mode": "plan_approved",
+            "mode": "workout_logged",
             "suggested_plan": norm_items,
-            "target_date": None,
+            "target_date": final_date,
             "workout_entry": None,
             "updated_weight_kg": None
         }
@@ -772,6 +759,8 @@ def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn
         f"1. Название упражнения — 3 подхода × 12 повторений | Вес: 15 кг\n"
         f"И в конце спроси: «Добавить эту тренировку в план?»\n"
         f"8. ПЛАНИРОВАНИЕ НА ЛЮБУЮ ДАТУ В КАЛЕНДАРЬ: ты ПОЛНОСТЬЮ УМЕЕШЬ составлять и планировать тренировки на любую дату (на завтра, 30 число, 1 декабря и т.д.). Никогда не говори, что у тебя нет такой функции! Когда просят составить или запланировать тренировку на конкретную дату — выведи список по формату из пункта 7 и спроси: «Добавить эту тренировку в план?» (система сама перенесёт его в календарь на нужную дату после подтверждения пользователя)."
+        f"9. ПСИХОЛОГИЯ ХАРАКТЕРА И МЯГКАЯ СУШКА: подмечай упорство атлета (регулярность тренировок, работу через усталость, прогресс весов) — хвали за конкретные дела, а не дежурными смайликами. При цели «сушка» всегда веди по протоколу мягкой сушки (-15% дефицита, 1.8–2.0 г белка на кг веса, сохранение мышц и связок без голодовок)."
+
     )
 
     messages = [{"role": "system", "content": system_prompt}]
