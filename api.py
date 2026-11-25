@@ -18,7 +18,6 @@ from datetime import datetime, timedelta
 from db_models import User, Workout, Exercise, DailyNutritionLog
 import io
 import re
-import edge_tts
 from fastapi.responses import StreamingResponse
 
 @asynccontextmanager
@@ -1251,7 +1250,6 @@ async def generate_tts(req: TTSRequest):
     audio_bytes = b""
     try:
         async def _synth_edge():
-            comm = edge_tts.Communicate(text=clean_text, voice="ru-RU-DmitryNeural", rate="+5%", pitch="-2Hz")
             buf = io.BytesIO()
             async for ch in comm.stream():
                 if ch["type"] == "audio":
