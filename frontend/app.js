@@ -90,11 +90,14 @@ function formatCoachRichText(rawText) {
         let line = lines[i].trim();
         if (!line) continue;
 
+        // Игнорируем декоративные разделители вроде ****, ---, ===
+        if (/^[\*\-_=#]{3,}$/.test(line)) continue;
+
         // Заголовки ###
         const headingMatch = line.match(/^#{1,4}\s+(.+)$/);
         if (headingMatch) {
             const hText = escapeHtml(headingMatch[1].replace(/\*\*/g, ""));
-            htmlParts.push(`<div class="coach-heading">${hText}</div>`);
+            htmlParts.push(`<h4>${hText}</h4>`);
             continue;
         }
 
@@ -102,7 +105,7 @@ function formatCoachRichText(rawText) {
         const bulletMatch = line.match(/^(?:[-•*])\s+(.+)$/);
         if (bulletMatch) {
             let bContent = escapeHtml(bulletMatch[1]).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-            htmlParts.push(`<div class="coach-bullet"><span class="coach-bullet-dot">•</span><div>${bContent}</div></div>`);
+            htmlParts.push(`<div style="display:flex; gap:8px; margin:6px 0;"><span style="color:#a3e635; font-weight:700;">•</span><div>${bContent}</div></div>`);
             continue;
         }
 
@@ -110,16 +113,16 @@ function formatCoachRichText(rawText) {
         const numMatch = line.match(/^(\d+[\.\)])\s+(.+)$/);
         if (numMatch) {
             let nContent = escapeHtml(numMatch[2]).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-            htmlParts.push(`<div class="coach-bullet"><span class="coach-bullet-num">${escapeHtml(numMatch[1])}</span><div>${nContent}</div></div>`);
+            htmlParts.push(`<div style="display:flex; gap:8px; margin:6px 0;"><span style="color:#38bdf8; font-weight:700;">${escapeHtml(numMatch[1])}</span><div>${nContent}</div></div>`);
             continue;
         }
 
         // Обычный абзац или подзаголовок (если вся строка в **...:**)
         let pHtml = escapeHtml(line).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
         if (/^<strong>[^<]+:<\/strong>$/.test(pHtml)) {
-            htmlParts.push(`<div class="coach-heading">${pHtml.replace(/<\/?strong>/g, "")}</div>`);
+            htmlParts.push(`<h4>${pHtml.replace(/<\/?strong>/g, "")}</h4>`);
         } else {
-            htmlParts.push(`<p class="coach-p">${pHtml}</p>`);
+            htmlParts.push(`<p>${pHtml}</p>`);
         }
     }
 
@@ -131,38 +134,35 @@ function appendAiChat(sender, text, color = "#e2e8f0") {
     const div = document.createElement("div");
 
     if (sender === "Ты") {
-        div.className = "coach-msg coach-msg-user";
-        const cleanUser = escapeHtml(String(text || "").replace(/\r/g, "").trim()).replace(/\n/g, "<br>");
-        const isLong = String(text || "").trim().length > 85;
+        const rawUser = String(text || "").replace(/\r/g, "").trim();
+        const cleanUser = escapeHtml(rawUser).replace(/\n/g, "<br>");
+        const isLong = rawUser.length > 75 || rawUser.includes("\n");
 
+        div.className = "user-msg-wrap" + (isLong ? " collapsed" : "");
         div.innerHTML = `
-            <div class="wv-user-bubble ${isLong ? "is-collapsible" : ""}">
-                <div class="wv-user-text">${cleanUser}</div>
-                <button type="button" class="wv-user-chevron" title="Свернуть / развернуть">⌄</button>
-            </div>
+            <div class="user-msg-text">${cleanUser}</div>
+            <button type="button" class="user-msg-toggle" title="Свернуть / развернуть">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+            </button>
         `;
 
-        const bubble = div.querySelector(".wv-user-bubble");
-        const chevron = div.querySelector(".wv-user-chevron");
-        if (bubble && chevron) {
-            bubble.addEventListener("click", () => {
-                const collapsed = bubble.classList.toggle("collapsed");
-                chevron.textContent = collapsed ? "⌄" : "⌃";
-            });
-            // По умолчанию длинные сообщения компактны (2 строки), короткие видны целиком
-            if (isLong) {
-                bubble.classList.add("collapsed");
-                chevron.textContent = "⌄";
-            } else {
-                chevron.textContent = "⌃";
+        const toggleBtn = div.querySelector(".user-msg-toggle");
+        if (toggleBtn) {
+            if (!isLong) {
+                toggleBtn.style.opacity = "0.45";
             }
+            div.addEventListener("click", () => {
+                div.classList.toggle("collapsed");
+            });
         }
     } else if (sender === "Система") {
         div.className = "coach-msg coach-msg-sys";
         div.style.cssText = `margin: 10px 0; padding: 8px 12px; border-radius: 10px; background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(56, 189, 248, 0.25); font-size: 13px; color: ${color};`;
         div.textContent = String(text || "").trim();
     } else {
-        div.className = "coach-msg coach-msg-ai";
+        div.className = "ai-msg-wrap";
         div.innerHTML = formatCoachRichText(text);
     }
 
@@ -418,24 +418,34 @@ function startVoiceVisualizer() {
 
 let isVoiceIntentionalActive = false;
 let voiceSilenceTimer = null;
+let voiceIgnoreResults = false;
 
 function stopVoiceManual(shouldSend = false) {
     isVoiceIntentionalActive = false;
+    voiceIgnoreResults = !shouldSend;
     if (voiceSilenceTimer) {
         clearTimeout(voiceSilenceTimer);
         voiceSilenceTimer = null;
     }
-        if (activeRecognition) {
+    if (activeRecognition) {
         try {
+            activeRecognition.onresult = null;
+            activeRecognition.onerror = null;
             activeRecognition.onend = null;
-            activeRecognition.stop();
+            activeRecognition.abort();
         } catch (e) {}
         activeRecognition = null;
     }
 
     stopVoiceVisualizer();
     const input = document.getElementById("aiCoachInput");
-    if (input) input.placeholder = "Спроси тренера или надиктуй подход...";
+    if (input) {
+        input.placeholder = "Спроси тренера или надиктуй подход...";
+        if (!shouldSend) {
+            input.blur();
+            input.value = "";
+        }
+    }
     if (shouldSend && input && input.value.trim()) {
         askAiCoach();
     }
@@ -449,6 +459,107 @@ function isFillerPhrase(txt) {
     ]);
     return clean.length < 3 || fillers.has(clean);
 }
+
+function startAiVoice() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+        appendAiChat("Система", "Используй микрофон на клавиатуре телефона для голосового ввода.", "#fbbf24");
+        return;
+    }
+
+    if (isVoiceIntentionalActive || activeRecognition) {
+        stopVoiceManual(true);
+        return;
+    }
+
+    const capsule = document.getElementById("coachInputCapsule");
+    const btn = document.getElementById("aiVoiceBtn");
+    const input = document.getElementById("aiCoachInput");
+
+    isVoiceIntentionalActive = true;
+    voiceIgnoreResults = false;
+    let committedText = input.value.trim();
+
+    if (capsule) capsule.classList.add("listening");
+    if (btn) btn.classList.add("active");
+    input.placeholder = "Слушаю... говори спокойно, нажми ↑ для отправки";
+    voiceEnergy = 0.45;
+    startVoiceVisualizer();
+
+    const resetSilenceTimer = () => {
+        if (voiceSilenceTimer) clearTimeout(voiceSilenceTimer);
+        voiceSilenceTimer = setTimeout(() => {
+            if (!isVoiceIntentionalActive) return;
+            const currentVal = input.value.trim();
+            if (!currentVal || isFillerPhrase(currentVal)) {
+                resetSilenceTimer();
+                return;
+            }
+            stopVoiceManual(true);
+        }, 4200);
+    };
+
+    const launchSession = () => {
+        if (!isVoiceIntentionalActive) return;
+        const recog = new SpeechRecognition();
+        activeRecognition = recog;
+        recog.lang = "ru-RU";
+        recog.interimResults = true;
+        recog.continuous = true;
+
+        recog.onresult = (e) => {
+            if (!isVoiceIntentionalActive || voiceIgnoreResults || isSendingCoach) return;
+            voiceEnergy = 1.0;
+            let interim = "";
+            let sessionFinal = "";
+            for (let i = 0; i < e.results.length; i++) {
+                const part = e.results[i][0].transcript.trim();
+                if (!part) continue;
+                if (e.results[i].isFinal) {
+                    sessionFinal += (sessionFinal ? " " : "") + part;
+                } else {
+                    interim += (interim ? " " : "") + part;
+                }
+            }
+            const nextChunk = [sessionFinal, interim].filter(Boolean).join(" ").trim();
+            const combined = committedText && nextChunk.toLowerCase().startsWith(committedText.toLowerCase())
+                ? nextChunk
+                : [committedText, nextChunk].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+
+            input.value = combined;
+            resetSilenceTimer();
+        };
+
+        recog.onerror = (e) => {
+            if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+                isVoiceIntentionalActive = false;
+                stopVoiceVisualizer();
+                appendAiChat("Система", "Разреши доступ к микрофону в настройках браузера.", "#fb7185");
+            }
+        };
+
+        recog.onend = () => {
+            activeRecognition = null;
+            if (isVoiceIntentionalActive && !isSendingCoach && !voiceIgnoreResults) {
+                committedText = input.value.trim();
+                setTimeout(launchSession, 150);
+            } else {
+                stopVoiceVisualizer();
+            }
+        };
+
+        try {
+            recog.start();
+            resetSilenceTimer();
+        } catch (err) {
+            isVoiceIntentionalActive = false;
+            stopVoiceVisualizer();
+        }
+    };
+
+    launchSession();
+}
+
 
 function startAiVoice() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
