@@ -6,17 +6,20 @@
     <meta name="theme-color" content="#0b0f19">
     <link rel="manifest" href="manifest.json">
     <title>Workout Vault</title>
-    <link rel="stylesheet" href="style.css?v=48">
+    <link rel="stylesheet" href="style.css?v=49">
 </head>
 <body>
 <div class="container">
-    <header>
-        <h1>WORKOUT VAULT</h1>
-        <div id="userBadge" class="hidden">
-            <span id="athleteName" class="badge"></span>
-            <button onclick="logout()" class="btn-link">Выйти</button>
+    <header style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+        <h1 style="margin:0;">WORKOUT VAULT</h1>
+        <div id="userBadge" class="hidden" style="display:flex; align-items:center; gap:8px;">
+            <button type="button" id="headerAvatarBtn" onclick="openProfileModal()" title="Анкета и настройки" style="width:40px; height:40px; border-radius:50%; padding:0; border:2px solid #a855f7; background:linear-gradient(135deg, #1e1b4b 0%, #3b0764 100%); color:#f8fafc; font-weight:800; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; overflow:hidden; box-shadow:0 0 14px rgba(168,85,247,0.45);">
+                <img id="headerAvatarImg" src="" alt="Аватар" class="hidden" style="width:100%; height:100%; object-fit:cover;">
+                <span id="headerAvatarInitials">АС</span>
+            </button>
         </div>
     </header>
+
 
     <section id="loginSection" class="card login-box">
         <h2 style="margin-bottom: 6px;">Вход в личный кабинет</h2>
@@ -46,11 +49,15 @@
         <section id="tab-home">
             <div class="card" style="border-left: 4px solid #a855f7; margin-bottom: 14px;">
                 <div style="display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px; margin-bottom:10px;">
-                    <div class="stat-box" style="border-color:#a855f7;">
-                        <div class="stat-label">Главная цель</div>
-                        <div id="mainGoalTitle" class="stat-val" style="color:#c084fc; font-size:16px; line-height:1.25;">Загрузка...</div>
-                        <div id="mainGoalSub" class="stat-sub">Протокол атлета</div>
+                    <div class="stat-box" onclick="openGoalModal()" style="border-color:#a855f7; cursor:pointer; position:relative;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; gap:4px;">
+                            <div class="stat-label" style="margin:0;">Главная цель</div>
+                            <span style="font-size:11px; color:#c084fc; background:rgba(168,85,247,0.16); padding:1px 6px; border-radius:6px;">⚙️</span>
+                        </div>
+                        <div id="mainGoalTitle" class="stat-val" style="color:#c084fc; font-size:15px; line-height:1.25; margin-top:4px;">Плавный набор массы</div>
+                        <div id="mainGoalSub" class="stat-sub">Цель: 2541 ккал/день</div>
                     </div>
+
                     <div class="stat-box" style="border-color:#38bdf8;">
                         <div class="stat-label">Средний расход</div>
                         <div id="heroDailyBurnVal" class="stat-val" style="color:#38bdf8; font-size:18px;">— ккал</div>
@@ -130,44 +137,35 @@
             </div>
         </section>
 
-        <!-- ВКЛАДКА 2: ТРЕНЕРСКАЯ И ПЛАНЕР -->
+                <!-- ВКЛАДКА 2: ТРЕНЕРСКАЯ И ПЛАНЕР -->
         <section id="tab-workout" class="hidden">
-            <div id="coachCard" class="card" style="border-left: 4px solid #a855f7;">
+            <div id="coachCard" class="card" style="border-left: 4px solid #a855f7; margin-bottom:10px;">
                 <div class="coach-inner-wrap">
                     <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
+                        <h2 style="font-size:18px; color:#c084fc; margin:0;">ИИ-Тренерская</h2>
                         <div style="display:flex; align-items:center; gap:8px;">
-                            <h2 style="font-size:18px; color:#c084fc;">ИИ-Тренерская</h2>
-                            <span id="coachMiniTimer" class="badge coach-hide-fs" style="background:rgba(56,189,248,0.16); color:#38bdf8;">⏱ 00:00</span>
-                        </div>
-                        <div style="display:flex; align-items:center; gap:8px;">
-                            <label class="coach-hide-fs" style="display:flex; align-items:center; gap:4px; font-size:11px; color:#94a3b8; margin:0; cursor:pointer;">
-                                <input id="ttsToggle" type="checkbox" onchange="toggleCoachVoice(this.checked)">
+                            <label class="coach-hide-fs" style="display:flex; align-items:center; gap:5px; font-size:11px; color:#cbd5e1; background:#0f172a; border:1px solid #334155; padding:4px 9px; border-radius:16px; margin:0; cursor:pointer;">
+                                <input id="ttsToggle" type="checkbox" onchange="toggleCoachVoice(this.checked)" style="width:14px; height:14px; margin:0;">
                                 <span>🔊 Голос</span>
                             </label>
                             <button id="fullscreenCoachBtn" onclick="toggleCoachFullscreen()" class="icon-btn" style="width:auto; padding:0 10px; font-size:12px; color:#c084fc;" title="Развернуть на весь экран">⤢ Весь экран</button>
                         </div>
                     </div>
-                    <div class="coach-hide-fs" style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
-                        <button class="t-btn" style="padding:4px 9px; min-height:30px;" onclick="startRestTimer(45)">45с</button>
-                        <button class="t-btn" style="padding:4px 9px; min-height:30px;" onclick="startRestTimer(60)">1:00</button>
-                        <button class="t-btn" style="padding:4px 9px; min-height:30px;" onclick="startRestTimer(90)">1:30</button>
-                        <button class="t-btn" style="padding:4px 9px; min-height:30px; color:#fb7185;" onclick="stopRestTimer()">Стоп</button>
-                    </div>
                     <div id="aiCoachBox" style="background:#0f172a; border:1px solid #1e293b; border-radius:12px; padding:12px; max-height:260px; overflow-y:auto; font-size:13px; margin-bottom:10px;"></div>
                     <style>
-                        .wv-capsule { display:flex; align-items:center; gap:8px; background:#0f172a; border:1px solid #334155; border-radius:24px; padding:6px 8px 6px 16px; transition:border-color .2s, box-shadow .2s; }
+                        .wv-capsule { display:flex; align-items:center; gap:8px; background:#0f172a; border:1px solid #334155; border-radius:24px; padding:6px 8px 6px 14px; transition:border-color .2s, box-shadow .2s; }
                         .wv-capsule.listening { border-color:#38bdf8; box-shadow:0 0 16px rgba(56,189,248,0.28); }
-                        .wv-capsule input { flex:1; background:transparent !important; border:none !important; outline:none !important; box-shadow:none !important; color:#f8fafc; font-size:15px; margin:0 !important; padding:6px 0 !important; min-width:0; }
-                        .wv-mic-btn { display:flex; align-items:center; justify-content:center; width:38px; height:38px; border-radius:50%; border:none; background:rgba(56,189,248,0.12); color:#38bdf8; cursor:pointer; flex-shrink:0; transition:all .2s; }
-                        .wv-mic-btn.active { width:64px; border-radius:19px; background:rgba(56,189,248,0.22); }
+                        .wv-capsule input { flex:1; background:transparent !important; border:none !important; outline:none !important; box-shadow:none !important; color:#f8fafc; font-size:14px; margin:0 !important; padding:6px 0 !important; min-width:0; text-overflow:ellipsis; }
+                        .wv-mic-btn { display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:50%; border:none; background:rgba(56,189,248,0.12); color:#38bdf8; cursor:pointer; flex-shrink:0; transition:all .2s; }
+                        .wv-mic-btn.active { width:62px; border-radius:18px; background:rgba(56,189,248,0.22); }
                         .wv-wave { display:none; align-items:center; justify-content:center; gap:3px; height:22px; }
                         .wv-mic-btn.active .wv-wave { display:flex; }
                         .wv-mic-btn.active .wv-mic-ico { display:none; }
                         .wv-wave span { display:block; width:3px; height:5px; border-radius:3px; background:#38bdf8; transition:height 60ms ease; }
-                        .wv-send-btn { width:38px; height:38px; border-radius:50%; border:none; background:#a855f7; color:#fff; font-size:17px; font-weight:700; cursor:pointer; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+                        .wv-send-btn { width:36px; height:36px; border-radius:50%; border:none; background:#a855f7; color:#fff; font-size:17px; font-weight:700; cursor:pointer; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
                     </style>
                     <div id="coachInputCapsule" class="wv-capsule">
-                        <input id="aiCoachInput" type="text" placeholder="Задай свой вопрос..." onkeydown="if(event.key==='Enter') askAiCoach()">
+                        <input id="aiCoachInput" type="text" placeholder="Напиши или надиктуй..." onkeydown="if(event.key==='Enter') askAiCoach()">
                         <button id="aiVoiceBtn" type="button" onclick="startAiVoice()" title="Голосовой ввод" class="wv-mic-btn">
                             <span class="wv-mic-ico">🎙️</span>
                             <span class="wv-wave" id="aiVoiceWave"><span></span><span></span><span></span><span></span><span></span></span>
@@ -176,6 +174,21 @@
                     </div>
                 </div>
             </div>
+
+            <div class="card" style="border-left: 4px solid #38bdf8; padding:12px 14px; margin-bottom:14px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px;">
+                    <span style="font-size:12px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.5px;">Таймер отдыха</span>
+                    <div id="coachMiniTimer" style="font-size:22px; font-weight:900; color:#38bdf8; background:#0f172a; border:1px solid rgba(56,189,248,0.4); border-radius:12px; padding:4px 14px; letter-spacing:1px; font-variant-numeric:tabular-nums;">⏱ 00:00</div>
+                </div>
+                <div style="display:grid; grid-template-columns:repeat(5, 1fr); gap:6px;">
+                    <button class="t-btn" style="padding:8px 4px; font-size:13px; font-weight:700;" onclick="startRestTimer(45)">45с</button>
+                    <button class="t-btn" style="padding:8px 4px; font-size:13px; font-weight:700;" onclick="startRestTimer(60)">1:00</button>
+                    <button class="t-btn" style="padding:8px 4px; font-size:13px; font-weight:700;" onclick="startRestTimer(90)">1:30</button>
+                    <button class="t-btn" style="padding:8px 4px; font-size:13px; font-weight:700;" onclick="startRestTimer(120)">2:00</button>
+                    <button class="t-btn" style="padding:8px 4px; font-size:13px; font-weight:700; color:#fb7185; border-color:rgba(251,113,133,0.35);" onclick="stopRestTimer()">Стоп</button>
+                </div>
+            </div>
+
             <div class="card" style="border-left: 4px solid #34d399;">
                 <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
                     <h2 style="font-size:18px; color:#34d399;">План тренировки</h2>
@@ -253,6 +266,8 @@
                 <div id="exerciseGifLibrary" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(160px, 1fr)); gap:10px;"></div>
             </div>
         </section>
+
+
         <!-- ВКЛАДКА 3: АНАЛИТИКА -->
         <section id="tab-analytics" class="hidden">
             <div class="card" style="border-left: 4px solid #38bdf8;">
@@ -304,43 +319,53 @@
         </section>
     </main>
 </div>
-<!-- МОДАЛЬНОЕ ОКНО: ЗЕЛЁНЫЙ КОРИДОР / БИРЖЕВОЙ ТЕРМИНАЛ ВЕСА -->
-<div id="weightTerminalModal" class="hidden" onclick="if(event.target===this) closeWeightModal()" style="position:fixed; inset:0; z-index:9999; background:rgba(5,8,17,0.82); backdrop-filter:blur(6px); display:none; align-items:center; justify-content:center; padding:14px;">
-    <div style="width:100%; max-width:460px; max-height:84vh; overflow-y:auto; background:linear-gradient(180deg, #13182e 0%, #0b0f19 100%); border:1px solid rgba(168,85,247,0.45); border-radius:18px; padding:16px; box-shadow:0 16px 48px rgba(0,0,0,0.65);">
+<!-- МОДАЛЬНОЕ ОКНО 1: ЗЕЛЁНЫЙ КОРИДОР / БИРЖЕВОЙ ТЕРМИНАЛ ВЕСА -->
+<div id="weightTerminalModal" class="hidden" onclick="if(event.target===this) closeWeightModal()" style="position:fixed; inset:0; z-index:9999; background:rgba(5,8,17,0.84); backdrop-filter:blur(6px); display:none; align-items:center; justify-content:center; padding:12px;">
+    <div style="width:100%; max-width:470px; max-height:88vh; overflow-y:auto; background:linear-gradient(180deg, #13182e 0%, #0b0f19 100%); border:1px solid rgba(168,85,247,0.5); border-radius:18px; padding:15px; box-shadow:0 16px 48px rgba(0,0,0,0.7);">
         <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
             <div style="display:flex; align-items:center; gap:8px;">
                 <h2 style="font-size:18px; color:#34d399; margin:0;">Зелёный коридор</h2>
                 <span id="wtBreakoutBadge" class="badge" style="background:rgba(52,211,153,0.16); color:#34d399; font-size:11px;">В КОРИДОРЕ</span>
             </div>
-            <button type="button" onclick="closeWeightModal()" style="background:rgba(148,163,184,0.14); border:1px solid #334155; color:#e2e8f0; width:32px; height:32px; border-radius:10px; font-size:16px; cursor:pointer;">✕</button>
+            <div style="display:flex; align-items:center; gap:6px;">
+                <button type="button" id="wtChartTypeBtn" onclick="toggleWeightChartType()" style="background:rgba(168,85,247,0.18); border:1px solid rgba(168,85,247,0.5); color:#e9d5ff; padding:5px 10px; border-radius:10px; font-size:11px; font-weight:700; cursor:pointer;">🕯 Свечи</button>
+                <button type="button" onclick="closeWeightModal()" style="background:rgba(148,163,184,0.14); border:1px solid #334155; color:#e2e8f0; width:32px; height:32px; border-radius:10px; font-size:16px; cursor:pointer;">✕</button>
+            </div>
         </div>
 
-        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
-            <div id="wtTickerLine" style="font-size:14px; color:#f8fafc; font-weight:700;">67.00 кг → 0.00</div>
-            <div style="display:flex; gap:5px;">
-                <button type="button" class="chip-btn wt-tf-btn" data-days="14" onclick="setWeightTimeframe(14)">14Д</button>
-                <button type="button" class="chip-btn wt-tf-btn" data-days="30" onclick="setWeightTimeframe(30)" style="border-color:#34d399; color:#34d399;">30Д</button>
-                <button type="button" class="chip-btn wt-tf-btn" data-days="90" onclick="setWeightTimeframe(90)">90Д</button>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; background:#090d16; padding:4px; border-radius:11px; border:1px solid #1e293b; margin-bottom:10px;">
+            <button type="button" id="wtModeStageBtn" onclick="setWeightViewMode('stage')" style="background:#1e293b; color:#34d399; border:1px solid rgba(52,211,153,0.45); border-radius:8px; padding:6px; font-size:12px; font-weight:700; cursor:pointer;">Текущий этап</button>
+            <button type="button" id="wtModeGoalBtn" onclick="setWeightViewMode('goal')" style="background:transparent; color:#94a3b8; border:none; border-radius:8px; padding:6px; font-size:12px; font-weight:700; cursor:pointer;">Путь до цели</button>
+        </div>
+
+        <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:6px; margin-bottom:10px;">
+            <div id="wtTickerLine" style="font-size:13px; color:#f8fafc; font-weight:700;">67.00 кг · Цель: 70.0 кг</div>
+            <div style="display:flex; gap:4px; flex-wrap:wrap;">
+                <button type="button" class="chip-btn wt-tf-btn" data-days="14" onclick="setWeightTimeframe(14)" style="border-color:#34d399; color:#34d399; padding:3px 7px; font-size:11px;">14Д</button>
+                <button type="button" class="chip-btn wt-tf-btn" data-days="30" onclick="setWeightTimeframe(30)" style="padding:3px 7px; font-size:11px;">30Д</button>
+                <button type="button" class="chip-btn wt-tf-btn" data-days="90" onclick="setWeightTimeframe(90)" style="padding:3px 7px; font-size:11px;">90Д</button>
+                <button type="button" class="chip-btn wt-tf-btn" data-days="180" onclick="setWeightTimeframe(180)" style="padding:3px 7px; font-size:11px;">180Д</button>
+                <button type="button" class="chip-btn wt-tf-btn" data-days="365" onclick="setWeightTimeframe(365)" style="padding:3px 7px; font-size:11px;">365Д</button>
             </div>
         </div>
 
         <div style="display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:7px; margin-bottom:10px;">
-            <div style="background:#0f172a; border:1px solid rgba(56,189,248,0.35); border-radius:10px; padding:7px 8px;">
-                <div style="font-size:10px; color:#38bdf8; text-transform:uppercase; font-weight:700;">Сопротивление</div>
-                <div id="wtResistanceVal" style="font-size:14px; font-weight:800; color:#f8fafc;">67.5 кг</div>
+            <div style="background:#0f172a; border:1px solid rgba(52,211,153,0.4); border-radius:10px; padding:7px 8px;">
+                <div id="wtTopLevelLabel" style="font-size:10px; color:#34d399; text-transform:uppercase; font-weight:700;">Пробой вверх</div>
+                <div id="wtResistanceVal" style="font-size:14px; font-weight:800; color:#f8fafc;">68.0 кг</div>
             </div>
-            <div style="background:#0f172a; border:1px solid rgba(52,211,153,0.45); border-radius:10px; padding:7px 8px;">
-                <div style="font-size:10px; color:#34d399; text-transform:uppercase; font-weight:700;">Коридор</div>
-                <div id="wtCorridorVal" style="font-size:13px; font-weight:800; color:#34d399;">66.5 ↔ 67.5</div>
+            <div style="background:#0f172a; border:1px solid rgba(168,85,247,0.45); border-radius:10px; padding:7px 8px;">
+                <div style="font-size:10px; color:#c084fc; text-transform:uppercase; font-weight:700;">Коридор</div>
+                <div id="wtCorridorVal" style="font-size:13px; font-weight:800; color:#e9d5ff;">66.5 ↔ 68.0</div>
             </div>
             <div style="background:#0f172a; border:1px solid rgba(251,191,36,0.35); border-radius:10px; padding:7px 8px;">
-                <div style="font-size:10px; color:#fbbf24; text-transform:uppercase; font-weight:700;">Поддержка</div>
+                <div id="wtBottomLevelLabel" style="font-size:10px; color:#fbbf24; text-transform:uppercase; font-weight:700;">Поддержка</div>
                 <div id="wtSupportVal" style="font-size:14px; font-weight:800; color:#f8fafc;">66.5 кг</div>
             </div>
         </div>
 
         <div style="background:#080c15; border:1px solid #1e293b; border-radius:12px; padding:8px; margin-bottom:10px;">
-            <canvas id="weightTerminalCanvas" style="width:100%; height:230px; display:block;"></canvas>
+            <canvas id="weightTerminalCanvas" style="width:100%; height:240px; display:block;"></canvas>
         </div>
 
         <div id="wtEnergyProgressBox" style="background:#0f172a; border:1px solid #1e293b; border-radius:10px; padding:9px 11px; font-size:12px; color:#cbd5e1; margin-bottom:10px; line-height:1.35;">
@@ -353,8 +378,109 @@
         </div>
     </div>
 </div>
+<!-- МОДАЛЬНОЕ ОКНО 2: УМНЫЙ ВЫБОР ЦЕЛИ И ПОЛЗУНОК КАЛОРИЙ -->
+<div id="goalSelectorModal" class="hidden" onclick="if(event.target===this) closeGoalModal()" style="position:fixed; inset:0; z-index:9999; background:rgba(5,8,17,0.84); backdrop-filter:blur(6px); display:none; align-items:center; justify-content:center; padding:14px;">
+    <div style="width:100%; max-width:440px; background:linear-gradient(180deg, #13182e 0%, #0b0f19 100%); border:1px solid rgba(168,85,247,0.5); border-radius:18px; padding:16px; box-shadow:0 16px 48px rgba(0,0,0,0.7);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <h2 style="font-size:18px; color:#c084fc; margin:0;">Режим цели и калораж</h2>
+            <button type="button" onclick="closeGoalModal()" style="background:rgba(148,163,184,0.14); border:1px solid #334155; color:#e2e8f0; width:32px; height:32px; border-radius:10px; font-size:16px; cursor:pointer;">✕</button>
+        </div>
 
-<script src="app.js?v=48"></script>
+        <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; margin-bottom:14px;">
+            <button type="button" id="goalDirCutBtn" onclick="selectGoalDirection('cut')" style="padding:9px 6px; border-radius:10px; border:1px solid #334155; background:#0f172a; color:#cbd5e1; font-size:12px; font-weight:700; cursor:pointer;">↘ Сушка</button>
+            <button type="button" id="goalDirHoldBtn" onclick="selectGoalDirection('hold')" style="padding:9px 6px; border-radius:10px; border:1px solid #334155; background:#0f172a; color:#cbd5e1; font-size:12px; font-weight:700; cursor:pointer;">→ Баланс</button>
+            <button type="button" id="goalDirBulkBtn" onclick="selectGoalDirection('bulk')" style="padding:9px 6px; border-radius:10px; border:1px solid #a855f7; background:rgba(168,85,247,0.2); color:#f3e8ff; font-size:12px; font-weight:700; cursor:pointer;">↗ Набор массы</button>
+        </div>
+
+        <div id="goalSliderSection" style="background:#0f172a; border:1px solid #1e293b; border-radius:12px; padding:12px; margin-bottom:12px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <span style="font-size:12px; color:#94a3b8;">Интенсивность режима:</span>
+                <strong id="goalIntensityLabel" style="font-size:13px; color:#34d399;">Плавный набор (+8%)</strong>
+            </div>
+            <input id="goalIntensitySlider" type="range" min="1" max="3" step="1" value="1" oninput="updateGoalPreview()" style="width:100%; accent-color:#a855f7; cursor:pointer;">
+            <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; margin-top:4px;">
+                <span id="goalStep1Text">Мягкий</span>
+                <span id="goalStep2Text">Средний</span>
+                <span id="goalStep3Text">Жёсткий</span>
+            </div>
+        </div>
+
+        <div id="goalTransitionHint" class="hidden" style="background:rgba(56,189,248,0.12); border:1px solid rgba(56,189,248,0.35); border-radius:10px; padding:8px 10px; font-size:11px; color:#bae6fd; margin-bottom:12px;"></div>
+
+        <div style="background:#090d16; border:1px solid #1e293b; border-radius:12px; padding:12px; margin-bottom:14px;">
+            <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;">
+                <span style="font-size:12px; color:#94a3b8;">Расчётная норма на день:</span>
+                <strong id="goalCalcKcalVal" style="font-size:22px; color:#38bdf8;">2541 ккал</strong>
+            </div>
+            <div id="goalCalcMacrosVal" style="font-size:12px; color:#34d399; font-weight:600;">Белки: 145 г · Жиры: 70 г · Углеводы: 332 г</div>
+            <div id="goalSafetyNote" style="font-size:11px; color:#94a3b8; margin-top:6px;">С учётом базового обмена и тренировочной активности.</div>
+        </div>
+
+        <button type="button" onclick="saveGoalSettings()" class="btn-primary btn-green" style="margin:0;">Применить цель и обновить расчёт</button>
+    </div>
+</div>
+
+<!-- МОДАЛЬНОЕ ОКНО 3: ЦЕНТР ПРОФИЛЯ, АНКЕТА И НАСТРОЙКИ В АВАТАРКЕ -->
+<div id="profileCenterModal" class="hidden" onclick="if(event.target===this) closeProfileModal()" style="position:fixed; inset:0; z-index:9999; background:rgba(5,8,17,0.84); backdrop-filter:blur(6px); display:none; align-items:center; justify-content:center; padding:14px;">
+    <div style="width:100%; max-width:440px; max-height:88vh; overflow-y:auto; background:linear-gradient(180deg, #13182e 0%, #0b0f19 100%); border:1px solid rgba(168,85,247,0.5); border-radius:18px; padding:16px; box-shadow:0 16px 48px rgba(0,0,0,0.7);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div id="modalAvatarPreview" style="width:46px; height:46px; border-radius:50%; border:2px solid #a855f7; background:linear-gradient(135deg, #1e1b4b 0%, #3b0764 100%); color:#f8fafc; font-weight:800; font-size:16px; display:flex; align-items:center; justify-content:center; overflow:hidden;">АС</div>
+                <div>
+                    <h2 id="profileModalName" style="font-size:17px; color:#f8fafc; margin:0;">Александр</h2>
+                    <span style="font-size:11px; color:#34d399;">Анкета и настройки Workout Vault</span>
+                </div>
+            </div>
+            <button type="button" onclick="closeProfileModal()" style="background:rgba(148,163,184,0.14); border:1px solid #334155; color:#e2e8f0; width:32px; height:32px; border-radius:10px; font-size:16px; cursor:pointer;">✕</button>
+        </div>
+
+        <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin-bottom:12px;">
+            <div>
+                <label style="font-size:11px;">Возраст</label>
+                <input id="profAgeInput" type="number" value="41" style="padding:8px; font-size:14px;">
+            </div>
+            <div>
+                <label style="font-size:11px;">Рост (см)</label>
+                <input id="profHeightInput" type="number" value="176" style="padding:8px; font-size:14px;">
+            </div>
+            <div>
+                <label style="font-size:11px;">Целевой вес (кг)</label>
+                <input id="profTargetWeightInput" type="number" step="0.5" value="70.0" style="padding:8px; font-size:14px;">
+            </div>
+        </div>
+
+        <label style="font-size:11px;">Уровень активности (работа и тренировки)</label>
+        <select id="profActivitySelect" style="width:100%; background:#0f172a; border:1px solid #334155; color:#f8fafc; border-radius:10px; padding:9px; font-size:13px; margin-bottom:12px;">
+            <option value="1.375">Лёгкая активность (1–2 тренировки в неделю)</option>
+            <option value="1.55" selected>Средняя активность (3–4 тренировки + смены)</option>
+            <option value="1.725">Высокая активность (4–5 интенсивных тренировок)</option>
+        </select>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; background:#0f172a; border:1px solid #1e293b; border-radius:12px; padding:10px; margin-bottom:14px;">
+            <div>
+                <div style="font-size:11px; color:#94a3b8; margin-bottom:4px;">Язык интерфейса</div>
+                <select id="profLangSelect" onchange="changeAppLanguage(this.value)" style="width:100%; background:#080c15; border:1px solid #334155; color:#f8fafc; border-radius:8px; padding:6px; font-size:12px;">
+                    <option value="ru" selected>🇷🇺 Русский</option>
+                    <option value="en">🇬🇧 English (скоро)</option>
+                </select>
+            </div>
+            <div>
+                <div style="font-size:11px; color:#94a3b8; margin-bottom:4px;">Аватар профиля</div>
+                <label style="display:flex; align-items:center; justify-content:center; background:#1e293b; border:1px solid #334155; color:#e2e8f0; border-radius:8px; padding:6px; font-size:12px; cursor:pointer; margin:0;">
+                    <span>📷 Загрузить фото</span>
+                    <input type="file" accept="image/*" onchange="handleAvatarUpload(this)" style="display:none;">
+                </label>
+            </div>
+        </div>
+
+        <div style="display:flex; gap:8px;">
+            <button type="button" onclick="saveProfileCenter()" class="btn-primary btn-green" style="margin:0; flex:1;">Сохранить анкету</button>
+            <button type="button" onclick="logout()" style="background:rgba(251,113,133,0.14); border:1px solid rgba(251,113,133,0.45); color:#fb7185; border-radius:12px; padding:0 14px; font-size:13px; font-weight:700; cursor:pointer;">Выйти</button>
+        </div>
+    </div>
+</div>
+
+<script src="app.js?v=49"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/app/sw.js');
@@ -362,6 +488,7 @@
 </script>
 </body>
 </html>
+
 
 
 

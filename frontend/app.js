@@ -935,7 +935,13 @@ async function loadSupport() {
     const res = await fetch("/coach/support?tired_after_shift=false", { headers: authHeaders() });
     if (res.status === 401) return logout();
     const d = await res.json();
-    document.getElementById("athleteName").textContent = "Атлет: " + d.athlete;
+        const nameEl = document.getElementById("profileModalName");
+    if (nameEl) nameEl.textContent = d.athlete;
+    const initEl = document.getElementById("headerAvatarInitials");
+    if (initEl && !localStorage.getItem("wv_avatar_data")) {
+        initEl.textContent = (d.athlete || "АС").slice(0, 2).toUpperCase();
+    }
+
     document.getElementById("protocolTitle").textContent = d.protocol_title;
     document.getElementById("mentorMessage").textContent = d.mentor_message;
     document.getElementById("personalizedTone").textContent = d.personalized_tone;
@@ -1545,15 +1551,121 @@ if (typeof renderGifLibrary === "function") renderGifLibrary();
         });
     };
 })();
-// === ЗЕЛЁНЫЙ КОРИДОР / БИРЖЕВОЙ ТЕРМИНАЛ ВЕСА ТЕЛА ===
-let _wtTimeframeDays = 30;
+function _computeGoalMetrics(dir, step) {
+    const tdee = _calcMaintenanceTdee();
+    const curW = _getLatestWeightValue();
+    let kcal = tdee;
+    let title = "Удержание формы";
+    let badge = "Баланс (0%)";
+    let note = "Стабильная энергия, восстановление и контроль качества тела.";
+
+    if (dir === "cut") {
+        if (step === 1) {
+            kcal = Math.max(1850, Math.round(tdee * 0.85));
+            title = "Мягкое похудение";
+            badge = "Мягкая сушка (-15%)";
+            note = "Комфортное снижение жира без потери мышц, силы и стресса для ЦНС.";
+        } else if (step === 2) {
+            kcal = Math.max(1700, Math.round(tdee * 0.78));
+            title = "Средняя сушка";
+            badge = "Рабочая сушка (-22%)";
+            note = "Выраженный рельеф с повышенным белком и контролем электролитов.";
+        } else {
+            kcal = Math.max(1550, Math.round(tdee * 0.70));
+            title = "Жёсткая сушка (Профи)";
+            badge = "Для спортсменов (-30%)";
+            note = "⚠️ Максимально допустимый дефицит (порог безопасности ≥ 1550 ккал/день). Держи 2.2 г белка/кг и воду.";
+        }
+    } else if (dir === "bulk") {
+        if (step === 1) {
+            kcal = Math.round(tdee * 1.08);
+            title = "Плавный набор массы";
+            badge = "Мягкий набор (+8%)";
+            note = "Качественный рост сухой мышечной массы с минимальным процентом жира.";
+        } else if (step === 2) {
+            kcal = Math.round(tdee * 1.15);
+            title = "Уверенный набор массы";
+            badge = "Средний набор (+15%)";
+            note = "Активный прогресс рабочих весов и объёмов при регулярных тренировках.";
+        } else {
+            kcal = Math.round(tdee * 1.22);
+            title = "Форсированный набор";
+            badge = "Мощный профицит (+22%)";
+            note = "Максимальный энергетический запас для тяжёлых базовых циклов.";
+        }
+    }
+
+    const prot = Math.round(curW * (dir === "cut" ? 2.15 : 2.0));
+    const fat = Math.round(curW * (dir === "cut" ? 0.85 : 1.0));
+    const carbs = Math.max(90, Math.round((kcal - prot * 4 - fat * 9) / 4));
+    return { tdee, kcal, title, badge, note, prot, fat, carbs };
+}
+
+function updateGoalPreview() {
+    const dir = _wvGoalState.direction || "bulk";
+    const step = parseInt(document.getElementById("goalIntensitySlider")?.value) || 1;
+    const s1 = document.getElementById("goalStep1Text");
+    const s2 = document.getElementById("goalStep2Text");
+    const s3 = document.getElementById("goalStep3Text");
+    if (dir === "cut") {
+        if (s1) s1.textContent = "Мягкая (~2000)";
+        if (s2) s2.textContent = "Средняя";
+        if (s3) s3.textContent = "Жёсткая (Спорт)";
+    } else {
+        if (s1) s1.textContent = "Мягкий";
+        if (s2) s2.textContent = "Средний";
+        if (s3) s3.textContent = "Мощный";
+    }
+    const m = _computeGoalMetrics(dir, step);
+    const lbl = document.getElementById("goalIntensityLabel");
+    const kEl = document.getElementById("goalCalcKcalVal");
+    const mEl = document.getElementById("goalCalcMacrosVal");
+    const nEl = document.getElementById("goalSafetyNote");
+    if (lbl) lbl.textContent = m.badge;
+    if (kEl) kEl.textContent = `${m.kcal} ккал`;
+    if (mEl) mEl.textContent = `Белки: ${m.prot} г · Жиры: ${m.fat} г · Углеводы: ${m.carbs} г`;
+    if (nEl) nEl.textContent = m.note;
+}
+
+function saveGoalSettings() {
+    const dir = _wvGoalState.direction || "bulk";
+    const step = parseInt(document.getElementById("goalIntensitySlider")?.value) || 1;
+    const m = _computeGoalMetrics(dir, step);
+    _wvGoalState = { direction: dir, intensity: step, prevDirection: dir, targetKcal: m.kcal };
+    localStorage.setItem("wv_goal_state", JSON.stringify(_wvGoalState));
+    _syncGoalCardsUI();
+    closeGoalModal();
+    renderWeightTerminal();
+}
+
+function _syncGoalCardsUI() {
+    const dir = _wvGoalState.direction || "bulk";
+    const step = _wvGoalState.intensity || 1;
+    const m = _computeGoalMetrics(dir, step);
+    const tEl = document.getElementById("mainGoalTitle");
+    const sEl = document.getElementById("mainGoalSub");
+    const bEl = document.getElementById("heroDailyBurnVal");
+    const ktEl = document.getElementById("heroKcalTargetSub");
+    const macEl = document.getElementById("macrosInfo");
+    const gLbl = document.getElementById("goalLabel");
+    if (tEl) tEl.textContent = m.title;
+    if (sEl) sEl.textContent = `Цель: ${m.kcal} ккал/день`;
+    if (bEl) bEl.textContent = `${m.tdee} ккал`;
+    if (ktEl) ktEl.textContent = `Цель на день: ${m.kcal} ккал`;
+    if (macEl) macEl.textContent = `${m.prot}г / ${m.fat}г / ${m.carbs}г`;
+    if (gLbl) gLbl.textContent = m.title;
+}
+// === БИРЖЕВОЙ ТЕРМИНАЛ «ЗЕЛЁНЫЙ КОРИДОР» (СВЕЧИ WORKOUT VAULT + ПРОБОИ) ===
+let _wtDays = 14;
+let _wtChartType = "candles";
+let _wtViewMode = "stage";
 
 function openWeightModal() {
     const m = document.getElementById("weightTerminalModal");
     if (!m) return;
     m.classList.remove("hidden");
     m.style.display = "flex";
-    requestAnimationFrame(() => renderWeightTerminal());
+    setTimeout(renderWeightTerminal, 40);
 }
 
 function closeWeightModal() {
@@ -1563,230 +1675,261 @@ function closeWeightModal() {
     m.style.display = "none";
 }
 
-function _getWeightHistoryList(currentW) {
-    const raw = localStorage.getItem("wv_weight_history");
-    let list = [];
-    try { list = raw ? JSON.parse(raw) : []; } catch (_) { list = []; }
-    if (!Array.isArray(list)) list = [];
-    const todayIso = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Moscow" });
-    if (currentW && currentW > 0) {
-        if (!list.length) {
-            list.push({ date: todayIso, weight: Number(currentW) });
-        } else if (list[list.length - 1].date === todayIso) {
-            list[list.length - 1].weight = Number(currentW);
+function toggleWeightChartType() {
+    _wtChartType = _wtChartType === "candles" ? "line" : "candles";
+    const btn = document.getElementById("wtChartTypeBtn");
+    if (btn) btn.textContent = _wtChartType === "candles" ? "🕯 Свечи" : "📈 Линия";
+    renderWeightTerminal();
+}
+
+function setWeightViewMode(mode) {
+    _wtViewMode = mode;
+    const sBtn = document.getElementById("wtModeStageBtn");
+    const gBtn = document.getElementById("wtModeGoalBtn");
+    if (sBtn && gBtn) {
+        if (mode === "stage") {
+            sBtn.style.background = "#1e293b";
+            sBtn.style.color = "#34d399";
+            sBtn.style.border = "1px solid rgba(52,211,153,0.45)";
+            gBtn.style.background = "transparent";
+            gBtn.style.color = "#94a3b8";
+            gBtn.style.border = "none";
         } else {
-            list.push({ date: todayIso, weight: Number(currentW) });
+            gBtn.style.background = "#1e293b";
+            gBtn.style.color = "#c084fc";
+            gBtn.style.border = "1px solid rgba(168,85,247,0.45)";
+            sBtn.style.background = "transparent";
+            sBtn.style.color = "#94a3b8";
+            sBtn.style.border = "none";
         }
-        localStorage.setItem("wv_weight_history", JSON.stringify(list.slice(-180)));
     }
-    return list;
+    renderWeightTerminal();
 }
 
 function setWeightTimeframe(days) {
-    _wtTimeframeDays = days;
-    document.querySelectorAll(".wt-tf-btn").forEach(btn => {
-        const active = Number(btn.dataset.days) === days;
-        btn.style.borderColor = active ? "#34d399" : "";
-        btn.style.color = active ? "#34d399" : "";
+    _wtDays = days;
+    document.querySelectorAll(".wt-tf-btn").forEach(b => {
+        const active = parseInt(b.dataset.days) === days;
+        b.style.borderColor = active ? "#34d399" : "#334155";
+        b.style.color = active ? "#34d399" : "#94a3b8";
     });
     renderWeightTerminal();
 }
 
-function submitNewWeightPoint() {
-    const inp = document.getElementById("wtNewWeightInput");
-    if (!inp || !inp.value) return;
-    const num = parseFloat(inp.value.replace(",", "."));
-    if (isNaN(num) || num < 35 || num > 250) return;
-    inp.value = "";
-    _saveWeightToSystem(num);
-}
+function _buildWeightSessions(baseWeight, dir) {
+    const raw = (typeof weightHistory !== "undefined" && Array.isArray(weightHistory)) ? weightHistory : [];
+    const daysCount = Math.min(_wtDays, 30);
+    const candles = [];
+    const trendStep = dir === "bulk" ? 0.018 : (dir === "cut" ? -0.022 : 0);
 
-async function _saveWeightToSystem(newWeight) {
-    const todayIso = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Moscow" });
-    const list = _getWeightHistoryList(null);
-    if (list.length && list[list.length - 1].date === todayIso) {
-        list[list.length - 1].weight = newWeight;
-    } else {
-        list.push({ date: todayIso, weight: newWeight });
-    }
-    localStorage.setItem("wv_weight_history", JSON.stringify(list.slice(-180)));
-    if (window._currentUserProfile) window._currentUserProfile.weight_kg = newWeight;
-    renderWeightTerminal();
-    try {
-        await apiFetch("/coach/ask", {
-            method: "POST",
-            body: JSON.stringify({ message: `мой вес ${newWeight}` })
+    for (let d = daysCount - 1; d >= 0; d--) {
+        const dayBase = Number((baseWeight - d * trendStep).toFixed(2));
+        const realForDay = raw.filter(item => {
+            if (!item || !item.date) return false;
+            const diff = Math.round((new Date() - new Date(item.date)) / 86400000);
+            return diff === d;
         });
-    } catch (_) {}
+
+        const slots = [
+            { label: "Утро", delta: -0.35 },
+            { label: "День", delta: 0.05 },
+            { label: "Полдник", delta: 0.25 },
+            { label: "Вечер", delta: 0.45 }
+        ];
+
+        slots.forEach((slot, idx) => {
+            const realPt = realForDay[idx];
+            const open = idx === 0
+                ? Number((dayBase + slot.delta - 0.08).toFixed(2))
+                : candles[candles.length - 1].close;
+            const close = realPt
+                ? Number(realPt.weight)
+                : Number((dayBase + slot.delta + Math.sin(d + idx) * 0.07).toFixed(2));
+            const high = Number((Math.max(open, close) + 0.14).toFixed(2));
+            const low = Number((Math.min(open, close) - 0.12).toFixed(2));
+            candles.push({ open, high, low, close, isLastDay: d === 0, slot: slot.label });
+        });
+    }
+    return candles;
 }
+
 function renderWeightTerminal() {
-    const prof = window._currentUserProfile || {};
-    const curW = Number(prof.weight_kg || 67.0);
-    const targetW = Number(prof.target_weight_kg || 67.0);
-    const allPts = _getWeightHistoryList(curW);
-    const pts = allPts.slice(-Math.max(2, _wtTimeframeDays));
-
-    const isCut = targetW < curW - 0.2;
-    const isBulk = targetW > curW + 0.2;
-
-    const baseLevel = Math.round(curW * 2) / 2;
-    let support = Number((baseLevel - 0.5).toFixed(1));
-    let resistance = Number((baseLevel + 0.5).toFixed(1));
-    let breakoutState = "В КОРИДОРЕ";
-
-    if (pts.length >= 2) {
-        const p1 = pts[pts.length - 2].weight;
-        const p2 = pts[pts.length - 1].weight;
-        if (isBulk && p1 >= resistance && p2 >= resistance) {
-            support = resistance;
-            resistance = Number((resistance + 0.5).toFixed(1));
-            breakoutState = "ПРОБОЙ ВВЕРХ ↗";
-        } else if (isCut && p1 <= support && p2 <= support) {
-            resistance = support;
-            support = Number((support - 0.5).toFixed(1));
-            breakoutState = "ПРОБОЙ ВНИЗ ↘";
-        }
-    }
-
-    const prevW = pts.length >= 2 ? pts[pts.length - 2].weight : curW;
-    const delta = Number((curW - prevW).toFixed(2));
-    const arrow = delta > 0.02 ? "↗" : (delta < -0.02 ? "↘" : (isBulk ? "↗" : (isCut ? "↘" : "→")));
-    const goodTrend = (isBulk && delta >= 0) || (isCut && delta <= 0) || (!isBulk && !isCut && Math.abs(delta) <= 0.3);
-    const trendColor = goodTrend ? "#34d399" : "#fbbf24";
-
-    let hintText = "";
-    if (isCut) {
-        const distKg = Math.max(0, Number((curW - support).toFixed(2)));
-        const kcalLeft = Math.round(distKg * 7700);
-        hintText = distKg > 0
-            ? `До пробоя поддержки ${support.toFixed(1)} кг осталось ${distKg.toFixed(1)} кг (≈ ${kcalLeft.toLocaleString("ru-RU")} ккал дефицита)`
-            : `Уровень ${support.toFixed(1)} кг пробит! Закрепись ещё 1 замером для сдвига коридора вниз.`;
-    } else if (isBulk) {
-        const distKg = Math.max(0, Number((resistance - curW).toFixed(2)));
-        const kcalLeft = Math.round(distKg * 7700);
-        hintText = distKg > 0
-            ? `До пробоя сопротивления ${resistance.toFixed(1)} кг осталось ${distKg.toFixed(1)} кг (≈ ${kcalLeft.toLocaleString("ru-RU")} ккал профицита)`
-            : `Уровень ${resistance.toFixed(1)} кг пробит! Закрепись ещё 1 замером — он станет новой поддержкой.`;
-    } else {
-        hintText = `Идеальное удержание в зелёном коридоре ${support.toFixed(1)} – ${resistance.toFixed(1)} кг (цель ${targetW.toFixed(1)} кг).`;
-    }
-
-    const elArrowBox = document.getElementById("heroTrendArrowBox");
-    if (elArrowBox) {
-        elArrowBox.textContent = arrow;
-        elArrowBox.style.color = trendColor;
-        elArrowBox.style.borderColor = trendColor;
-        elArrowBox.style.boxShadow = `0 0 12px ${goodTrend ? "rgba(52,211,153,0.4)" : "rgba(251,191,36,0.4)"}`;
-    }
-    const elCorridor = document.getElementById("heroCorridorRange");
-    const elCurInfo = document.getElementById("heroCurrentWeightInfo");
-    if (elCorridor) {
-        elCorridor.textContent = `${support.toFixed(1)} – ${resistance.toFixed(1)} кг`;
-        elCorridor.style.color = trendColor;
-    }
-    if (elCurInfo) {
-        elCurInfo.innerHTML = `Сейчас: <strong style="color:#f8fafc">${curW.toFixed(1)} кг</strong> · цель ${targetW.toFixed(1)} кг`;
-    }
-
-    const elBadge = document.getElementById("wtBreakoutBadge");
-    const elTicker = document.getElementById("wtTickerLine");
-    const elRes = document.getElementById("wtResistanceVal");
-    const elSup = document.getElementById("wtSupportVal");
-    const elCor = document.getElementById("wtCorridorVal");
-    const elProg = document.getElementById("wtEnergyProgressBox");
-    if (elBadge) { elBadge.textContent = breakoutState; elBadge.style.color = trendColor; }
-    if (elTicker) {
-        const sign = delta > 0 ? "+" : "";
-        elTicker.innerHTML = `${curW.toFixed(2)} кг <span style="color:${trendColor}">${arrow} ${sign}${delta.toFixed(2)}</span> · Цель: ${targetW.toFixed(1)} кг`;
-    }
-    if (elRes) elRes.textContent = `${resistance.toFixed(1)} кг`;
-    if (elSup) elSup.textContent = `${support.toFixed(1)} кг`;
-    if (elCor) elCor.textContent = `${support.toFixed(1)} ↔ ${resistance.toFixed(1)}`;
-    if (elProg) elProg.innerHTML = `<strong style="color:${trendColor}">${arrow} Статус уровня:</strong> ${hintText}`;
-
     const canvas = document.getElementById("weightTerminalCanvas");
     if (!canvas) return;
-    const parentW = canvas.parentElement ? canvas.parentElement.clientWidth - 16 : 0;
-    const w = Math.max(260, parentW || Math.min(410, window.innerWidth - 60));
-    const h = 230;
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = w * dpr;
-    canvas.height = h * dpr;
     const ctx = canvas.getContext("2d");
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    const W = Math.max(300, rect.width || 380);
+    const H = 240;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
     ctx.scale(dpr, dpr);
-    ctx.clearRect(0, 0, w, h);
 
-    const drawPts = pts.length >= 2 ? pts : [{ date: "Старт", weight: curW }, { date: "Сегодня", weight: curW }];
-    const vals = drawPts.map(p => p.weight).concat([support - 0.3, resistance + 0.3]);
-    const minV = Math.min(...vals);
-    const maxV = Math.max(...vals);
-    const padL = 12, padR = 48, padT = 18, padB = 24;
-    const plotW = w - padL - padR;
-    const plotH = h - padT - padB;
-    const yOf = v => padT + plotH - ((v - minV) / Math.max(0.2, maxV - minV)) * plotH;
+    const curW = _getLatestWeightValue();
+    const targetW = parseFloat(_wvProfile.targetWeight) || 70.0;
+    const dir = _wvGoalState.direction || "bulk";
 
-    ctx.strokeStyle = "rgba(148,163,184,0.08)";
-    ctx.lineWidth = 1;
-    for (let g = 0; g <= 4; g++) {
-        const gy = padT + (plotH / 4) * g;
-        ctx.beginPath(); ctx.moveTo(padL, gy); ctx.lineTo(padL + plotW, gy); ctx.stroke();
+    const stepSize = 1.5;
+    const support = Number((Math.floor(curW * 2) / 2 - 0.5).toFixed(1));
+    const resistance = Number((support + stepSize).toFixed(1));
+
+    const recentMorning = [curW];
+    const isBreakout = dir === "bulk"
+        ? (curW >= resistance && recentMorning.length >= 1)
+        : (dir === "cut" && curW <= support);
+
+    const badgeEl = document.getElementById("wtBreakoutBadge");
+    if (badgeEl) {
+        badgeEl.textContent = isBreakout ? "BREAKOUT ⚡" : "В КОРИДОРЕ";
+        badgeEl.style.background = isBreakout ? "rgba(168,85,247,0.28)" : "rgba(52,211,153,0.16)";
+        badgeEl.style.color = isBreakout ? "#e9d5ff" : "#34d399";
     }
 
-    const yRes = yOf(resistance);
-    const ySup = yOf(support);
-    ctx.fillStyle = "rgba(52, 211, 153, 0.13)";
-    ctx.fillRect(padL, Math.min(yRes, ySup), plotW, Math.abs(ySup - yRes));
+    const tickerEl = document.getElementById("wtTickerLine");
+    const arrow = dir === "bulk" ? "↗" : (dir === "cut" ? "↘" : "→");
+    if (tickerEl) tickerEl.textContent = `${curW.toFixed(2)} кг ${arrow} Цель: ${targetW.toFixed(1)} кг`;
 
-    ctx.save();
-    ctx.setLineDash([5, 4]);
+    const topLbl = document.getElementById("wtTopLevelLabel");
+    const botLbl = document.getElementById("wtBottomLevelLabel");
+    const resEl = document.getElementById("wtResistanceVal");
+    const supEl = document.getElementById("wtSupportVal");
+    const corEl = document.getElementById("wtCorridorVal");
+    if (topLbl) topLbl.textContent = dir === "cut" ? "Потолок удержания" : "Пробой вверх";
+    if (botLbl) botLbl.textContent = dir === "cut" ? "Пробой вниз" : "Поддержка";
+    if (resEl) resEl.textContent = `${resistance.toFixed(1)} кг`;
+    if (supEl) supEl.textContent = `${support.toFixed(1)} кг`;
+    if (corEl) corEl.textContent = `${support.toFixed(1)} ↔ ${resistance.toFixed(1)}`;
 
-    ctx.strokeStyle = "#38bdf8";
-    ctx.lineWidth = 1.4;
-    ctx.beginPath(); ctx.moveTo(padL, yRes); ctx.lineTo(padL + plotW, yRes); ctx.stroke();
-    ctx.fillStyle = "#38bdf8"; ctx.font = "bold 11px sans-serif";
-    ctx.fillText(resistance.toFixed(1), padL + plotW + 6, yRes + 4);
+    const candles = _buildWeightSessions(curW, dir);
+    const minVal = _wtViewMode === "goal"
+        ? Math.min(support - 0.5, targetW - 0.8)
+        : support - 0.45;
+    const maxVal = _wtViewMode === "goal"
+        ? Math.max(resistance + 0.5, targetW + 0.8)
+        : resistance + 0.45;
 
-    ctx.strokeStyle = "#fbbf24";
-    ctx.beginPath(); ctx.moveTo(padL, ySup); ctx.lineTo(padL + plotW, ySup); ctx.stroke();
-    ctx.fillStyle = "#fbbf24";
-    ctx.fillText(support.toFixed(1), padL + plotW + 6, ySup + 4);
-    ctx.restore();
+    const padL = 8, padR = 46, padT = 16, padB = 18;
+    const plotW = W - padL - padR;
+    const plotH = H - padT - padB;
+    const toY = v => padT + ((maxVal - v) / Math.max(0.1, maxVal - minVal)) * plotH;
 
-    const stepX = plotW / Math.max(1, drawPts.length - 1);
-    const grad = ctx.createLinearGradient(0, padT, 0, padT + plotH);
-    grad.addColorStop(0, "rgba(163, 230, 53, 0.36)");
-    grad.addColorStop(1, "rgba(163, 230, 53, 0.0)");
+    ctx.clearRect(0, 0, W, H);
 
-    ctx.beginPath();
-    drawPts.forEach((p, i) => {
-        const x = padL + i * stepX;
-        const y = yOf(p.weight);
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    });
-    ctx.strokeStyle = "#a3e635";
-    ctx.lineWidth = 2.6;
-    ctx.stroke();
-
-    ctx.lineTo(padL + (drawPts.length - 1) * stepX, padT + plotH);
-    ctx.lineTo(padL, padT + plotH);
-    ctx.closePath();
+    // Заливка зелёного коридора
+    const yRes = toY(resistance);
+    const ySup = toY(support);
+    const grad = ctx.createLinearGradient(0, yRes, 0, ySup);
+    grad.addColorStop(0, "rgba(52, 211, 153, 0.16)");
+    grad.addColorStop(0.5, "rgba(168, 85, 247, 0.08)");
+    grad.addColorStop(1, "rgba(52, 211, 153, 0.14)");
     ctx.fillStyle = grad;
-    ctx.fill();
+    ctx.fillRect(padL, yRes, plotW, Math.max(4, ySup - yRes));
 
-    drawPts.forEach((p, i) => {
-        const x = padL + i * stepX;
-        const y = yOf(p.weight);
+    // Пунктирные уровни
+    const drawLevel = (val, color) => {
+        const y = toY(val);
+        ctx.save();
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.2;
         ctx.beginPath();
-        ctx.arc(x, y, i === drawPts.length - 1 ? 5 : 3, 0, Math.PI * 2);
-        ctx.fillStyle = i === drawPts.length - 1 ? "#ffffff" : "#a3e635";
-        ctx.fill();
-        if (i === drawPts.length - 1) {
-            ctx.fillStyle = "#a3e635";
-            ctx.fillRect(padL + plotW + 4, y - 9, 42, 18);
-            ctx.fillStyle = "#080c15";
-            ctx.font = "bold 11px sans-serif";
-            ctx.fillText(p.weight.toFixed(1), padL + plotW + 8, y + 4);
-        }
-    });
+        ctx.moveTo(padL, y);
+        ctx.lineTo(W - padR, y);
+        ctx.stroke();
+        ctx.restore();
+        ctx.fillStyle = color;
+        ctx.font = "bold 10px sans-serif";
+        ctx.fillText(val.toFixed(1), W - padR + 5, y + 3);
+    };
+
+    drawLevel(resistance, "#34d399");
+    drawLevel(support, "#fbbf24");
+    if (_wtViewMode === "goal") drawLevel(targetW, "#c084fc");
+
+    // Отрисовка свечей или линии
+    const stepX = plotW / Math.max(1, candles.length);
+    if (_wtChartType === "candles") {
+        const bodyW = Math.max(2.5, Math.min(7, stepX * 0.62));
+        candles.forEach((c, i) => {
+            const x = padL + i * stepX + stepX / 2;
+            const isUp = c.close >= c.open;
+            const col = isUp ? "#34d399" : "#a855f7";
+            ctx.strokeStyle = col;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(x, toY(c.high));
+            ctx.lineTo(x, toY(c.low));
+            ctx.stroke();
+
+            const yTop = toY(Math.max(c.open, c.close));
+            const yBot = toY(Math.min(c.open, c.close));
+            ctx.fillStyle = col;
+            ctx.fillRect(x - bodyW / 2, yTop, bodyW, Math.max(2, yBot - yTop));
+        });
+    } else {
+        ctx.strokeStyle = "#34d399";
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        candles.forEach((c, i) => {
+            const x = padL + i * stepX + stepX / 2;
+            const y = toY(c.close);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+    }
+
+    // Плашка текущей цены справа
+    const yCur = toY(curW);
+    ctx.fillStyle = "#34d399";
+    ctx.beginPath();
+    ctx.roundRect(W - padR + 2, yCur - 9, 42, 18, 5);
+    ctx.fill();
+    ctx.fillStyle = "#050811";
+    ctx.font = "bold 10px sans-serif";
+    ctx.fillText(curW.toFixed(1), W - padR + 7, yCur + 3.5);
+
+    // Статус снизу
+    const progEl = document.getElementById("wtEnergyProgressBox");
+    if (progEl) {
+        const diffToBreak = dir === "cut"
+            ? Math.max(0, curW - support).toFixed(1)
+            : Math.max(0, resistance - curW).toFixed(1);
+        const kcalReserve = Math.round(parseFloat(diffToBreak) * 7700);
+        progEl.innerHTML = isBreakout
+            ? `⚡ <strong style="color:#e9d5ff;">ПРОБОЙ УРОВНЯ!</strong> Вес закрепился за границей коридора. После 2 утренних замеров этаж сдвинется выше.`
+            : `→ <strong style="color:#34d399;">Статус уровня:</strong> Удержание в коридоре ${support.toFixed(1)}–${resistance.toFixed(1)} кг (4 сессии/день). До пробоя: <strong>${diffToBreak} кг</strong> (~${kcalReserve} ккал профицита).`;
+    }
 }
-setTimeout(() => { if (typeof renderWeightTerminal === "function") renderWeightTerminal(); }, 500);
+
+async function submitNewWeightPoint() {
+    const inp = document.getElementById("wtNewWeightInput");
+    const val = parseFloat(inp?.value);
+    if (!val || val < 35 || val > 250) return;
+    _wvProfile.weight = val;
+    localStorage.setItem("wv_profile_v49", JSON.stringify(_wvProfile));
+    if (typeof weightHistory !== "undefined" && Array.isArray(weightHistory)) {
+            weightHistory.push({ date: new Date().toISOString(), weight: val });
+    }
+    inp.value = "";
+    renderWeightTerminal();
+    if (typeof apiFetch === "function") {
+        try {
+            await apiFetch("/weight", { method: "POST", body: JSON.stringify({ weight: val }) });
+        } catch (e) {}
+    }
+}
+
+function initV49Modules() {
+    _syncAvatarUI();
+    _syncGoalCardsUI();
+    renderWeightTerminal();
+}
+
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initV49Modules);
+} else {
+    initV49Modules();
+}
+
+
