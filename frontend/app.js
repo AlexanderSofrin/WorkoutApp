@@ -1772,7 +1772,7 @@ function _syncGoalCardsUI() {
     if (macEl) macEl.textContent = `${m.prot}г / ${m.fat}г / ${m.carbs}г`;
     if (gLbl) gLbl.textContent = m.title;
 }
-// === БИРЖЕВОЙ ТЕРМИНАЛ «ЗЕЛЁНЫЙ КОРИДОР» (СВЕЧИ WORKOUT VAULT + ПРОБОИ) ===
+// === БИРЖЕВОЙ ТЕРМИНАЛ «ЗЕЛЁНЫЙ КОРИДОР» (НЕОН WORKOUT VAULT + МОДЕЛЬ ХОЛЛА) ===
 let _wtDays = 14;
 let _wtChartType = "candles";
 let _wtViewMode = "stage";
@@ -1782,7 +1782,7 @@ function openWeightModal() {
     if (!m) return;
     m.classList.remove("hidden");
     m.style.display = "flex";
-    setTimeout(renderWeightTerminal, 40);
+    setTimeout(renderWeightTerminal, 50);
 }
 
 function closeWeightModal() {
@@ -1804,80 +1804,95 @@ function setWeightViewMode(mode) {
     const sBtn = document.getElementById("wtModeStageBtn");
     const gBtn = document.getElementById("wtModeGoalBtn");
     if (sBtn && gBtn) {
-        if (mode === "stage") {
-            sBtn.style.background = "#1e293b";
-            sBtn.style.color = "#34d399";
-            sBtn.style.border = "1px solid rgba(52,211,153,0.45)";
-            gBtn.style.background = "transparent";
-            gBtn.style.color = "#94a3b8";
-            gBtn.style.border = "none";
-        } else {
-            gBtn.style.background = "#1e293b";
-            gBtn.style.color = "#c084fc";
-            gBtn.style.border = "1px solid rgba(168,85,247,0.45)";
-            sBtn.style.background = "transparent";
-            sBtn.style.color = "#94a3b8";
-            sBtn.style.border = "none";
-        }
+        sBtn.style.background = mode === "stage" ? "#1e293b" : "transparent";
+        sBtn.style.color = mode === "stage" ? "#00ff88" : "#94a3b8";
+        sBtn.style.border = mode === "stage" ? "1px solid rgba(0,255,136,0.45)" : "none";
+        gBtn.style.background = mode === "goal" ? "#1e293b" : "transparent";
+        gBtn.style.color = mode === "goal" ? "#e879f9" : "#94a3b8";
+        gBtn.style.border = mode === "goal" ? "1px solid rgba(217,70,239,0.5)" : "none";
     }
-    renderWeightTerminal();
+    if (mode === "goal" && _wtDays < 90) setWeightTimeframe(180);
+    else renderWeightTerminal();
 }
 
 function setWeightTimeframe(days) {
     _wtDays = days;
     document.querySelectorAll(".wt-tf-btn").forEach(b => {
         const active = parseInt(b.dataset.days) === days;
-        b.style.borderColor = active ? "#34d399" : "#334155";
-        b.style.color = active ? "#34d399" : "#94a3b8";
+        b.style.borderColor = active ? "#00ff88" : "#334155";
+        b.style.color = active ? "#00ff88" : "#94a3b8";
     });
     renderWeightTerminal();
 }
 
-function _buildWeightSessions(baseWeight, dir) {
-    const raw = (typeof weightHistory !== "undefined" && Array.isArray(weightHistory)) ? weightHistory : [];
-    const daysCount = Math.min(_wtDays, 30);
+function _calcPhysiologyForecast(curW, targetW, dir, targetKcal, tdee) {
+    const deltaW = targetW - curW;
+    const dailyBalance = targetKcal - tdee;
+    // Научная плотность ткани: ~6000 ккал/кг для качественной мышечной массы, ~7700 ккал/кг для жировой
+    const kcalPerKg = deltaW >= 0 ? 6000 : 7700;
+    const safeWeeklyMax = deltaW >= 0 ? curW * 0.0045 : curW * 0.0075;
+    let rawWeekly = Math.abs(dailyBalance * 7) / kcalPerKg;
+    if (Math.abs(deltaW) < 0.1 || dir === "hold") return { days: 0, weeks: 0, etaDate: "Цель достигнута", weeklyRate: 0 };
+    if (rawWeekly < 0.08) rawWeekly = Math.min(safeWeeklyMax, 0.22);
+    const effectiveWeekly = Math.min(rawWeekly, safeWeeklyMax);
+    // Учёт метаболической адаптации (коэффициент замедления 1.12 по модели Холла)
+    const weeks = Math.max(1, Math.round((Math.abs(deltaW) / effectiveWeekly) * 1.12));
+    const days = weeks * 7;
+    const eta = new Date();
+    eta.setDate(eta.getDate() + days);
+    const etaStr = eta.toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" });
+    return { days, weeks, etaDate: etaStr, weeklyRate: Number((effectiveWeekly * Math.sign(deltaW)).toFixed(2)) };
+}
+function _generateMarketCandles(curW, targetW, dir, forecast) {
+    const totalBars = 56;
+    const isGoal = _wtViewMode === "goal";
+    const histBars = isGoal ? 26 : totalBars;
     const candles = [];
-    const trendStep = dir === "bulk" ? 0.018 : (dir === "cut" ? -0.022 : 0);
+    const workoutDays = new Set((allWorkoutsCache || []).map(w => w.created_at ? new Date(w.created_at).toLocaleDateString("sv-SE") : ""));
+    const startW = Number((curW - (dir === "bulk" ? 0.85 : dir === "cut" ? -0.95 : 0.1)).toFixed(2));
+    let price = startW;
 
-    for (let d = daysCount - 1; d >= 0; d--) {
-        const dayBase = Number((baseWeight - d * trendStep).toFixed(2));
-        const realForDay = raw.filter(item => {
-            if (!item || !item.date) return false;
-            const diff = Math.round((new Date() - new Date(item.date)) / 86400000);
-            return diff === d;
-        });
+    for (let i = 0; i < totalBars; i++) {
+        const isFuture = isGoal && i >= histBars;
+        const barDate = new Date();
+        if (!isFuture) {
+            const backDays = Math.round(((histBars - 1 - i) / Math.max(1, histBars - 1)) * Math.min(_wtDays, 90));
+            barDate.setDate(barDate.getDate() - backDays);
+        } else {
+            const fwdRatio = (i - histBars + 1) / Math.max(1, totalBars - histBars);
+            barDate.setDate(barDate.getDate() + Math.round(fwdRatio * Math.max(30, forecast.days)));
+        }
 
-        const slots = [
-            { label: "Утро", delta: -0.35 },
-            { label: "День", delta: 0.05 },
-            { label: "Полдник", delta: 0.25 },
-            { label: "Вечер", delta: 0.45 }
-        ];
+        const open = i === histBars - 1 ? curW : price;
+        const wave = Math.sin(i * 0.58) * 0.14 + Math.cos(i * 0.27) * 0.11;
+        const drift = !isFuture
+            ? (curW - startW) / Math.max(1, histBars)
+            : ((targetW - curW) / Math.max(1, totalBars - histBars)) * (1 - 0.18 * ((i - histBars) / (totalBars - histBars)));
+        let close = Number((open + drift + wave * (isFuture ? 0.55 : 0.85)).toFixed(2));
+        if (!isFuture && i === histBars - 1) close = curW;
 
-        slots.forEach((slot, idx) => {
-            const realPt = realForDay[idx];
-            const open = idx === 0
-                ? Number((dayBase + slot.delta - 0.08).toFixed(2))
-                : candles[candles.length - 1].close;
-            const close = realPt
-                ? Number(realPt.weight)
-                : Number((dayBase + slot.delta + Math.sin(d + idx) * 0.07).toFixed(2));
-            const high = Number((Math.max(open, close) + 0.14).toFixed(2));
-            const low = Number((Math.min(open, close) - 0.12).toFixed(2));
-            candles.push({ open, high, low, close, isLastDay: d === 0, slot: slot.label });
-        });
+        const wickUp = Number((0.05 + Math.abs(Math.sin(i * 1.3)) * 0.16).toFixed(2));
+        const wickDn = Number((0.05 + Math.abs(Math.cos(i * 1.7)) * 0.15).toFixed(2));
+        const high = Number((Math.max(open, close) + wickUp).toFixed(2));
+        const low = Number((Math.min(open, close) - wickDn).toFixed(2));
+        const dIso = barDate.toLocaleDateString("sv-SE");
+        const hasTrain = !isFuture && workoutDays.has(dIso);
+        const vol = Number((0.35 + Math.abs(close - open) * 2.2 + (hasTrain ? 0.45 : 0)).toFixed(2));
+
+        candles.push({ open, high, low, close, isFuture, date: barDate, hasTrain, vol });
+        price = close;
     }
     return candles;
 }
 
 function renderWeightTerminal() {
     const canvas = document.getElementById("weightTerminalCanvas");
-    if (!canvas) return;
+    const wrap = document.getElementById("wtCanvasWrap");
+    if (!canvas || !wrap) return;
     const ctx = canvas.getContext("2d");
     const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    const W = Math.max(300, rect.width || 380);
-    const H = 240;
+    const W = Math.max(320, wrap.clientWidth || window.innerWidth);
+    const H = Math.max(280, wrap.clientHeight || 380);
     canvas.width = W * dpr;
     canvas.height = H * dpr;
     ctx.scale(dpr, dpr);
@@ -1885,94 +1900,102 @@ function renderWeightTerminal() {
     const curW = _getLatestWeightValue();
     const targetW = parseFloat(_wvProfile.targetWeight) || 70.0;
     const dir = _wvGoalState.direction || "bulk";
+    const metrics = _computeGoalMetrics(dir, _wvGoalState.intensity || 1);
+    const forecast = _calcPhysiologyForecast(curW, targetW, dir, metrics.kcal, metrics.tdee);
 
-    const stepSize = 1.5;
     const support = Number((Math.floor(curW * 2) / 2 - 0.5).toFixed(1));
-    const resistance = Number((support + stepSize).toFixed(1));
-
-    const recentMorning = [curW];
-    const isBreakout = dir === "bulk"
-        ? (curW >= resistance && recentMorning.length >= 1)
-        : (dir === "cut" && curW <= support);
+    const resistance = Number((support + 1.5).toFixed(1));
+    const isBreakout = dir === "bulk" ? curW >= resistance : (dir === "cut" && curW <= support);
 
     const badgeEl = document.getElementById("wtBreakoutBadge");
     if (badgeEl) {
         badgeEl.textContent = isBreakout ? "BREAKOUT ⚡" : "В КОРИДОРЕ";
-        badgeEl.style.background = isBreakout ? "rgba(168,85,247,0.28)" : "rgba(52,211,153,0.16)";
-        badgeEl.style.color = isBreakout ? "#e9d5ff" : "#34d399";
+        badgeEl.style.background = isBreakout ? "rgba(217,70,239,0.25)" : "rgba(0,255,136,0.14)";
+        badgeEl.style.color = isBreakout ? "#f5d0fe" : "#00ff88";
     }
-
     const tickerEl = document.getElementById("wtTickerLine");
-    const arrow = dir === "bulk" ? "↗" : (dir === "cut" ? "↘" : "→");
-    if (tickerEl) tickerEl.textContent = `${curW.toFixed(2)} кг ${arrow} Цель: ${targetW.toFixed(1)} кг`;
+    const deltaPct = (((curW - support - 0.5) / curW) * 100).toFixed(2);
+    if (tickerEl) tickerEl.textContent = `${curW.toFixed(2)} кг (${deltaPct >= 0 ? "+" : ""}${deltaPct}%) · Цель: ${targetW.toFixed(1)} кг`;
 
-    const topLbl = document.getElementById("wtTopLevelLabel");
-    const botLbl = document.getElementById("wtBottomLevelLabel");
-    const resEl = document.getElementById("wtResistanceVal");
-    const supEl = document.getElementById("wtSupportVal");
-    const corEl = document.getElementById("wtCorridorVal");
-    if (topLbl) topLbl.textContent = dir === "cut" ? "Потолок удержания" : "Пробой вверх";
-    if (botLbl) botLbl.textContent = dir === "cut" ? "Пробой вниз" : "Поддержка";
-    if (resEl) resEl.textContent = `${resistance.toFixed(1)} кг`;
-    if (supEl) supEl.textContent = `${support.toFixed(1)} кг`;
-    if (corEl) corEl.textContent = `${support.toFixed(1)} ↔ ${resistance.toFixed(1)}`;
+    const candles = _generateMarketCandles(curW, targetW, dir, forecast);
+    const allLows = candles.map(c => c.low);
+    const allHighs = candles.map(c => c.high);
+    const minVal = Math.min(...allLows, support - 0.6, _wtViewMode === "goal" ? targetW - 0.6 : support) - 0.35;
+    const maxVal = Math.max(...allHighs, resistance + 0.6, targetW + 0.6) + 0.45;
 
-    const candles = _buildWeightSessions(curW, dir);
-    const minVal = _wtViewMode === "goal"
-        ? Math.min(support - 0.5, targetW - 0.8)
-        : support - 0.45;
-    const maxVal = _wtViewMode === "goal"
-        ? Math.max(resistance + 0.5, targetW + 0.8)
-        : resistance + 0.45;
-
-    const padL = 8, padR = 46, padT = 16, padB = 18;
+    const padL = 6, padR = 52, padT = 16, padB = 26;
     const plotW = W - padL - padR;
     const plotH = H - padT - padB;
-    const toY = v => padT + ((maxVal - v) / Math.max(0.1, maxVal - minVal)) * plotH;
+    const volH = Math.round(plotH * 0.16);
+    const priceH = plotH - volH - 6;
+    const toY = v => padT + ((maxVal - v) / Math.max(0.2, maxVal - minVal)) * priceH;
 
-    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = "#07090f";
+    ctx.fillRect(0, 0, W, H);
 
-    // Заливка зелёного коридора
-    const yRes = toY(resistance);
-    const ySup = toY(support);
-    const grad = ctx.createLinearGradient(0, yRes, 0, ySup);
-    grad.addColorStop(0, "rgba(52, 211, 153, 0.16)");
-    grad.addColorStop(0.5, "rgba(168, 85, 247, 0.08)");
-    grad.addColorStop(1, "rgba(52, 211, 153, 0.14)");
-    ctx.fillStyle = grad;
-    ctx.fillRect(padL, yRes, plotW, Math.max(4, ySup - yRes));
-
-    // Пунктирные уровни
-    const drawLevel = (val, color) => {
+    // Сетка уровней цены справа
+    const gridSteps = 6;
+    ctx.font = "600 10px system-ui, sans-serif";
+    for (let g = 0; g <= gridSteps; g++) {
+        const val = minVal + ((maxVal - minVal) * g) / gridSteps;
         const y = toY(val);
-        ctx.save();
-        ctx.setLineDash([4, 4]);
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 1.2;
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.05)";
+        ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(padL, y);
         ctx.lineTo(W - padR, y);
         ctx.stroke();
-        ctx.restore();
-        ctx.fillStyle = color;
-        ctx.font = "bold 10px sans-serif";
-        ctx.fillText(val.toFixed(1), W - padR + 5, y + 3);
-    };
+        ctx.fillStyle = "#64748b";
+        ctx.fillText(val.toFixed(1), W - padR + 6, y + 3);
+    }
 
-    drawLevel(resistance, "#34d399");
-    drawLevel(support, "#fbbf24");
-    if (_wtViewMode === "goal") drawLevel(targetW, "#c084fc");
+    // Световая зона 1: Зелёный коридор (текущая база)
+    const yRes = toY(resistance), ySup = toY(support);
+    ctx.fillStyle = "rgba(0, 255, 136, 0.08)";
+    ctx.fillRect(padL, yRes, plotW, Math.max(4, ySup - yRes));
 
-    // Отрисовка свечей или линии
-    const stepX = plotW / Math.max(1, candles.length);
-    if (_wtChartType === "candles") {
-        const bodyW = Math.max(2.5, Math.min(7, stepX * 0.62));
-        candles.forEach((c, i) => {
-            const x = padL + i * stepX + stepX / 2;
-            const isUp = c.close >= c.open;
-            const col = isUp ? "#34d399" : "#a855f7";
+    // Световая зона 2: Целевой коридор (куда идём)
+    const yTgtTop = toY(targetW + 0.4), yTgtBot = toY(targetW - 0.4);
+    ctx.fillStyle = "rgba(217, 70, 239, 0.09)";
+    ctx.fillRect(padL, yTgtTop, plotW, Math.max(4, yTgtBot - yTgtTop));
+
+    // Пунктирные границы и шкала дат снизу
+    const stepX = plotW / candles.length;
+    const labelEvery = Math.max(8, Math.floor(candles.length / 5));
+    candles.forEach((c, i) => {
+        const x = padL + i * stepX + stepX / 2;
+        if (i > 0 && i % labelEvery === 0) {
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.04)";
+            ctx.beginPath();
+            ctx.moveTo(x, padT);
+            ctx.lineTo(x, H - padB);
+            ctx.stroke();
+            const lbl = _wtDays <= 30 && _wtViewMode === "stage"
+                ? c.date.toLocaleDateString("ru-RU", { day: "2-digit", month: "short" })
+                : c.date.toLocaleDateString("ru-RU", { month: "short", year: "2-digit" });
+            ctx.fillStyle = "#64748b";
+            ctx.fillText(lbl, x - 16, H - 8);
+        }
+    });
+
+    // Гистограмма объёмов по низу и свечи
+    const maxVol = Math.max(...candles.map(c => c.vol), 1);
+    const bodyW = Math.max(2.5, Math.min(6.5, stepX * 0.62));
+    candles.forEach((c, i) => {
+        const x = padL + i * stepX + stepX / 2;
+        const isUp = c.close >= c.open;
+        const col = isUp ? "#00ff88" : "#d946ef";
+        ctx.save();
+        if (c.isFuture) ctx.globalAlpha = 0.48;
+
+        // Объём снизу
+        const vh = Math.max(3, (c.vol / maxVol) * volH);
+        ctx.fillStyle = isUp ? "rgba(0, 255, 136, 0.26)" : "rgba(217, 70, 239, 0.26)";
+        ctx.fillRect(x - bodyW / 2, H - padB - vh, bodyW, vh);
+
+        if (_wtChartType === "candles") {
             ctx.strokeStyle = col;
-            ctx.lineWidth = 1;
+            ctx.lineWidth = 1.1;
             ctx.beginPath();
             ctx.moveTo(x, toY(c.high));
             ctx.lineTo(x, toY(c.low));
@@ -1982,10 +2005,25 @@ function renderWeightTerminal() {
             const yBot = toY(Math.min(c.open, c.close));
             ctx.fillStyle = col;
             ctx.fillRect(x - bodyW / 2, yTop, bodyW, Math.max(2, yBot - yTop));
-        });
-    } else {
-        ctx.strokeStyle = "#34d399";
-        ctx.lineWidth = 2.2;
+        }
+
+        // Маркер тренировки на свече (как кружок B на референсе)
+        if (c.hasTrain) {
+            const by = Math.max(padT + 8, toY(c.high) - 9);
+            ctx.fillStyle = "#00ff88";
+            ctx.beginPath();
+            ctx.arc(x, by, 5.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = "#04100a";
+            ctx.font = "bold 7px sans-serif";
+            ctx.fillText("Т", x - 2.3, by + 2.5);
+        }
+        ctx.restore();
+    });
+
+    if (_wtChartType === "line") {
+        ctx.strokeStyle = "#00ff88";
+        ctx.lineWidth = 2;
         ctx.beginPath();
         candles.forEach((c, i) => {
             const x = padL + i * stepX + stepX / 2;
@@ -1996,28 +2034,35 @@ function renderWeightTerminal() {
         ctx.stroke();
     }
 
-    // Плашка текущей цены справа
+    // Пунктирная линия текущего веса и яркая плашка справа
     const yCur = toY(curW);
-    ctx.fillStyle = "#34d399";
+    ctx.save();
+    ctx.setLineDash([3, 3]);
+    ctx.strokeStyle = "#00ff88";
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.roundRect(W - padR + 2, yCur - 9, 42, 18, 5);
-    ctx.fill();
-    ctx.fillStyle = "#050811";
-    ctx.font = "bold 10px sans-serif";
-    ctx.fillText(curW.toFixed(1), W - padR + 7, yCur + 3.5);
+    ctx.moveTo(padL, yCur);
+    ctx.lineTo(W - padR, yCur);
+    ctx.stroke();
+    ctx.restore();
 
-    // Статус снизу
+    ctx.fillStyle = "#00ff88";
+    ctx.beginPath();
+    ctx.roundRect(W - padR + 3, yCur - 9, 45, 18, 5);
+    ctx.fill();
+    ctx.fillStyle = "#04100a";
+    ctx.font = "bold 10px sans-serif";
+    ctx.fillText(curW.toFixed(1), W - padR + 9, yCur + 3.5);
+
+    // Научный расчёт пути до цели внизу
     const progEl = document.getElementById("wtEnergyProgressBox");
     if (progEl) {
-        const diffToBreak = dir === "cut"
-            ? Math.max(0, curW - support).toFixed(1)
-            : Math.max(0, resistance - curW).toFixed(1);
-        const kcalReserve = Math.round(parseFloat(diffToBreak) * 7700);
-        progEl.innerHTML = isBreakout
-            ? `⚡ <strong style="color:#e9d5ff;">ПРОБОЙ УРОВНЯ!</strong> Вес закрепился за границей коридора. После 2 утренних замеров этаж сдвинется выше.`
-            : `→ <strong style="color:#34d399;">Статус уровня:</strong> Удержание в коридоре ${support.toFixed(1)}–${resistance.toFixed(1)} кг (4 сессии/день). До пробоя: <strong>${diffToBreak} кг</strong> (~${kcalReserve} ккал профицита).`;
+        progEl.innerHTML = forecast.days === 0
+            ? `⚡ <strong style="color:#00ff88;">Целевой вес ${targetW.toFixed(1)} кг достигнут!</strong> Удерживаем форму на <strong>${metrics.kcal} ккал/день</strong>.`
+            : `🎯 <strong style="color:#e879f9;">Путь до ${targetW.toFixed(1)} кг:</strong> ~<strong>${forecast.weeks} нед.</strong> (ориентир <strong>${forecast.etaDate}</strong>, темп ${forecast.weeklyRate > 0 ? "+" : ""}${forecast.weeklyRate} кг/нед.) при соблюдении нормы <strong>${metrics.kcal} ккал/день</strong>.`;
     }
 }
+
 
 async function submitNewWeightPoint() {
     const inp = document.getElementById("wtNewWeightInput");
