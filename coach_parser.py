@@ -102,16 +102,17 @@ def parse_batch_workout_log(text: str) -> Optional[list]:
 def parse_workout_command(text: str) -> Optional[dict]:
     """
     Разбирает реальную живую диктовку выполненных подходов (одна строка).
-    Игнорирует длинные отчёты и разговорные фразы обсуждения плана.
+    Поддерживает серии вида: 'первый 14, второй 14, третий 16, четвёртый 18, пятый 12'.
     """
-    clean = text.strip()
+    clean = re.sub(r"\b(?:э-э+|ээ+|мм+|ну|короче|смотри|слушай|типа|как\s+бы)\b", " ", text.strip(), flags=re.IGNORECASE)
+    clean = re.sub(r"\s+", " ", clean).strip()
     lower = clean.lower()
 
-    if "\n" in clean or len(clean) > 140:
+    if "\n" in clean or len(clean) > 320:
         return None
 
     planning_phrases = (
-        "составь", "составим", "план", "тренировку", "давай сделаем",
+        "составь", "составим", "план", "давай сделаем",
         "давай так", "что делать", "посоветуй", "подбери", "какие упражнения", "?"
     )
     if any(p in lower for p in planning_phrases):
@@ -119,7 +120,7 @@ def parse_workout_command(text: str) -> Optional[dict]:
 
     has_sets_pattern = bool(re.search(r"\d+\s*(?:по|x|х|\*)\s*\d+", lower)) or bool(re.search(r":\s*\d+", lower))
     has_reps_num = bool(re.search(r"(?:на\s+\d+|\b\d+\s*(?:раз|повтор))", lower))
-    triggers = ("запиши", "добавь", "сохрани", "сделал", "выполнил", "пожал", "присел", "подтянулся", "подход")
+    triggers = ("запиши", "добавь", "сохрани", "сделал", "выполнил", "пожал", "присел", "подтянулся", "подтягивался", "подход")
 
     if not (has_sets_pattern or has_reps_num or any(re.search(rf"\b{t}\b", lower) for t in triggers)):
         return None
@@ -152,14 +153,14 @@ def parse_workout_command(text: str) -> Optional[dict]:
         normalized = re.sub(rf"\b{word}\b", digit, normalized)
 
     name_part = re.sub(
-        r"^(?:так\s+|ну\s+|короче\s+|давай\s+|делаем\s+|запиши\s+|добавь\s+|сохрани\s+|я\s+сделал\s+|сделал\s+|выполнил\s+|ещё\s+|еще\s+|сейчас\s+)+",
+        r"^(?:так\s+|давай\s+|делаем\s+|запиши\s+|добавь\s+|сохрани\s+|я\s+сегодня\s+|сегодня\s+|я\s+сделал\s+|сделал\s+|выполнил\s+|ещё\s+|еще\s+|сейчас\s+)+",
         "",
         clean,
         flags=re.IGNORECASE
     )
     name_part = re.sub(r"^[1-6]\s*(?:подход)?\s*(?:на\s+[а-яё]+\s*)?[,.-]?\s*", "", name_part, flags=re.IGNORECASE)
     name_part = re.split(
-        r"[:;]|\b\d+\s*(?:подход|по|повтор|раз|x|х|\*)|\b(?:один|два|три|четыре|пять|с\s+весом|вес|на\s+\d+)\b|\d+(?:[.,]\d+)?\s*кг",
+        r"[:;]|\b\d+\s*(?:подход|по|повтор|раз|x|х|\*)|\b(?:один|первый|первом|два|второй|втором|три|третий|третьем|четыре|четвёртый|четвертый|пять|пятый|шесть|шестой|с\s+весом|вес|на\s+\d+)\b|\d+(?:[.,]\d+)?\s*кг",
         name_part,
         maxsplit=1,
         flags=re.IGNORECASE
@@ -176,13 +177,12 @@ def parse_workout_command(text: str) -> Optional[dict]:
             entries.append({"sets": int(s_str), "reps": int(r_str), "weight": weight})
 
     ord_matches = re.findall(
-        r"(?:^|[,.;]\s*)([1-9])\s*(?:подход[ае]?\s*)?(?:на\s+|[-—:]\s*)?(\d{1,3})(?=\s*(?:[,.;]|повтор|раз|$))",
+        r"(?:^|[,.;]\s*|\bи\s+)([1-9])\s*(?:подход[ае]?\s*)?(?:на\s+|[-—:]\s*)?(\d{1,3})(?=\s*(?:[,.;]|и\s+\d|повтор|раз|$))",
         normalized
     )
-    for _, r_str in ord_matches:
-        reps_val = int(r_str)
-        if not any(e["reps"] == reps_val and e["sets"] == 1 for e in entries):
-            entries.append({"sets": 1, "reps": reps_val, "weight": weight})
+    if ord_matches:
+        for _, r_str in ord_matches:
+            entries.append({"sets": 1, "reps": int(r_str), "weight": weight})
 
     if not entries and ":" in normalized:
         after_colon = normalized.split(":", 1)[1]
@@ -192,7 +192,7 @@ def parse_workout_command(text: str) -> Optional[dict]:
 
     if not entries:
         single_match = re.search(
-            r"(?:на\s+)?(\d{1,3})\s*(?:повтор\w*|раз\b)|(?:сделал|пожал|присел|подтянулся|на)\s+(\d{1,3})\b",
+            r"(?:на\s+)?(\d{1,3})\s*(?:повтор\w*|раз\b)|(?:сделал|пожал|присел|подтянулся|подтягивался|на)\s+(\d{1,3})\b",
             normalized
         )
         if single_match:
@@ -217,3 +217,4 @@ def parse_workout_command(text: str) -> Optional[dict]:
             "tonnage_kg": total_tonnage
         }
     }
+

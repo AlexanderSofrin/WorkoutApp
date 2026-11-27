@@ -1551,6 +1551,123 @@ if (typeof renderGifLibrary === "function") renderGifLibrary();
         });
     };
 })();
+// === УПРАВЛЕНИЕ ЦЕЛЬЮ, АНКЕТОЙ И ПРОФИЛЕМ (v50) ===
+let _wvProfile = JSON.parse(localStorage.getItem("wv_profile_v49") || '{"age":41,"height":176,"weight":67.0,"targetWeight":70.0,"activity":1.55}');
+let _wvGoalState = JSON.parse(localStorage.getItem("wv_goal_state") || '{"direction":"bulk","intensity":1,"prevDirection":"bulk","targetKcal":2541}');
+
+function _getLatestWeightValue() {
+    if (typeof weightHistory !== "undefined" && Array.isArray(weightHistory) && weightHistory.length > 0) {
+        const last = weightHistory[weightHistory.length - 1];
+        if (last && last.weight) return parseFloat(last.weight);
+    }
+    return parseFloat(_wvProfile.weight) || (currentNutritionPlan?.green_corridor?.current_weight_kg) || 67.0;
+}
+
+function _calcMaintenanceTdee() {
+    const w = _getLatestWeightValue();
+    const h = parseFloat(_wvProfile.height) || 176;
+    const age = parseInt(_wvProfile.age) || 41;
+    const act = parseFloat(_wvProfile.activity) || 1.55;
+    const bmr = 10 * w + 6.25 * h - 5 * age + 5;
+    return Math.round(bmr * act);
+}
+
+function openProfileModal() {
+    const m = document.getElementById("profileCenterModal");
+    if (!m) return;
+    document.getElementById("profAgeInput").value = _wvProfile.age || 41;
+    document.getElementById("profHeightInput").value = _wvProfile.height || 176;
+    document.getElementById("profTargetWeightInput").value = _wvProfile.targetWeight || 70.0;
+    document.getElementById("profActivitySelect").value = String(_wvProfile.activity || 1.55);
+    m.classList.remove("hidden");
+    m.style.display = "flex";
+}
+
+function closeProfileModal() {
+    const m = document.getElementById("profileCenterModal");
+    if (!m) return;
+    m.classList.add("hidden");
+    m.style.display = "none";
+}
+function _syncAvatarUI() {
+    const savedImg = localStorage.getItem("wv_avatar_data");
+    const hdrImg = document.getElementById("headerAvatarImg");
+    const hdrInit = document.getElementById("headerAvatarInitials");
+    const modPrev = document.getElementById("modalAvatarPreview");
+    if (savedImg) {
+        if (hdrImg) { hdrImg.src = savedImg; hdrImg.classList.remove("hidden"); }
+        if (hdrInit) hdrInit.classList.add("hidden");
+        if (modPrev) modPrev.innerHTML = `<img src="${savedImg}" style="width:100%;height:100%;object-fit:cover;">`;
+    }
+}
+
+function handleAvatarUpload(input) {
+    const file = input && input.files ? input.files[0] : null;
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        localStorage.setItem("wv_avatar_data", e.target.result);
+        _syncAvatarUI();
+    };
+    reader.readAsDataURL(file);
+}
+
+function saveProfileCenter() {
+    _wvProfile.age = parseInt(document.getElementById("profAgeInput")?.value) || 41;
+    _wvProfile.height = parseFloat(document.getElementById("profHeightInput")?.value) || 176;
+    _wvProfile.targetWeight = parseFloat(document.getElementById("profTargetWeightInput")?.value) || 70.0;
+    _wvProfile.activity = parseFloat(document.getElementById("profActivitySelect")?.value) || 1.55;
+    localStorage.setItem("wv_profile_v49", JSON.stringify(_wvProfile));
+    _syncGoalCardsUI();
+    closeProfileModal();
+}
+
+function changeAppLanguage(lang) {
+    localStorage.setItem("wv_lang", lang);
+}
+
+function openGoalModal() {
+    const m = document.getElementById("goalSelectorModal");
+    if (!m) return;
+    const slider = document.getElementById("goalIntensitySlider");
+    if (slider) slider.value = _wvGoalState.intensity || 1;
+    selectGoalDirection(_wvGoalState.direction || "bulk");
+    m.classList.remove("hidden");
+    m.style.display = "flex";
+}
+
+function closeGoalModal() {
+    const m = document.getElementById("goalSelectorModal");
+    if (!m) return;
+    m.classList.add("hidden");
+    m.style.display = "none";
+}
+
+function selectGoalDirection(dir) {
+    _wvGoalState.direction = dir;
+    const map = { cut: "goalDirCutBtn", hold: "goalDirHoldBtn", bulk: "goalDirBulkBtn" };
+    Object.entries(map).forEach(([k, id]) => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        const active = k === dir;
+        btn.style.borderColor = active ? "#a855f7" : "#334155";
+        btn.style.background = active ? "rgba(168,85,247,0.2)" : "#0f172a";
+        btn.style.color = active ? "#f3e8ff" : "#cbd5e1";
+    });
+    const sliderSec = document.getElementById("goalSliderSection");
+    if (sliderSec) sliderSec.style.display = dir === "hold" ? "none" : "block";
+    const hint = document.getElementById("goalTransitionHint");
+    if (hint) {
+        if (_wvGoalState.prevDirection === "cut" && dir === "bulk") {
+            hint.textContent = "💡 Переход после сушки: начни с 1-й ступени (+8%) на 10–14 дней, чтобы избежать резкого отката воды.";
+            hint.classList.remove("hidden");
+        } else {
+            hint.classList.add("hidden");
+        }
+    }
+    updateGoalPreview();
+}
+
 function _computeGoalMetrics(dir, step) {
     const tdee = _calcMaintenanceTdee();
     const curW = _getLatestWeightValue();

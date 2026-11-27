@@ -423,7 +423,7 @@ def _build_user_context(user: User, db: Session, target_date: str | None = None)
     protect_str = ", ".join(protections) if protections else "стандартный контроль техники"
 
     profile_line = (
-        f"Профиль: вес {user.weight_kg or '?'} кг (цель {user.target_weight_kg or '?'} кг), "
+        f"Профиль: возраст {user.age or 41} лет, вес {user.weight_kg or '?'} кг (цель {user.target_weight_kg or '?'} кг), "
         f"рост {user.height_cm or '?'} см, цель — {goal_text}, график работы {user.work_schedule or '2/2'}, "
         f"стаж {user.experience_years or 1.0} г. Беречь: {protect_str}."
     )
@@ -650,7 +650,8 @@ def _has_explicit_record_intent(low_msg: str, user_id: int, check_prev: bool = T
     want_plan = any(p in low_msg for p in ("в план", "в тренировочный план", "запланируй", "поставь в план", "добавь в план"))
     want_notebook = any(
         p in low_msg for p in (
-            "в блокнот", "в журнал", "в дневник", "в историю", "в календарь",
+            "в блокнот", "в журнал", "в дневник", "в историю", "в календарь", "в базу",
+            "занеси в базу", "запиши в базу", "сохрани в базу", "в бд",
             "запиши тренировку", "занеси тренировку", "запиши её", "занеси её",
             "запиши это", "занеси это", "сохрани тренировку", "зафиксируй тренировку",
             "запиши всю", "занеси всю", "записывай в блокнот"
@@ -662,9 +663,10 @@ def _has_explicit_record_intent(low_msg: str, user_id: int, check_prev: bool = T
             last_user = prev_msgs[-1]
             if any(p in last_user for p in ("в план", "запланируй")):
                 want_plan = True
-            elif any(p in last_user for p in ("в блокнот", "в журнал", "в дневник", "запиши", "занес", "сохрани")):
+            elif any(p in last_user for p in ("в блокнот", "в журнал", "в дневник", "в базу", "запиши", "занес", "сохрани")):
                 want_notebook = True
     return want_plan, want_notebook
+
 
 def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn=None,
                          current_plan: Optional[list] = None, scheduled_plans: Optional[dict] = None) -> dict:
@@ -679,6 +681,16 @@ def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn
         return sched_res
 
     want_plan, want_notebook = _has_explicit_record_intent(low_msg, user.id, check_prev=True)
+    if any(p in low_msg for p in ("очисти черновик", "сбрось черновик", "удали черновик", "начни заново", "забудь черновик")):
+        _SESSION_DRAFT.pop(user.id, None)
+        _PENDING_PLANS.pop(user.id, None)
+        _CHAT_WINDOWS[user.id] = []
+        reply = f"Чистый лист, {first_name}! Черновик полностью очищен — диктуй новую тренировку."
+        return {
+            "reply": reply, "mode": "chat", "suggested_plan": None,
+            "target_date": target_date, "workout_entry": None, "updated_weight_kg": None
+        }
+
     batch_items = parse_batch_workout_log(clean_msg)
 
     # 0.2. Запрос показать накопленную за диалог тренировку ("выведи всю тренировку / что у нас получилось")
@@ -926,7 +938,7 @@ def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn
             "target_date": None
         }
 
-    # 3. Одиночное упражнение по ходу тренировки
+    # 3. Упражнение с одним или серией подходов по ходу тренировки
     parsed_single = parse_workout_command(clean_msg)
     if parsed_single and parsed_single.get("entries"):
         matched_name = _match_catalog_exercise(parsed_single["exercise_name"], db)
@@ -934,7 +946,7 @@ def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn
         first_e = parsed_single["entries"][0]
         _ACTIVE_EXERCISES[user.id] = {"name": matched_name, "weight": first_e.get("weight", 0)}
 
-        cur_plan, _ = _has_explicit_record_intent(low_msg, user.id, check_prev=False)
+        cur_plan, cur_notebook = _has_explicit_record_intent(low_msg, user.id, check_prev=False)
         if cur_plan:
             parts = [f"{e['sets']}×{e['reps']} ({e['weight']} кг)" for e in parsed_single["entries"]]
             summary = f"{matched_name}: " + ", ".join(parts)
@@ -942,12 +954,27 @@ def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn
             append_session_memory(user.id, "user", clean_msg)
             append_session_memory(user.id, "assistant", reply)
             return {
-                "reply": reply,
-                "mode": "live_set",
-                "workout_entry": parsed_single,
-                "updated_weight_kg": None,
-                "suggested_plan": None,
-                "target_date": target_date
+                "reply": reply, "mode": "live_set", "workout_entry": parsed_single,
+                "updated_weight_kg": None, "suggested_plan": None, "target_date": target_date
+            }
+
+        # Если пользователь сразу сказал «запиши в базу / в блокнот» вместе с упражнением
+        if cur_notebook:
+            new_items = [{
+                "exercise_name": matched_name,
+                "sets": int(e.get("sets") or 1),
+                "reps": int(e.get("reps") or 1),
+                "weight": float(e.get("weight") or 0),
+                "done": True
+            } for e in parsed_single["entries"]]
+            lines, total_sets, total_tonnage = _format_draft_lines(new_items)
+            compress_session_memory(user.id, f"Записано: {matched_name} ({total_sets} подх.)")
+            _SESSION_DRAFT.pop(user.id, None)
+            _PENDING_PLANS.pop(user.id, None)
+            reply = f"**Записал в базу, {first_name}!**\n\n" + "\n".join(lines)
+            return {
+                "reply": reply, "mode": "workout_logged", "suggested_plan": new_items,
+                "target_date": target_date, "workout_entry": None, "updated_weight_kg": None
             }
 
         sess_list = _SESSION_DRAFT.setdefault(user.id, [])
@@ -960,20 +987,21 @@ def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn
                 "done": True
             })
         _PENDING_PLANS[user.id] = {"items": list(sess_list), "target_date": target_date}
-        w_txt = f" ({first_e.get('weight', 0)} кг)" if first_e.get("weight", 0) > 0 else ""
+
+        reps_seq = ", ".join(str(e.get("reps", 1)) for e in parsed_single["entries"])
+        tot_r = sum(int(e.get("sets", 1)) * int(e.get("reps", 1)) for e in parsed_single["entries"])
+        w_val = float(first_e.get("weight", 0))
+        w_txt = f" · вес {w_val} кг" if w_val > 0 else ""
         reply = (
-            f"**Запомнил в текущую тренировку (#{len(sess_list)}): {matched_name} — {first_e.get('sets', 1)}×{first_e.get('reps', 1)}{w_txt}.**\n"
-            f"Продолжай в том же духе! Когда закончишь — скажи «выведи всю тренировку» или «запиши в блокнот»."
+            f"**Принято, {first_name}! {matched_name}:** {len(parsed_single['entries'])} подх. "
+            f"({reps_seq} = **{tot_r} повт.**{w_txt}).\n"
+            f"Добавил в черновик (всего позиций: {len(sess_list)}). Диктуй дальше или скажи **«занеси в базу»**."
         )
         append_session_memory(user.id, "user", clean_msg)
         append_session_memory(user.id, "assistant", reply)
         return {
-            "reply": reply,
-            "mode": "chat",
-            "workout_entry": None,
-            "updated_weight_kg": None,
-            "suggested_plan": None,
-            "target_date": None
+            "reply": reply, "mode": "chat", "workout_entry": None,
+            "updated_weight_kg": None, "suggested_plan": None, "target_date": None
         }
 
     # 4. Диалог с GigaChat-Max: живой характер напарника + спортивная физиология + контекст БД
@@ -1009,7 +1037,7 @@ def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn
         f"4. ДОЗИРОВАННАЯ ГЛУБИНА: на короткую реплику между подходами отвечай живо и компактно (3–5 строк). На разбор тренировки, самочувствия, питания или расхода калорий — давай размеренный, логичный разбор по полочкам. Не навязывай непрошеные программы на неделю, если о них не просили.\n"
         f"5. УЧЁТ КОНТЕКСТА И САМОЧУВСТВИЯ: всегда опирайся на реальный вес атлета, цель, график смен 2/2 и историю тренировок из БД. Если атлет отмечает усталость, недосып или лёгкую простуду — мягко снижай нагрузку на голову, сосуды и суставы, хвали за взвешенные решения.\n"
         f"6. ПОКАЗ ТРЕНИРОВКИ ЗА ДАТУ: если просят показать тренировку за конкретное число, выведи чистый список упражнений с подходами, повторениями, весом и общим тоннажем, а в конце дай короткий общий вывод.\n"
-        f"7. ГРАНИЦЫ КОМПЕТЕНЦИИ: ты отвечаешь ТОЛЬКО за спорт, тренировки, технику, питание, КБЖУ, режим дня, восстановление мышц/связок и спортивный настрой. На посторонние темы (юриспруденция, финансы, политика, код) тепло отвечай: «Извини, {first_name}, я твой персональный ИИ-тренер: помогаю с тренировками, прогрессией весов, питанием и восстановлением. В этом вопросе не подскажу, но по залу и режиму — всегда в строю!»\n"
+        f"7. ГРАНИЦЫ КОМПЕТЕНЦИИ: ты отвечаешь ТОЛЬКО за спорт, тренировки, технику, питание, КБЖУ, режим дня, восстановление мышц/связок и спортивный настрой. На посторонние темы (юриспруденция, финансы, политика, код) тепло отвечай: «Извини, {first_name}, я твой персональный ИИ-тренер: помогаю с тренировками, прогрессией весов, питанием и восстановлением. В этом вопросе не подскажу, но по залу и режиму — всегда в строю!», Никогда не переспрашивай то, что атлет уже сказал, и не задавай длинных анкетных вопросов — общайся как живой напарник в зале.\n"
         f"8. СОСТАВЛЕНИЕ И ПЛАНИРОВАНИЕ ТРЕНИРОВКИ (ТОЛЬКО КОГДА ЯВНО ПРОСЯТ СОСТАВИТЬ/ЗАПЛАНИРОВАТЬ): выведи нумерованный список в формате:\n"
         f"1. Название упражнения — 3 подхода × 12 повторений | Вес: 15 кг\n"
         f"И в конце спроси: «Добавить эту тренировку в план?»\n"
