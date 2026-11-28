@@ -202,6 +202,8 @@ def _fast_parse_live_copilot(user_id: int, message: str, db: Session, first_name
     """
     low = message.lower().strip()
     target_date = _extract_target_date(message)
+    if "?" in low or any(w in low for w in ("творог", "рис", "овсян", "каш", "калор", "ккал", "белк", "протеин", "сколько")):
+        return None
 
     # 1. Старт или переключение текущего упражнения во время тренировки
     m_start = re.search(
@@ -524,8 +526,25 @@ def _build_user_context(user: User, db: Session, target_date: str | None = None)
         nutrition_line = "Питание (свежие дни): " + "; ".join(n_parts) + weight_freshness_note
     else:
         nutrition_line = "Питание: логов КБЖУ за последние дни пока нет." + weight_freshness_note
+    rec_rows = (
+        db.query(Workout.exercise_name, func.max(Workout.weight), func.max(Workout.reps))
+        .filter(Workout.user_id == user.id)
+        .group_by(Workout.exercise_name)
+        .limit(8)
+        .all()
+    )
+    if rec_rows:
+        rec_parts = [
+            f"{r_name}: {f'{r_w} кг' if r_w else f'{r_r} повт.'}"
+            for r_name, r_w, r_r in rec_rows
+        ]
+        records_line = "Личные рекорды в базе: " + ", ".join(rec_parts) + "."
+    else:
+        records_line = ""
 
-    return f"{time_line}\n{profile_line}{specific_date_line}\n{workouts_line}\n{nutrition_line}"
+    return f"{time_line}\n{profile_line}{specific_date_line}\n{workouts_line}\n{records_line}\n{nutrition_line}"
+
+
 
 
 def _extract_all_dates(text: str) -> list:
@@ -694,6 +713,11 @@ def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn
     sched_res = _handle_schedule_dialog(user.id, clean_msg, scheduled_plans, first_name)
     if sched_res:
         return sched_res
+    # 0.1. Мгновенный перехват диктовки сетов во время тренировки (Live Copilot)
+    live_res = _fast_parse_live_copilot(user.id, clean_msg, db, first_name)
+    if live_res:
+        return live_res
+
 
     want_plan, want_notebook = _has_explicit_record_intent(low_msg, user.id, check_prev=True)
     if any(p in low_msg for p in ("очисти черновик", "сбрось черновик", "удали черновик", "начни заново", "забудь черновик")):

@@ -1102,8 +1102,9 @@ def ask_personal_ai_coach(
                 custom_dt = parsed_d.replace(hour=now_msk.hour, minute=now_msk.minute, second=now_msk.second)
             except ValueError:
                 pass
-        recent_cutoff = datetime.utcnow() - timedelta(seconds=20)
+        recent_cutoff = now_msk - timedelta(seconds=5)
         for item in result["suggested_plan"]:
+
             ex_name = item["exercise_name"]
             s_val = int(item.get("sets") or 3)
             r_val = int(item.get("reps") or 12)

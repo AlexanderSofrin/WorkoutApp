@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0b0f19">
     <link rel="manifest" href="manifest.json">
     <title>Workout Vault</title>
-    <link rel="stylesheet" href="style.css?v=52">
+    <link rel="stylesheet" href="style.css?v=53">
 </head>
 <body>
 <div class="container">
@@ -383,13 +383,16 @@
                 <span style="font-size:12px; color:#94a3b8;">Интенсивность режима:</span>
                 <strong id="goalIntensityLabel" style="font-size:13px; color:#34d399;">Плавный набор (+8%)</strong>
             </div>
-            <input id="goalIntensitySlider" type="range" min="1" max="3" step="1" value="1" oninput="updateGoalPreview()" style="width:100%; accent-color:#a855f7; cursor:pointer;">
-            <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; margin-top:4px;">
-                <span id="goalStep1Text">Мягкий</span>
-                <span id="goalStep2Text">Средний</span>
-                <span id="goalStep3Text">Жёсткий</span>
+            <input id="goalIntensitySlider" type="range" min="1" max="5" step="1" value="1" oninput="updateGoalPreview()" style="width:100%; accent-color:#a855f7; cursor:pointer;">
+            <div style="display:flex; justify-content:space-between; font-size:10.5px; color:#64748b; margin-top:4px;">
+                <span id="goalStep1Text">1. Мягкий</span>
+                <span id="goalStep2Text">2. Средний</span>
+                <span id="goalStep3Text">3. Сильный</span>
+                <span id="goalStep4Text">4. Атлет</span>
+                <span id="goalStep5Text">5. Профи</span>
             </div>
         </div>
+
 
         <div id="goalTransitionHint" class="hidden" style="background:rgba(56,189,248,0.12); border:1px solid rgba(56,189,248,0.35); border-radius:10px; padding:8px 10px; font-size:11px; color:#bae6fd; margin-bottom:12px;"></div>
 
@@ -528,7 +531,7 @@
     </div>
 </div>
 
-<script src="app.js?v=52"></script>
+<script src="app.js?v=53"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/app/sw.js');

@@ -1669,43 +1669,31 @@ function _computeGoalMetrics(dir, step) {
     let note = "Стабильная энергия, восстановление и контроль качества тела.";
 
     if (dir === "cut") {
-        if (step === 1) {
-            kcal = Math.max(1850, Math.round(tdee * 0.85));
-            title = "Мягкое похудение";
-            badge = "Мягкая сушка (-15%)";
-            note = "Комфортное снижение жира без потери мышц, силы и стресса для ЦНС.";
-        } else if (step === 2) {
-            kcal = Math.max(1700, Math.round(tdee * 0.78));
-            title = "Средняя сушка";
-            badge = "Рабочая сушка (-22%)";
-            note = "Выраженный рельеф с повышенным белком и контролем электролитов.";
-        } else {
-            kcal = Math.max(1550, Math.round(tdee * 0.70));
-            title = "Жёсткая сушка (Профи)";
-            badge = "Для спортсменов (-30%)";
-            note = "⚠️ Максимально допустимый дефицит (порог безопасности ≥ 1550 ккал/день). Держи 2.2 г белка/кг и воду.";
-        }
+        const cutSteps = [
+            { mult: 0.90, min: 1900, t: "Бережное похудение", b: "1. Лёгкий дефицит (-10%)", n: "Комфортное снижение веса без чувства голода и стресса для ЦНС." },
+            { mult: 0.85, min: 1800, t: "Мягкая сушка", b: "2. Мягкая сушка (-15%)", n: "Оптимальный темп сжигания жира с сохранением силовых показателей." },
+            { mult: 0.80, min: 1700, t: "Средняя сушка", b: "3. Средняя сушка (-20%)", n: "Выраженный рельеф. Держи 2.1 г белка/кг, клетчатку и электролиты." },
+            { mult: 0.75, min: 1600, t: "Интенсивная сушка", b: "4. Интенсивная (-25%)", n: "⚠️ Повышенный дефицит. Следи за сном и самочувствием, не затягивай цикл." },
+            { mult: 0.70, min: 1550, t: "Жёсткая сушка (Профи)", b: "5. Спорт-сушка (-30%)", n: "⚠️ Предельный безопасный дефицит (порог ≥ 1550 ккал/день). Только для опытных." }
+        ];
+        const s = cutSteps[Math.min(4, Math.max(0, step - 1))];
+        kcal = Math.max(s.min, Math.round(tdee * s.mult));
+        title = s.t; badge = s.b; note = s.n;
     } else if (dir === "bulk") {
-        if (step === 1) {
-            kcal = Math.round(tdee * 1.08);
-            title = "Плавный набор массы";
-            badge = "Мягкий набор (+8%)";
-            note = "Качественный рост сухой мышечной массы с минимальным процентом жира.";
-        } else if (step === 2) {
-            kcal = Math.round(tdee * 1.15);
-            title = "Уверенный набор массы";
-            badge = "Средний набор (+15%)";
-            note = "Активный прогресс рабочих весов и объёмов при регулярных тренировках.";
-        } else {
-            kcal = Math.round(tdee * 1.22);
-            title = "Форсированный набор";
-            badge = "Мощный профицит (+22%)";
-            note = "Максимальный энергетический запас для тяжёлых базовых циклов.";
-        }
+        const bulkSteps = [
+            { mult: 1.08, t: "Плавный набор массы", b: "1. Плавный (+8%)", n: "Качественный рост сухой мышечной массы с минимальным процентом жира." },
+            { mult: 1.15, t: "Уверенный набор массы", b: "2. Средний (+15%)", n: "Активный прогресс рабочих весов и объёмов при регулярных тренировках." },
+            { mult: 1.24, t: "Форсированный набор", b: "3. Сильный (+24%)", n: "Увеличенный энергетический резерв для тяжёлых базовых циклов и сменного графика." },
+            { mult: 1.35, t: "Спортивный профицит", b: "4. Атлет (+35% · 3500+)", n: "Высокий калораж для атлетов с быстрым обменом веществ и большим расходом энергии." },
+            { mult: 1.50, t: "Максимум (Хардгейнер)", b: "5. Профи (+50% · 4000–5500+)", n: "Экстремальный профицит для тяжёлых силовых циклов. Контролируй качество пищи и ЖКТ." }
+        ];
+        const s = bulkSteps[Math.min(4, Math.max(0, step - 1))];
+        kcal = Math.round(tdee * s.mult);
+        title = s.t; badge = s.b; note = s.n;
     }
 
     const prot = Math.round(curW * (dir === "cut" ? 2.15 : 2.0));
-    const fat = Math.round(curW * (dir === "cut" ? 0.85 : 1.0));
+    const fat = Math.round(curW * (dir === "cut" ? 0.85 : 1.05));
     const carbs = Math.max(90, Math.round((kcal - prot * 4 - fat * 9) / 4));
     return { tdee, kcal, title, badge, note, prot, fat, carbs };
 }
@@ -1713,18 +1701,14 @@ function _computeGoalMetrics(dir, step) {
 function updateGoalPreview() {
     const dir = _wvGoalState.direction || "bulk";
     const step = parseInt(document.getElementById("goalIntensitySlider")?.value) || 1;
-    const s1 = document.getElementById("goalStep1Text");
-    const s2 = document.getElementById("goalStep2Text");
-    const s3 = document.getElementById("goalStep3Text");
-    if (dir === "cut") {
-        if (s1) s1.textContent = "Мягкая (~2000)";
-        if (s2) s2.textContent = "Средняя";
-        if (s3) s3.textContent = "Жёсткая (Спорт)";
-    } else {
-        if (s1) s1.textContent = "Мягкий";
-        if (s2) s2.textContent = "Средний";
-        if (s3) s3.textContent = "Мощный";
-    }
+    const labels = dir === "cut"
+        ? ["1. Лёгкая", "2. Мягкая", "3. Средняя", "4. Сильная", "5. Профи"]
+        : ["1. Плавный", "2. Средний", "3. Сильный", "4. Атлет", "5. Профи"];
+    labels.forEach((txt, idx) => {
+        const el = document.getElementById(`goalStep${idx + 1}Text`);
+        if (el) el.textContent = txt;
+    });
+
     const m = _computeGoalMetrics(dir, step);
     const lbl = document.getElementById("goalIntensityLabel");
     const kEl = document.getElementById("goalCalcKcalVal");
@@ -1735,10 +1719,13 @@ function updateGoalPreview() {
     if (mEl) mEl.textContent = `Белки: ${m.prot} г · Жиры: ${m.fat} г · Углеводы: ${m.carbs} г`;
     if (nEl) nEl.textContent = m.note;
 
-        const hint = document.getElementById("goalTransitionHint");
+    const hint = document.getElementById("goalTransitionHint");
     if (hint) {
-        if (dir === "cut" && step >= 2) {
-            hint.innerHTML = "🧬 <strong>Научный совет:</strong> если вы ранее не проходили жёсткую сушку, лучше выбрать <strong>1-ю мягкую ступень (-15%)</strong> и растянуть путь на дольше. При резком дефиците подскакивает гормон голода <strong>грелин</strong> и падает <strong>лептин</strong> — мягкий темп защищает от срывов и сохраняет мышцы.";
+        if (dir === "cut" && step >= 3) {
+            hint.innerHTML = "🧬 <strong>Научный совет:</strong> если вы ранее не проходили жёсткую сушку, лучше выбрать <strong>1–2 мягкую ступень (-10…-15%)</strong> и растянуть путь на дольше. При резком дефиците подскакивает гормон голода <strong>грелин</strong> и падает <strong>лептин</strong> — плавный темп защищает от срывов и сохраняет мышцы.";
+            hint.classList.remove("hidden");
+        } else if (dir === "bulk" && step >= 4) {
+            hint.innerHTML = "⚡ <strong>Совет по профициту:</strong> режимы <strong>4–5 (3500–5500+ ккал)</strong> рассчитаны на высокий расход энергии и тяжёлые тренировки. Если прирост веса превышает +0.5 кг в неделю, снизь ступень на 1 шаг, чтобы не набирать лишний жир.";
             hint.classList.remove("hidden");
         } else if (_wvGoalState.prevDirection === "cut" && dir === "bulk") {
             hint.textContent = "💡 Переход после сушки: начни с 1-й ступени (+8%) на 10–14 дней, чтобы избежать резкого отката воды.";
@@ -1747,8 +1734,8 @@ function updateGoalPreview() {
             hint.classList.add("hidden");
         }
     }
-
 }
+
 
 function saveGoalSettings() {
     const dir = _wvGoalState.direction || "bulk";
