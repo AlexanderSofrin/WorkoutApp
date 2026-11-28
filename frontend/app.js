@@ -1754,7 +1754,11 @@ function _syncGoalCardsUI() {
     const dir = _wvGoalState.direction || "bulk";
     const step = _wvGoalState.intensity || 1;
     const m = _computeGoalMetrics(dir, step);
+    const curW = _getLatestWeightValue();
     const targetW = parseFloat(_wvProfile.targetWeight) || 70.0;
+    const fc = _calcPhysiologyForecast(curW, targetW, dir, m.kcal, m.tdee);
+    const rateTxt = fc.weeklyRate !== 0 ? ` (${fc.weeklyRate > 0 ? "+" : ""}${fc.weeklyRate} кг/нед)` : "";
+
     const tEl = document.getElementById("mainGoalTitle");
     const sEl = document.getElementById("mainGoalSub");
     const bEl = document.getElementById("heroDailyBurnVal");
@@ -1764,11 +1768,12 @@ function _syncGoalCardsUI() {
     if (tEl) tEl.textContent = m.title;
     if (sEl) sEl.textContent = `Цель: ${targetW.toFixed(1)} кг`;
     if (bEl) bEl.textContent = `${m.tdee} ккал`;
-    if (ktEl) ktEl.textContent = `Цель: ${m.kcal} ккал/день`;
+    if (ktEl) ktEl.textContent = `Цель: ${m.kcal} ккал/день${rateTxt}`;
 
     if (macEl) macEl.textContent = `${m.prot}г / ${m.fat}г / ${m.carbs}г`;
     if (gLbl) gLbl.textContent = m.title;
 }
+
 // === БИРЖЕВОЙ ТЕРМИНАЛ «ЗЕЛЁНЫЙ КОРИДОР» (НЕОН WORKOUT VAULT + МОДЕЛЬ ХОЛЛА) ===
 let _wtDays = 14;
 let _wtChartType = "candles";
@@ -1840,44 +1845,83 @@ function _calcPhysiologyForecast(curW, targetW, dir, targetKcal, tdee) {
     const etaStr = eta.toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" });
     return { days, weeks, etaDate: etaStr, weeklyRate: Number((effectiveWeekly * Math.sign(deltaW)).toFixed(2)) };
 }
+function _getWeightLogSeries() {
+    let logs = JSON.parse(localStorage.getItem("wv_weight_logs_v1") || "[]");
+    if (!Array.isArray(logs)) logs = [];
+    if (logs.length === 0) {
+        const curW = _getLatestWeightValue();
+        const seed = [
+            { date: new Date(Date.now() - 6 * 86400000).toLocaleDateString("sv-SE"), open: 66.8, high: 67.2, low: 66.7, close: 67.0 },
+            { date: new Date(Date.now() - 4 * 86400000).toLocaleDateString("sv-SE"), open: 67.0, high: 67.5, low: 66.9, close: 67.3 },
+            { date: new Date(Date.now() - 2 * 86400000).toLocaleDateString("sv-SE"), open: 67.3, high: 67.6, low: 67.1, close: 67.2 },
+            { date: new Date().toLocaleDateString("sv-SE"), open: 67.2, high: Math.max(67.2, curW), low: curW, close: curW }
+        ];
+        localStorage.setItem("wv_weight_logs_v1", JSON.stringify(seed));
+        return seed;
+    }
+    return logs;
+}
+
+function _recordWeightBar(newW) {
+    const todayIso = new Date().toLocaleDateString("sv-SE");
+    const logs = _getWeightLogSeries();
+    const last = logs[logs.length - 1];
+    if (last && last.date === todayIso) {
+        last.high = Number(Math.max(last.high, newW).toFixed(2));
+        last.low = Number(Math.min(last.low, newW).toFixed(2));
+        last.close = Number(newW.toFixed(2));
+    } else {
+        const prevClose = last ? last.close : newW;
+        logs.push({
+            date: todayIso,
+            open: Number(prevClose.toFixed(2)),
+            high: Number(Math.max(prevClose, newW).toFixed(2)),
+            low: Number(Math.min(prevClose, newW).toFixed(2)),
+            close: Number(newW.toFixed(2))
+        });
+    }
+    localStorage.setItem("wv_weight_logs_v1", JSON.stringify(logs));
+    return logs;
+}
+
 function _generateMarketCandles(curW, targetW, dir, forecast) {
-    const totalBars = 56;
     const isGoal = _wtViewMode === "goal";
-    const histBars = isGoal ? 26 : totalBars;
-    const candles = [];
+    const logs = _getWeightLogSeries();
     const workoutDays = new Set((allWorkoutsCache || []).map(w => w.created_at ? new Date(w.created_at).toLocaleDateString("sv-SE") : ""));
-    const startW = Number((curW - (dir === "bulk" ? 0.85 : dir === "cut" ? -0.95 : 0.1)).toFixed(2));
-    let price = startW;
+    const candles = [];
 
-    for (let i = 0; i < totalBars; i++) {
-        const isFuture = isGoal && i >= histBars;
-        const barDate = new Date();
-        if (!isFuture) {
-            const backDays = Math.round(((histBars - 1 - i) / Math.max(1, histBars - 1)) * Math.min(_wtDays, 90));
-            barDate.setDate(barDate.getDate() - backDays);
-        } else {
-            const fwdRatio = (i - histBars + 1) / Math.max(1, totalBars - histBars);
+    // 1. Замороженная история реальных свечей (прошлое не перерисовывается!)
+    logs.forEach(item => {
+        const vol = Number((0.4 + Math.abs(item.close - item.open) * 2.4 + (workoutDays.has(item.date) ? 0.45 : 0)).toFixed(2));
+        candles.push({
+            open: item.open,
+            high: item.high,
+            low: item.low,
+            close: item.close,
+            isFuture: false,
+            date: new Date(item.date + "T12:00:00"),
+            hasTrain: workoutDays.has(item.date),
+            vol
+        });
+    });
+
+    // 2. Будущая траектория к цели (только в режиме «Путь до цели»)
+    if (isGoal) {
+        const futureBars = 24;
+        let price = curW;
+        for (let i = 0; i < futureBars; i++) {
+            const fwdRatio = (i + 1) / futureBars;
+            const barDate = new Date();
             barDate.setDate(barDate.getDate() + Math.round(fwdRatio * Math.max(30, forecast.days)));
+            const open = price;
+            const wave = Math.sin(i * 0.65) * 0.09;
+            const drift = ((targetW - curW) / futureBars) * (1 - 0.15 * fwdRatio);
+            const close = Number((open + drift + wave).toFixed(2));
+            const high = Number((Math.max(open, close) + 0.08).toFixed(2));
+            const low = Number((Math.min(open, close) - 0.08).toFixed(2));
+            candles.push({ open, high, low, close, isFuture: true, date: barDate, hasTrain: false, vol: 0.45 });
+            price = close;
         }
-
-        const open = i === histBars - 1 ? curW : price;
-        const wave = Math.sin(i * 0.58) * 0.14 + Math.cos(i * 0.27) * 0.11;
-        const drift = !isFuture
-            ? (curW - startW) / Math.max(1, histBars)
-            : ((targetW - curW) / Math.max(1, totalBars - histBars)) * (1 - 0.18 * ((i - histBars) / (totalBars - histBars)));
-        let close = Number((open + drift + wave * (isFuture ? 0.55 : 0.85)).toFixed(2));
-        if (!isFuture && i === histBars - 1) close = curW;
-
-        const wickUp = Number((0.05 + Math.abs(Math.sin(i * 1.3)) * 0.16).toFixed(2));
-        const wickDn = Number((0.05 + Math.abs(Math.cos(i * 1.7)) * 0.15).toFixed(2));
-        const high = Number((Math.max(open, close) + wickUp).toFixed(2));
-        const low = Number((Math.min(open, close) - wickDn).toFixed(2));
-        const dIso = barDate.toLocaleDateString("sv-SE");
-        const hasTrain = !isFuture && workoutDays.has(dIso);
-        const vol = Number((0.35 + Math.abs(close - open) * 2.2 + (hasTrain ? 0.45 : 0)).toFixed(2));
-
-        candles.push({ open, high, low, close, isFuture, date: barDate, hasTrain, vol });
-        price = close;
     }
     return candles;
 }
@@ -1899,26 +1943,49 @@ function renderWeightTerminal() {
     const dir = _wvGoalState.direction || "bulk";
     const metrics = _computeGoalMetrics(dir, _wvGoalState.intensity || 1);
     const forecast = _calcPhysiologyForecast(curW, targetW, dir, metrics.kcal, metrics.tdee);
+    const logs = _getWeightLogSeries();
 
-    const support = Number((Math.floor(curW * 2) / 2 - 0.5).toFixed(1));
-    const resistance = Number((support + 1.5).toFixed(1));
-    const isBreakout = dir === "bulk" ? curW >= resistance : (dir === "cut" && curW <= support);
+    // Динамический коридор от точки пробоя (+0.4..0.5 кг для набора, -0.5 кг для сушки)
+    const bandWidth = (_wvProfile.knownMaxW && _wvProfile.knownMinW && _wvProfile.knownMaxW > _wvProfile.knownMinW)
+        ? Math.min(1.2, Math.max(0.4, Number((_wvProfile.knownMaxW - _wvProfile.knownMinW).toFixed(2))))
+        : 0.5;
+    const support = dir === "cut" ? Number((curW - bandWidth).toFixed(1)) : Number(curW.toFixed(1));
+    const resistance = Number((support + bandWidth).toFixed(1));
+
+    const prevClose = logs.length >= 2 ? logs[logs.length - 2].close : curW;
+    const isBreakoutDown = curW < prevClose - 0.25;
+    const isBreakoutUp = curW > prevClose + 0.25;
+    const isCalibrating = logs.length < 7 && !(_wvProfile.knownMinW && _wvProfile.knownMaxW);
 
     const badgeEl = document.getElementById("wtBreakoutBadge");
     if (badgeEl) {
-        badgeEl.textContent = isBreakout ? "BREAKOUT ⚡" : "В КОРИДОРЕ";
-        badgeEl.style.background = isBreakout ? "rgba(217,70,239,0.25)" : "rgba(0,255,136,0.14)";
-        badgeEl.style.color = isBreakout ? "#f5d0fe" : "#00ff88";
+        if (isBreakoutDown) {
+            badgeEl.textContent = `ПРОБОЙ ВНИЗ · ПОДДЕРЖКА ${support.toFixed(1)}`;
+            badgeEl.style.background = "rgba(217,70,239,0.24)";
+            badgeEl.style.color = "#f5d0fe";
+        } else if (isBreakoutUp) {
+            badgeEl.textContent = `ПРОБОЙ ВВЕРХ ⚡`;
+            badgeEl.style.background = "rgba(0,255,136,0.22)";
+            badgeEl.style.color = "#00ff88";
+        } else if (isCalibrating) {
+            badgeEl.textContent = `КАЛИБРОВКА ${logs.length}/7 ДН.`;
+            badgeEl.style.background = "rgba(56,189,248,0.18)";
+            badgeEl.style.color = "#7dd3fc";
+        } else {
+            badgeEl.textContent = `КОРИДОР ${support.toFixed(1)}–${resistance.toFixed(1)}`;
+            badgeEl.style.background = "rgba(0,255,136,0.14)";
+            badgeEl.style.color = "#00ff88";
+        }
     }
     const tickerEl = document.getElementById("wtTickerLine");
-    const deltaPct = (((curW - support - 0.5) / curW) * 100).toFixed(2);
-    if (tickerEl) tickerEl.textContent = `${curW.toFixed(2)} кг (${deltaPct >= 0 ? "+" : ""}${deltaPct}%) · Цель: ${targetW.toFixed(1)} кг`;
+    const deltaKg = (curW - prevClose).toFixed(2);
+    if (tickerEl) tickerEl.textContent = `${curW.toFixed(2)} кг (${deltaKg >= 0 ? "+" : ""}${deltaKg} кг) · Коридор: ${support.toFixed(1)}–${resistance.toFixed(1)} кг`;
 
     const candles = _generateMarketCandles(curW, targetW, dir, forecast);
     const allLows = candles.map(c => c.low);
     const allHighs = candles.map(c => c.high);
-    const minVal = Math.min(...allLows, support - 0.6, _wtViewMode === "goal" ? targetW - 0.6 : support) - 0.35;
-    const maxVal = Math.max(...allHighs, resistance + 0.6, targetW + 0.6) + 0.45;
+    const minVal = Math.min(...allLows, support - 0.4, _wtViewMode === "goal" ? targetW - 0.4 : support) - 0.25;
+    const maxVal = Math.max(...allHighs, resistance + 0.4, targetW + 0.4) + 0.35;
 
     const padL = 6, padR = 52, padT = 16, padB = 26;
     const plotW = W - padL - padR;
@@ -1929,6 +1996,7 @@ function renderWeightTerminal() {
 
     ctx.fillStyle = "#07090f";
     ctx.fillRect(0, 0, W, H);
+
 
     // Сетка уровней цены справа
     const gridSteps = 6;
@@ -2057,6 +2125,7 @@ async function submitNewWeightPoint() {
     if (!val || val < 35 || val > 250) return;
     _wvProfile.weight = val;
     localStorage.setItem("wv_profile_v49", JSON.stringify(_wvProfile));
+    _recordWeightBar(val);
     if (typeof weightHistory !== "undefined" && Array.isArray(weightHistory)) {
         weightHistory.push({ date: new Date().toISOString(), weight: val });
     }
@@ -2099,6 +2168,8 @@ async function checkAndOpenOnboarding() {
 }
 
 async function submitOnboardingWizard() {
+    const minW = parseFloat(document.getElementById("obMinWeightInput")?.value) || null;
+    const maxW = parseFloat(document.getElementById("obMaxWeightInput")?.value) || null;
     const payload = {
         full_name: (document.getElementById("obNameInput")?.value || "").trim() || "Атлет",
         gender: document.getElementById("obGenderSelect")?.value || "male",
@@ -2123,9 +2194,13 @@ async function submitOnboardingWizard() {
             height: payload.height_cm,
             weight: payload.weight_kg,
             targetWeight: payload.target_weight_kg,
-            activity: actMap[payload.work_type] || 1.55
+            activity: actMap[payload.work_type] || 1.55,
+            knownMinW: minW,
+            knownMaxW: maxW
         };
         localStorage.setItem("wv_profile_v49", JSON.stringify(_wvProfile));
+        localStorage.removeItem("wv_weight_logs_v1");
+        _recordWeightBar(payload.weight_kg);
         const m = document.getElementById("onboardingWelcomeModal");
         if (m) { m.classList.add("hidden"); m.style.display = "none"; }
         _syncGoalCardsUI();
@@ -2133,6 +2208,7 @@ async function submitOnboardingWizard() {
         await Promise.all([loadSupport(), loadNutrition()]);
     }
 }
+
 
 function initV49Modules() {
     _syncAvatarUI();

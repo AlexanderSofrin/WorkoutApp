@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0b0f19">
     <link rel="manifest" href="manifest.json">
     <title>Workout Vault</title>
-    <link rel="stylesheet" href="style.css?v=54">
+    <link rel="stylesheet" href="style.css?v=55">
 </head>
 <body>
 <div class="container">
@@ -62,8 +62,10 @@
                     <div class="stat-box" style="border-color:#38bdf8;">
                         <div class="stat-label">Средний расход</div>
                         <div id="heroDailyBurnVal" class="stat-val" style="color:#38bdf8; font-size:18px;">— ккал</div>
-                        <div id="heroKcalTargetSub" class="stat-sub">Цель на день: —</div>
+                        <div id="heroKcalTargetSub" class="stat-sub">Цель: — ккал/день</div>
+                        <div id="heroWeeklyRateSub" class="stat-sub" style="color:#34d399; font-weight:700;">Темп: +0.22 кг/нед</div>
                     </div>
+
                     <div class="stat-box" style="border-color:#34d399;">
                         <div class="stat-label">Ритм недели</div>
                         <div id="weeklyStreakVal" class="stat-val" style="color:#34d399; font-size:18px;">0 / 4</div>
@@ -500,6 +502,17 @@
             <div><label style="font-size:10px;">Вес (кг)</label><input id="obWeightInput" type="number" step="0.1" value="70.0" style="padding:7px; font-size:13px;"></div>
             <div><label style="font-size:10px; color:#00ff88;">Цель (кг)</label><input id="obTargetInput" type="number" step="0.1" value="72.0" style="padding:7px; font-size:13px; border-color:rgba(0,255,136,0.45);"></div>
         </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
+            <div>
+                <label style="font-size:10.5px; color:#94a3b8;">Утренний мин. вес (необяз.)</label>
+                <input id="obMinWeightInput" type="number" step="0.1" placeholder="Напр. 66.0 (если знаешь)" style="padding:7px; font-size:12.5px;">
+            </div>
+            <div>
+                <label style="font-size:10.5px; color:#94a3b8;">Вечерний макс. вес (необяз.)</label>
+                <input id="obMaxWeightInput" type="number" step="0.1" placeholder="Напр. 66.8 (или замерим за 7 дн.)" style="padding:7px; font-size:12.5px;">
+            </div>
+        </div>
+
 
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
             <div>
@@ -532,7 +545,7 @@
     </div>
 </div>
 
-<script src="app.js?v=54"></script>
+<script src="app.js?v=50"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/app/sw.js');
