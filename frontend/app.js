@@ -1759,8 +1759,10 @@ function _syncGoalCardsUI() {
     const curW = _getLatestWeightValue();
     const targetW = parseFloat(_wvProfile.targetWeight) || 70.0;
     const fc = _calcPhysiologyForecast(curW, targetW, dir, m.kcal, m.tdee);
-    const rateTxt = fc.weeklyRate !== 0 ? ` (${fc.weeklyRate > 0 ? "+" : ""}${fc.weeklyRate} кг/нед)` : "";
 
+    const tEl = document.getElementById("mainGoalTitle");
+    const sEl = document.getElementById("mainGoalSub");
+    const bEl = document.getElementById("heroDailyBurnVal");
     const ktEl = document.getElementById("heroKcalTargetSub");
     const rateEl = document.getElementById("heroWeeklyRateSub");
     const macEl = document.getElementById("macrosInfo");
@@ -1774,6 +1776,10 @@ function _syncGoalCardsUI() {
             ? `Темп: ${fc.weeklyRate > 0 ? "+" : ""}${fc.weeklyRate} кг/нед`
             : "Темп: 0.0 кг/нед (баланс)";
     }
+    if (macEl) macEl.textContent = `${m.prot}г / ${m.fat}г / ${m.carbs}г`;
+    if (gLbl) gLbl.textContent = m.title;
+}
+
 
 
 // === БИРЖЕВОЙ ТЕРМИНАЛ «ЗЕЛЁНЫЙ КОРИДОР» (НЕОН WORKOUT VAULT + МОДЕЛЬ ХОЛЛА) ===
