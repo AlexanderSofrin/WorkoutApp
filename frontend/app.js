@@ -66,7 +66,10 @@ function toggleCoachFullscreen() {
     const card = document.getElementById("coachCard");
     const btn = document.getElementById("fullscreenCoachBtn");
     const isFull = card.classList.toggle("coach-fullscreen");
-    btn.textContent = isFull ? "✕" : "⤢";
+    btn.innerHTML = isFull
+        ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="square"><polyline points="4 14 10 14 10 20"></polyline><polyline points="20 10 14 10 14 4"></polyline><line x1="14" y1="10" x2="21" y2="3"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>`
+        : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="square"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>`;
+
     btn.title = isFull ? "Свернуть чат" : "Развернуть на весь экран";
     const box = document.getElementById("aiCoachBox");
     if (box) box.scrollTop = box.scrollHeight;
@@ -1442,7 +1445,21 @@ function renderGifLibrary(group) {
     if (!tabsEl || !gridEl) return;
     const groups = ["\u0412\u0441\u0435", "\u0413\u0440\u0443\u0434\u044c", "\u0421\u043f\u0438\u043d\u0430", "\u041d\u043e\u0433\u0438", "\u0414\u0435\u043b\u044c\u0442\u044b", "\u0420\u0443\u043a\u0438", "\u041f\u0440\u0435\u0441\u0441"];
     tabsEl.innerHTML = groups.map(g => `<button class="chip-btn" style="${g === currentGifGroup ? 'border-color:#38bdf8; color:#38bdf8; background:rgba(56,189,248,0.15);' : ''}" onclick="renderGifLibrary('${g}')">${g}</button>`).join("");
-    const list = currentGifGroup === "\u0412\u0441\u0435" ? GIF_EXERCISE_LIBRARY : GIF_EXERCISE_LIBRARY.filter(item => item.group === currentGifGroup);
+        const groupMapRu = { chest: "Грудь", back: "Спина", legs: "Ноги", shoulders: "Дельты", arms: "Руки", core: "Пресс" };
+    const mergedLib = [...GIF_EXERCISE_LIBRARY];
+    (allExercisesCatalog || []).forEach(ex => {
+        if (!mergedLib.some(m => m.name.toLowerCase() === ex.name.toLowerCase())) {
+            mergedLib.push({
+                name: ex.name,
+                group: groupMapRu[ex.muscle_group] || "Все",
+                met: 5.0,
+                gif: "",
+                tip: ex.technique_tips || "Контролируй технику и амплитуду движения."
+            });
+        }
+    });
+    const list = currentGifGroup === "Все" ? mergedLib : mergedLib.filter(item => item.group === currentGifGroup);
+
     gridEl.innerHTML = "";
     list.forEach(item => {
         const safeName = item.name.replace(/'/g, "\\'");

@@ -24,6 +24,8 @@ _CHAT_WINDOWS: dict[int, list[dict]] = {}
 _COMPRESSED_CONTEXT: dict[int, str] = {}
 _PENDING_PLANS: dict[int, dict] = {}
 _ACTIVE_EXERCISES: dict[int, dict] = {}  # {user_id: {"name": str, "weight": float}}
+_WEIGHT_REMINDED_DAY: dict[int, str] = {}
+
 MAX_WINDOW_MESSAGES = 8
 
 _GIGACHAT_TOKEN_CACHE: dict[str, object] = {"token": "", "expires_at": 0.0}
@@ -507,16 +509,21 @@ def _build_user_context(user: User, db: Session, target_date: str | None = None)
     )
     last_weight_log = next((n for n in nutri_rows if n.weight_kg is not None), None)
     weight_freshness_note = ""
-    if last_weight_log:
-        try:
-            w_dt = datetime.strptime(last_weight_log.log_date, "%Y-%m-%d")
-            days_w = (now.date() - w_dt.date()).days
-            if days_w >= 4:
-                weight_freshness_note = f" | ВНИМАНИЕ: последний замер веса в базе был {days_w} дн. назад ({last_weight_log.weight_kg} кг) — мягко предложи утром натощак взвеситься и занести свежий вес."
-        except ValueError:
-            pass
-    else:
-        weight_freshness_note = " | ВНИМАНИЕ: в дневнике давно не обновлялся вес — при случае мягко напомни взвеситься утром натощак."
+    today_key = now.strftime("%Y-%m-%d")
+    already_reminded = (_WEIGHT_REMINDED_DAY.get(user.id) == today_key)
+    if not already_reminded:
+        if last_weight_log:
+            try:
+                w_dt = datetime.strptime(last_weight_log.log_date, "%Y-%m-%d")
+                days_w = (now.date() - w_dt.date()).days
+                if days_w >= 4:
+                    weight_freshness_note = f" | ВНИМАНИЕ (однократно за день): последний замер веса был {days_w} дн. назад ({last_weight_log.weight_kg} кг) — если сейчас НЕ идёт активная тренировка, мягко напомни взвеситься утром натощак."
+                    _WEIGHT_REMINDED_DAY[user.id] = today_key
+            except ValueError:
+                pass
+        else:
+            weight_freshness_note = " | ВНИМАНИЕ (однократно за день): в дневнике давно не обновлялся вес — если сейчас НЕ идёт активная тренировка, мягко напомни взвеситься утром натощак."
+            _WEIGHT_REMINDED_DAY[user.id] = today_key
 
     if nutri_rows:
         n_parts = [
@@ -796,12 +803,7 @@ def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn
 
     # 0.5. Перехват вводных фраз без цифр ("давай начнём тренировку / сейчас скину")
     has_numbers = bool(re.search(r"\d", clean_msg))
-    is_prep_phrase = (
-            not has_numbers
-            and any(w in low_msg for w in
-                    ("сейчас", "готов", "скину", "дам", "начн", "прими к сведению", "выстрой", "посмотри"))
-            and any(w in low_msg for w in ("тренировк", "запис", "блокнот", "журнал", "список", "подход"))
-    )
+    is_prep_phrase = False
     if is_prep_phrase:
         if want_plan:
             reply = f"**На связи, {first_name}!** Диктуй или вставляй упражнения — аккуратно добавлю их в твой «План тренировки»."
@@ -978,7 +980,8 @@ def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn
         }
 
     # 3. Упражнение с одним или серией подходов по ходу тренировки
-    parsed_single = parse_workout_command(clean_msg)
+    parsed_single = parse_workout_command(clean_msg) if "?" not in clean_msg and len(clean_msg.split()) <= 9 else None
+
     if parsed_single and parsed_single.get("entries"):
         matched_name = _match_catalog_exercise(parsed_single["exercise_name"], db)
         parsed_single["exercise_name"] = matched_name
@@ -1064,20 +1067,24 @@ def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn
                 sched_lines.append(f"{d_f}: {ex_s}")
     sched_note = ("ЗАПЛАНИРОВАННЫЕ ТРЕНИРОВКИ В КАЛЕНДАРЕ: " + " | ".join(sched_lines) + "\n") if sched_lines else ""
 
+    draft_summary_lines, _, _ = _format_draft_lines(_SESSION_DRAFT.get(user.id) or [])
+    draft_context = (
+        "ТЕКУЩИЙ ЛОГ СЕГОДНЯШНЕЙ ТРЕНИРОВКИ В ПАМЯТИ:\n" + "\n".join(draft_summary_lines) + "\n"
+        if draft_summary_lines else "ТЕКУЩИЙ ЛОГ ТРЕНИРОВКИ: пока пуст.\n"
+    )
+
     system_prompt = (
-        f"Ты — персональный ИИ-тренер, спортивный физиолог и мудрый, тактичный напарник в Workout Vault. "
-        f"Общаешься с атлетом {first_name} на равных — живо, глубоко, уважительно и по-товарищески, как умный наставник и друг.\n\n"
-        f"ДАННЫЕ АТЛЕТА ИЗ БАЗЫ:\n{db_context}\n{sched_note}{active_note} {compressed_note}\n\n"
-        f"ПРИНЦИПЫ ОБЩЕНИЯ И НАУЧНОЙ БЕЗОПАСНОСТИ:\n"
-        f"0. НИКОГДА НЕ ВЫДУМЫВАЙ УПРАЖНЕНИЯ, ПОДХОДЫ И ВЕСА: если пользователь не называл конкретные упражнения и цифры, не придумывай за него отчёт. Отвечай по сути вопроса.\n"
-        f"1. ЖИРНЫЙ ГЛАВНЫЙ ВЫВОД В НАЧАЛЕ: начинай содержательный ответ с 1–2 ёмких предложений, выделенных **двойными звёздочками**, с главным ответом, поддержкой или выводом.\n"
-        f"2. НАУЧНЫЕ ДОВОДЫ И ФИЗИОЛОГИЯ: опирайся на доказательную спортивную медицину и нутрициологию (гликоген, водный баланс, синтез белка, восстановление ЦНС, грелин/лептин, защита поясницы, коленей и локтей). Объясняй «почему так» простым человеческим языком.\n"
-        f"3. БЕЗ ПРИКАЗОВ И ДАВЛЕНИЯ: никогда не командуй («ты обязан съесть ровно X»). Предлагай ориентиры и варианты, всегда напоминая прислушиваться к собственному самочувствию, уровню энергии и здравому смыслу.\n"
-        f"4. МЕДИЦИНСКИЕ ПРЕДОХРАНИТЕЛИ: ты не назначаешь лекарства, гормоны и схемы лечения. При любом вопросе о спортивных добавках, жёстких диетах, болях или здоровье давай общую научную справку и тактично напоминай, что приём добавок и изменения в диете стоит обсудить со своим врачом.\n"
-        f"5. КОНТРОЛЬ АКТУАЛЬНОСТИ БАЗЫ: если в данных выше есть пометка ВНИМАНИЕ о давнем взвешивании, органично и по-дружески напомни в конце ответа, что пора утром натощак заглянуть на весы и обновить цифру в терминале.\n"
-        f"6. СТРУКТУРА И ГЛУБИНА: для разборов используй короткие подзаголовки (**Подзаголовок:**) и списки (• **Акцент:** пояснение). На короткие реплики в зале отвечай бодро и компактно (3–5 строк), на глубокие вопросы — развёрнуто и по делу.\n"
-        f"7. ШИРОКИЙ КРУГОЗОР + ФОКУС НА ЧЕЛОВЕКЕ: ты свободно поддерживаешь разговор о психологии привычек, сне, стрессе, сменном графике 2/2 и режиме жизни, мягко связывая это с энергией и восстановлением.\n"
-        f"8. СОСТАВЛЕНИЕ ПЛАНА (ТОЛЬКО ПО ПРОСЬБЕ): выводи нумерованный список «1. Упражнение — 3 подхода × 12 повторений | Вес: 15 кг» и спрашивай: «Добавить эту тренировку в план?»"
+        f"Ты — персональный ИИ-тренер, спортивный физиолог и опытный, тактичный напарник в Workout Vault. "
+        f"Общаешься с атлетом {first_name} на равных — живо, глубоко, уважительно и без канцелярской «воды».\n\n"
+        f"ДАННЫЕ АТЛЕТА ИЗ БАЗЫ:\n{db_context}\n{sched_note}{draft_context}{active_note} {compressed_note}\n\n"
+        f"ЖЕЛЕЗНЫЕ ПРАВИЛА ПОВЕДЕНИЯ:\n"
+        f"1. ЖИВОЙ РАЗГОВОР БЕЗ ШАБЛОНОВ: отвечай по существу, как умный старший напарник в зале. Начинай с **жирного главного вывода** (1–2 предложения).\n"
+        f"2. ПОНИМАНИЕ УПРАЖНЕНИЙ ПО ОПИСАНИЮ: если атлет описывает движение своими словами (например, «берёшь гантели и поднимаешь по диагонали к другому плечу» → Перекрёстные сгибания на бицепс к противоположному плечу; «поднимаешь на бицепс, разворачиваешь ладони от себя и медленно опускаешь» → Сгибания Зоттмана; «скручивания книжка» → Скручивания «Книжка»), сразу назови правильное упражнение и зафиксируй его.\n"
+        f"3. ЕДИНЫЙ НУМЕРОВАННЫЙ ЛОГ ТРЕНИРОВКИ: когда атлет сообщает подходы, повторы или вес по ходу тренировки, обновляй и показывай компактный нумерованный список всей текущей сессии (1, 2, 3...), объединяя подходы одного упражнения в одну позицию. Если вес гантелей не назван — вежливо уточни его в скобках.\n"
+        f"4. НЕ ПРОЩАЙСЯ РАНЬШЕ ВРЕМЕНИ: пока атлет не сказал «тренировка окончена» или «запиши в базу», НЕ читай лекции про ночной сон, питание после зала и НЕ спрашивай про следующую тренировку.\n"
+        f"5. МЕДИЦИНСКИЕ ПРЕДОХРАНИТЕЛИ И БЕЗОПАСНОСТЬ: опирайся на физиологию (гликоген, миофибриллы, восстановление ЦНС, защита поясницы, коленей и локтей). Не назначай лекарства и при вопросах о добавках или здоровье рекомендуй согласовать это с врачом.\n"
+        f"6. СИНХРОНИЗАЦИЯ ЧЕРНОВИКА: если в этом сообщении атлет добавил или уточнил упражнения текущей тренировки, в самом конце ответа добавь скрытый JSON-блок актуального списка всей текущей тренировки:\n"
+        f"[DRAFT_JSON][{{\"exercise_name\": \"Название\", \"sets\": 3, \"reps\": 12, \"weight\": 15.5}}][/DRAFT_JSON]"
     )
 
     messages = [{"role": "system", "content": system_prompt}]
@@ -1087,7 +1094,29 @@ def generate_coach_reply(message: str, user: User, db: Session, detect_muscle_fn
 
     llm_raw = _call_gigachat_llm(messages)
     if llm_raw:
-        reply = _extract_and_store_plan(user.id, llm_raw, db, target_date)
+        m_draft = re.search(r"\[DRAFT_JSON\](.*?)\[/DRAFT_JSON\]", llm_raw, flags=re.DOTALL)
+        if m_draft:
+            try:
+                parsed_d = json.loads(m_draft.group(1).strip())
+                if isinstance(parsed_d, list) and parsed_d:
+                    clean_d = []
+                    for it in parsed_d:
+                        ex_n = _match_catalog_exercise(str(it.get("exercise_name", "")).strip(), db)
+                        if ex_n:
+                            clean_d.append({
+                                "exercise_name": ex_n,
+                                "sets": int(it.get("sets") or 1),
+                                "reps": int(it.get("reps") or 12),
+                                "weight": float(it.get("weight") or 0),
+                                "done": True
+                            })
+                    if clean_d:
+                        _SESSION_DRAFT[user.id] = clean_d
+                        _PENDING_PLANS[user.id] = {"items": list(clean_d), "target_date": target_date}
+            except Exception:
+                pass
+        llm_cleaned = re.sub(r"\[DRAFT_JSON\].*?\[/DRAFT_JSON\]", "", llm_raw, flags=re.DOTALL).strip()
+        reply = _extract_and_store_plan(user.id, llm_cleaned, db, target_date)
         append_session_memory(user.id, "user", clean_msg)
         append_session_memory(user.id, "assistant", reply)
         return {

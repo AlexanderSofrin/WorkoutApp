@@ -6,15 +6,17 @@
     <meta name="theme-color" content="#0b0f19">
     <link rel="manifest" href="manifest.json">
     <title>Workout Vault</title>
-    <link rel="stylesheet" href="style.css?v=56">
+    <link rel="stylesheet" href="style.css?v=57">
 </head>
 <body>
 <div class="container">
     <header style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
         <h1 style="margin:0;">WORKOUT VAULT</h1>
         <div id="userBadge" class="hidden" style="display:flex; align-items:center; gap:8px;">
-            <button type="button" id="headerAvatarBtn" onclick="openProfileModal()" title="Анкета и настройки" style="width:40px; height:40px; border-radius:50%; padding:0; border:2px solid #a855f7; background:linear-gradient(135deg, #1e1b4b 0%, #3b0764 100%); color:#f8fafc; font-weight:800; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; overflow:hidden; box-shadow:0 0 14px rgba(168,85,247,0.45);">
-                <img id="headerAvatarImg" src="" alt="Аватар" class="hidden" style="width:100%; height:100%; object-fit:cover;">
+            <button type="button" id="headerAvatarBtn" onclick="openProfileModal()" title="Анкета и настройки"
+                    style="width:40px; height:40px; border-radius:50%; padding:0; border:2px solid #a855f7; background:linear-gradient(135deg, #1e1b4b 0%, #3b0764 100%); color:#f8fafc; font-weight:800; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; overflow:hidden; box-shadow:0 0 14px rgba(168,85,247,0.45);">
+                <img id="headerAvatarImg" src="" alt="Аватар" class="hidden"
+                     style="width:100%; height:100%; object-fit:cover;">
                 <span id="headerAvatarInitials">АС</span>
             </button>
         </div>
@@ -29,7 +31,8 @@
         <label>Пароль</label>
         <input id="loginPass" type="password" placeholder="Введите пароль" autocomplete="current-password">
         <button onclick="login()" class="btn-primary">Войти в систему</button>
-        <p id="loginError" class="hidden" style="color:#fb7185; font-size:12px; margin-top:10px; text-align:center;"></p>
+        <p id="loginError" class="hidden"
+           style="color:#fb7185; font-size:12px; margin-top:10px; text-align:center;"></p>
     </section>
 
     <main id="dashboardSection" class="hidden">
@@ -49,13 +52,18 @@
         <section id="tab-home">
             <div class="card" style="border-left: 4px solid #a855f7; margin-bottom: 14px;">
                 <div style="display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px; margin-bottom:10px;">
-                    <div class="stat-box" onclick="openGoalModal()" style="border-color:#a855f7; cursor:pointer; position:relative;">
+                    <div class="stat-box" onclick="openGoalModal()"
+                         style="border-color:#a855f7; cursor:pointer; position:relative;">
                         <div style="display:flex; justify-content:space-between; align-items:center; gap:4px;">
                             <div class="stat-label" style="margin:0;">Главная цель</div>
                             <span style="font-size:11px; color:#c084fc; background:rgba(168,85,247,0.16); padding:1px 6px; border-radius:6px;">⚙️</span>
                         </div>
-                        <div id="mainGoalTitle" class="stat-val" style="color:#c084fc; font-size:15px; line-height:1.25; margin-top:4px;">Плавный набор массы</div>
-                        <div id="mainGoalSub" class="stat-sub" style="color:#e2e8f0; font-weight:600;">Цель: 70.0 кг</div>
+                        <div id="mainGoalTitle" class="stat-val"
+                             style="color:#c084fc; font-size:15px; line-height:1.25; margin-top:4px;">Плавный набор
+                            массы
+                        </div>
+                        <div id="mainGoalSub" class="stat-sub" style="color:#e2e8f0; font-weight:600;">Цель: 70.0 кг
+                        </div>
 
                     </div>
 
@@ -63,7 +71,9 @@
                         <div class="stat-label">Средний расход</div>
                         <div id="heroDailyBurnVal" class="stat-val" style="color:#38bdf8; font-size:18px;">— ккал</div>
                         <div id="heroKcalTargetSub" class="stat-sub">Цель: — ккал/день</div>
-                        <div id="heroWeeklyRateSub" class="stat-sub" style="color:#34d399; font-weight:700;">Темп: +0.22 кг/нед</div>
+                        <div id="heroWeeklyRateSub" class="stat-sub" style="color:#34d399; font-weight:700;">Темп: +0.22
+                            кг/нед
+                        </div>
                     </div>
 
                     <div class="stat-box" style="border-color:#34d399;">
@@ -71,23 +81,30 @@
                         <div id="weeklyStreakVal" class="stat-val" style="color:#34d399; font-size:18px;">0 / 4</div>
                         <div id="weeklyStreakSub" class="stat-sub">Тренировок за 7 дней</div>
                     </div>
-                                        <div class="stat-box" onclick="openWeightModal()" style="background:linear-gradient(135deg, #171c36 0%, #0c1021 100%); border:1px solid rgba(168,85,247,0.5); box-shadow:0 4px 18px rgba(168,85,247,0.14); cursor:pointer; display:flex; flex-direction:column; justify-content:space-between;">
+                    <div class="stat-box" onclick="openWeightModal()"
+                         style="background:linear-gradient(135deg, #171c36 0%, #0c1021 100%); border:1px solid rgba(168,85,247,0.5); box-shadow:0 4px 18px rgba(168,85,247,0.14); cursor:pointer; display:flex; flex-direction:column; justify-content:space-between;">
                         <div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
                             <div class="stat-label" style="color:#c084fc; margin:0;">Зелёный коридор</div>
-                            <span id="heroTrendArrowBox" style="display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:9px; background:rgba(52,211,153,0.18); border:1px solid rgba(52,211,153,0.55); color:#34d399; font-size:16px; font-weight:900; box-shadow:0 0 12px rgba(52,211,153,0.35);">↗</span>
+                            <span id="heroTrendArrowBox"
+                                  style="display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:9px; background:rgba(52,211,153,0.18); border:1px solid rgba(52,211,153,0.55); color:#34d399; font-size:16px; font-weight:900; box-shadow:0 0 12px rgba(52,211,153,0.35);">↗</span>
                         </div>
-                        <div id="heroCorridorRange" class="stat-val" style="color:#34d399; font-size:16px; margin-top:4px;">66.5 – 67.5 кг</div>
+                        <div id="heroCorridorRange" class="stat-val"
+                             style="color:#34d399; font-size:16px; margin-top:4px;">66.5 – 67.5 кг
+                        </div>
                         <div id="heroCurrentWeightInfo" class="stat-sub" style="color:#e2e8f0;">Сейчас: 67.0 кг</div>
                     </div>
 
                 </div>
-                <div id="dailyQuoteBox" style="background:#0f172a; border:1px solid #1e293b; border-radius:10px; padding:9px 12px; font-size:12px; color:#cbd5e1; font-style:italic;">
+                <div id="dailyQuoteBox"
+                     style="background:#0f172a; border:1px solid #1e293b; border-radius:10px; padding:9px 12px; font-size:12px; color:#cbd5e1; font-style:italic;">
                     «Сила не приходит от побед. Твоя борьба развивает твою силу». — Арнольд Шварценеггер
                 </div>
             </div>
             <div class="card card-shield">
                 <div style="margin-bottom:10px;">
-                    <div style="font-size:11px; color:#34d399; font-weight:700; text-transform:uppercase;">Совет наставника на сегодня</div>
+                    <div style="font-size:11px; color:#34d399; font-weight:700; text-transform:uppercase;">Совет
+                        наставника на сегодня
+                    </div>
                     <h2 id="protocolTitle" style="font-size:19px; margin-top:2px;">Загрузка...</h2>
                 </div>
                 <p id="mentorMessage" style="font-size:14px; color:#e2e8f0; margin-bottom:6px;"></p>
@@ -95,7 +112,8 @@
                 <div class="grid-4">
                     <div class="stat-box">
                         <div class="stat-label">Микрошаг дня</div>
-                        <div id="microStep" style="font-size:12px; color:#6ee7b7; margin-top:4px; font-weight:600;"></div>
+                        <div id="microStep"
+                             style="font-size:12px; color:#6ee7b7; margin-top:4px; font-weight:600;"></div>
                     </div>
                     <div class="stat-box">
                         <div class="stat-label">Накопленный тоннаж</div>
@@ -136,60 +154,101 @@
                     </div>
                     <div id="sampleMenuList"></div>
                 </div>
-                <p id="scheduleCoachTip" style="font-size:12px; color:#cbd5e1; background:#0f172a; padding:10px 12px; border-radius:10px; margin-top:12px;"></p>
+                <p id="scheduleCoachTip"
+                   style="font-size:12px; color:#cbd5e1; background:#0f172a; padding:10px 12px; border-radius:10px; margin-top:12px;"></p>
             </div>
         </section>
 
-                <!-- ВКЛАДКА 2: ТРЕНЕРСКАЯ И ПЛАНЕР -->
+        <!-- ВКЛАДКА 2: ТРЕНЕРСКАЯ И ПЛАНЕР -->
         <section id="tab-workout" class="hidden">
             <div id="coachCard" class="card" style="border-left: 4px solid #a855f7; margin-bottom:10px;">
                 <div class="coach-inner-wrap">
+
                     <div style="display:flex; flex-wrap:nowrap; justify-content:space-between; align-items:center; gap:6px; margin-bottom:8px;">
                         <h2 style="font-size:16px; color:#c084fc; margin:0; white-space:nowrap;">ИИ-Тренерская</h2>
-                        <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
-                            <label class="coach-hide-fs" style="display:flex; align-items:center; gap:4px; font-size:11px; color:#cbd5e1; background:#0f172a; border:1px solid #334155; padding:4px 8px; border-radius:14px; margin:0; cursor:pointer; white-space:nowrap;">
-                                <input id="ttsToggle" type="checkbox" onchange="toggleCoachVoice(this.checked)" style="width:13px; height:13px; margin:0;">
-                                <span>🔊 Голос</span>
-                            </label>
-                            <button id="fullscreenCoachBtn" onclick="toggleCoachFullscreen()" class="icon-btn" style="width:32px; height:28px; padding:0; font-size:14px; color:#c084fc; display:flex; align-items:center; justify-content:center;" title="Развернуть на весь экран">⤢</button>
-                        </div>
+                        <button id="fullscreenCoachBtn" type="button" onclick="toggleCoachFullscreen()"
+                                style="width:32px; height:32px; padding:0; background:rgba(168,85,247,0.14); border:1px solid rgba(168,85,247,0.5); border-radius:9px; color:#e9d5ff; display:inline-flex; align-items:center; justify-content:center; cursor:pointer;"
+                                title="Развернуть на весь экран">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                 stroke-width="2.6" stroke-linecap="square" stroke-linejoin="miter">
+                                <polyline points="15 3 21 3 21 9"></polyline>
+                                <polyline points="9 21 3 21 3 15"></polyline>
+                                <line x1="21" y1="3" x2="14" y2="10"></line>
+                                <line x1="3" y1="21" x2="10" y2="14"></line>
+                            </svg>
+                        </button>
                     </div>
 
-                    <div id="aiCoachBox" style="background:#0f172a; border:1px solid #1e293b; border-radius:12px; padding:12px; max-height:260px; overflow-y:auto; font-size:13px; margin-bottom:10px;"></div>
+                    <div id="aiCoachBox"
+                         style="background:#0f172a; border:1px solid #1e293b; border-radius:12px; padding:12px; max-height:260px; overflow-y:auto; font-size:13px; margin-bottom:10px;"></div>
                     <style>
-                        .wv-capsule { display:flex; align-items:center; gap:8px; background:#0f172a; border:1px solid #334155; border-radius:24px; padding:6px 8px 6px 14px; transition:border-color .2s, box-shadow .2s; }
-                        .wv-capsule.listening { border-color:#38bdf8; box-shadow:0 0 16px rgba(56,189,248,0.28); }
+                        .wv-capsule { display:flex; align-items:center; gap:8px; background:#0f172a; border:1px solid #334155; border-radius:22px; padding:6px 8px 6px 14px; transition:border-color .2s, box-shadow .2s; }
+                        .wv-capsule.listening { border-color:#00ff88; box-shadow:0 0 16px rgba(0,255,136,0.25); }
                         .wv-capsule input { flex:1; background:transparent !important; border:none !important; outline:none !important; box-shadow:none !important; color:#f8fafc; font-size:14px; margin:0 !important; padding:6px 0 !important; min-width:0; text-overflow:ellipsis; }
-                        .wv-mic-btn { display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:50%; border:none; background:rgba(56,189,248,0.12); color:#38bdf8; cursor:pointer; flex-shrink:0; transition:all .2s; }
-                        .wv-mic-btn.active { width:62px; border-radius:18px; background:rgba(56,189,248,0.22); }
+                        .wv-mic-btn { display:flex; align-items:center; justify-content:center; width:38px; height:38px; border-radius:11px; border:1px solid rgba(168,85,247,0.45); background:rgba(168,85,247,0.14); color:#e9d5ff; cursor:pointer; flex-shrink:0; transition:all .2s; }
+                        .wv-mic-btn.active { width:62px; border-radius:14px; border-color:#00ff88; background:rgba(0,255,136,0.18); color:#00ff88; }
                         .wv-wave { display:none; align-items:center; justify-content:center; gap:3px; height:22px; }
                         .wv-mic-btn.active .wv-wave { display:flex; }
                         .wv-mic-btn.active .wv-mic-ico { display:none; }
-                        .wv-wave span { display:block; width:3px; height:5px; border-radius:3px; background:#38bdf8; transition:height 60ms ease; }
-                        .wv-send-btn { width:36px; height:36px; border-radius:50%; border:none; background:#a855f7; color:#fff; font-size:17px; font-weight:700; cursor:pointer; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+                        .wv-wave span { display:block; width:3px; height:5px; border-radius:2px; background:#00ff88; transition:height 60ms ease; }
+                        .wv-send-btn { width:38px; height:38px; border-radius:11px; border:none; background:linear-gradient(135deg, #00ff88, #10b981); color:#04100a; cursor:pointer; flex-shrink:0; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 12px rgba(0,255,136,0.28); }
                     </style>
                     <div id="coachInputCapsule" class="wv-capsule">
-                        <input id="aiCoachInput" type="text" placeholder="Напиши или надиктуй..." onkeydown="if(event.key==='Enter') askAiCoach()">
-                        <button id="aiVoiceBtn" type="button" onclick="startAiVoice()" title="Голосовой ввод" class="wv-mic-btn">
-                            <span class="wv-mic-ico">🎙️</span>
-                            <span class="wv-wave" id="aiVoiceWave"><span></span><span></span><span></span><span></span><span></span></span>
+                        <input id="aiCoachInput" type="text" placeholder="Спроси тренера или надиктуй..."
+                               onkeydown="if(event.key==='Enter') askAiCoach()">
+                        <button id="aiVoiceBtn" type="button" onclick="startAiVoice()" title="Голосовой ввод"
+                                class="wv-mic-btn">
+                            <span class="wv-mic-ico"
+                                  style="display:inline-flex; align-items:center; justify-content:center;">
+                                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                     stroke-width="2.4" stroke-linecap="square" stroke-linejoin="miter">
+                                    <rect x="9" y="2" width="6" height="12" rx="1"></rect>
+                                    <path d="M5 10v2a7 7 0 0 0 14 0v-2"></path>
+                                    <line x1="12" y1="19" x2="12" y2="22"></line>
+                                    <line x1="8" y1="22" x2="16" y2="22"></line>
+                                </svg>
+                            </span>
+                            <span class="wv-wave"
+                                  id="aiVoiceWave"><span></span><span></span><span></span><span></span><span></span></span>
                         </button>
-                        <button type="button" onclick="askAiCoach()" title="Отправить" class="wv-send-btn">↑</button>
+                        <button type="button" onclick="askAiCoach()" title="Отправить" class="wv-send-btn">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                 stroke-width="2.8" stroke-linecap="square" stroke-linejoin="miter">
+                                <line x1="12" y1="19" x2="12" y2="5"></line>
+                                <polyline points="5 12 12 5 19 12"></polyline>
+                            </svg>
+                        </button>
                     </div>
+
+
                 </div>
             </div>
 
             <div class="card" style="border-left: 4px solid #38bdf8; padding:12px 14px; margin-bottom:14px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px;">
                     <span style="font-size:12px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.5px;">Таймер отдыха</span>
-                    <div id="coachMiniTimer" style="font-size:22px; font-weight:900; color:#38bdf8; background:#0f172a; border:1px solid rgba(56,189,248,0.4); border-radius:12px; padding:4px 14px; letter-spacing:1px; font-variant-numeric:tabular-nums;">⏱ 00:00</div>
+                    <div id="coachMiniTimer"
+                         style="font-size:22px; font-weight:900; color:#38bdf8; background:#0f172a; border:1px solid rgba(56,189,248,0.4); border-radius:12px; padding:4px 14px; letter-spacing:1px; font-variant-numeric:tabular-nums;">
+                        ⏱ 00:00
+                    </div>
                 </div>
                 <div style="display:grid; grid-template-columns:repeat(5, 1fr); gap:6px;">
-                    <button class="t-btn" style="padding:8px 4px; font-size:13px; font-weight:700;" onclick="startRestTimer(45)">45с</button>
-                    <button class="t-btn" style="padding:8px 4px; font-size:13px; font-weight:700;" onclick="startRestTimer(60)">1:00</button>
-                    <button class="t-btn" style="padding:8px 4px; font-size:13px; font-weight:700;" onclick="startRestTimer(90)">1:30</button>
-                    <button class="t-btn" style="padding:8px 4px; font-size:13px; font-weight:700;" onclick="startRestTimer(120)">2:00</button>
-                    <button class="t-btn" style="padding:8px 4px; font-size:13px; font-weight:700; color:#fb7185; border-color:rgba(251,113,133,0.35);" onclick="stopRestTimer()">Стоп</button>
+                    <button class="t-btn" style="padding:8px 4px; font-size:13px; font-weight:700;"
+                            onclick="startRestTimer(45)">45с
+                    </button>
+                    <button class="t-btn" style="padding:8px 4px; font-size:13px; font-weight:700;"
+                            onclick="startRestTimer(60)">1:00
+                    </button>
+                    <button class="t-btn" style="padding:8px 4px; font-size:13px; font-weight:700;"
+                            onclick="startRestTimer(90)">1:30
+                    </button>
+                    <button class="t-btn" style="padding:8px 4px; font-size:13px; font-weight:700;"
+                            onclick="startRestTimer(120)">2:00
+                    </button>
+                    <button class="t-btn"
+                            style="padding:8px 4px; font-size:13px; font-weight:700; color:#fb7185; border-color:rgba(251,113,133,0.35);"
+                            onclick="stopRestTimer()">Стоп
+                    </button>
                 </div>
             </div>
 
@@ -197,18 +256,22 @@
                 <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
                     <h2 style="font-size:18px; color:#34d399;">План тренировки</h2>
                     <div style="display:flex; align-items:center; gap:8px;">
-                        <input id="workoutDateInput" type="date" style="background:#0f172a; border:1px solid #334155; color:#e2e8f0; padding:5px 8px; border-radius:8px; font-size:12px;">
+                        <input id="workoutDateInput" type="date"
+                               style="background:#0f172a; border:1px solid #334155; color:#e2e8f0; padding:5px 8px; border-radius:8px; font-size:12px;">
                         <button onclick="clearPlan()" class="btn-link">Очистить</button>
                     </div>
                 </div>
                 <div id="workoutPlanList"></div>
-                <div id="planTotalKcalBox" style="margin-top:10px; background:#0f172a; border:1px solid #1e293b; border-radius:10px; padding:8px 12px; display:flex; justify-content:space-between; align-items:center; font-size:13px;">
+                <div id="planTotalKcalBox"
+                     style="margin-top:10px; background:#0f172a; border:1px solid #1e293b; border-radius:10px; padding:8px 12px; display:flex; justify-content:space-between; align-items:center; font-size:13px;">
                     <span style="color:#94a3b8;">Прогноз расхода за тренировку (MET):</span>
                     <strong id="planTotalKcalVal" style="color:#fbbf24;">~0 ккал</strong>
                 </div>
                 <div id="savePlanBtnBox" class="hidden" style="margin-top:12px;">
-                    <button onclick="saveWholePlan()" class="btn-primary btn-green">Записать всю тренировку в БД</button>
-                    <p id="planSaveStatus" class="hidden" style="color:#34d399; font-size:12px; text-align:center; margin-top:8px;"></p>
+                    <button onclick="saveWholePlan()" class="btn-primary btn-green">Записать всю тренировку в БД
+                    </button>
+                    <p id="planSaveStatus" class="hidden"
+                       style="color:#34d399; font-size:12px; text-align:center; margin-top:8px;"></p>
                 </div>
             </div>
 
@@ -216,20 +279,28 @@
                 <div class="card">
                     <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
                         <h2 style="font-size:18px; color:#38bdf8;">Быстрый подбор упражнений</h2>
-                        <button id="toggleCatalogBtn" onclick="toggleCatalogPanel()" class="btn-link" style="color:#38bdf8;">📂 Каталог</button>
+                        <button id="toggleCatalogBtn" onclick="toggleCatalogPanel()" class="btn-link"
+                                style="color:#38bdf8;">📂 Каталог
+                        </button>
                     </div>
-                    <input id="quickSearchInput" type="text" placeholder="Начни вводить: гоблет, махи, тяга, жим..." oninput="handleQuickSearch(this.value)">
+                    <input id="quickSearchInput" type="text" placeholder="Начни вводить: гоблет, махи, тяга, жим..."
+                           oninput="handleQuickSearch(this.value)">
                     <div id="quickAutocompleteList" class="autocomplete-box hidden"></div>
-                    <div style="font-size:11px; color:#94a3b8; margin-bottom:6px;">Частые упражнения (нажми, чтобы добавить в план):</div>
+                    <div style="font-size:11px; color:#94a3b8; margin-bottom:6px;">Частые упражнения (нажми, чтобы
+                        добавить в план):
+                    </div>
                     <div id="quickChipsRow" class="chip-row"></div>
-                    <div id="fullCatalogPanel" class="hidden" style="margin-top:12px; padding-top:12px; border-top:1px solid #1e293b;">
+                    <div id="fullCatalogPanel" class="hidden"
+                         style="margin-top:12px; padding-top:12px; border-top:1px solid #1e293b;">
                         <div class="checks" style="margin-bottom:8px;">
-                            <label><input id="safeBack" type="checkbox" checked onchange="loadRecommendation()"> Поясница</label>
+                            <label><input id="safeBack" type="checkbox" checked onchange="loadRecommendation()">
+                                Поясница</label>
                             <label><input id="safeKnees" type="checkbox" checked onchange="loadRecommendation()"> Колени</label>
                             <label><input id="safeElbows" type="checkbox" checked onchange="loadRecommendation()"> Локти</label>
                         </div>
                         <div class="tiles" style="margin-bottom:6px;">
-                            <button onclick="setLocation('')" class="tile-btn" style="border-color:#38bdf8;">Все</button>
+                            <button onclick="setLocation('')" class="tile-btn" style="border-color:#38bdf8;">Все
+                            </button>
                             <button onclick="setLocation('home')" class="tile-btn">Дома</button>
                             <button onclick="setLocation('street')" class="tile-btn">Турник</button>
                             <button onclick="setLocation('gym')" class="tile-btn">Зал</button>
@@ -257,7 +328,8 @@
                         <div><label>Вес (кг)</label><input id="exWeight" type="number" step="0.5" placeholder="0"></div>
                     </div>
                     <button onclick="saveWorkout()" class="btn-primary btn-green">Сохранить подход в БД</button>
-                    <p id="saveStatus" class="hidden" style="color:#34d399; font-size:12px; text-align:center; margin-top:10px;"></p>
+                    <p id="saveStatus" class="hidden"
+                       style="color:#34d399; font-size:12px; text-align:center; margin-top:10px;"></p>
                 </div>
             </div>
 
@@ -267,7 +339,8 @@
                     <span class="stat-sub">Нажми на упражнение, чтобы посмотреть технику и добавить в план</span>
                 </div>
                 <div id="gifCategoryTabs" class="tiles" style="margin-bottom:10px;"></div>
-                <div id="exerciseGifLibrary" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(160px, 1fr)); gap:10px;"></div>
+                <div id="exerciseGifLibrary"
+                     style="display:grid; grid-template-columns:repeat(auto-fill, minmax(160px, 1fr)); gap:10px;"></div>
             </div>
         </section>
 
@@ -279,19 +352,29 @@
                     <h2 style="font-size:18px; color:#38bdf8;">Календарь тренировок и расхода</h2>
                     <div style="display:flex; align-items:center; gap:8px;">
                         <button onclick="changeCalMonth(-1)" class="icon-btn" title="Предыдущий месяц">◀</button>
-                        <strong id="calMonthTitle" style="font-size:14px; color:#e2e8f0; min-width:120px; text-align:center;">Ноябрь 2026</strong>
+                        <strong id="calMonthTitle"
+                                style="font-size:14px; color:#e2e8f0; min-width:120px; text-align:center;">Ноябрь
+                            2026</strong>
                         <button onclick="changeCalMonth(1)" class="icon-btn" title="Следующий месяц">▶</button>
                     </div>
                 </div>
                 <div style="display:grid; grid-template-columns:repeat(7, 1fr); gap:4px; text-align:center; font-size:11px; color:#94a3b8; font-weight:700; margin-bottom:6px;">
-                    <div>ПН</div><div>ВТ</div><div>СР</div><div>ЧТ</div><div>ПТ</div><div style="color:#fbbf24;">СБ</div><div style="color:#fbbf24;">ВС</div>
+                    <div>ПН</div>
+                    <div>ВТ</div>
+                    <div>СР</div>
+                    <div>ЧТ</div>
+                    <div>ПТ</div>
+                    <div style="color:#fbbf24;">СБ</div>
+                    <div style="color:#fbbf24;">ВС</div>
                 </div>
                 <div id="calendarGrid" style="display:grid; grid-template-columns:repeat(7, 1fr); gap:4px;"></div>
-                <div id="calDayDetails" style="margin-top:12px; background:#0f172a; border:1px solid #1e293b; border-radius:12px; padding:12px; font-size:13px;">
-                    <div style="color:#94a3b8;">Нажми на любой день в календаре, чтобы посмотреть тренировку или статус отдыха.</div>
+                <div id="calDayDetails"
+                     style="margin-top:12px; background:#0f172a; border:1px solid #1e293b; border-radius:12px; padding:12px; font-size:13px;">
+                    <div style="color:#94a3b8;">Нажми на любой день в календаре, чтобы посмотреть тренировку или статус
+                        отдыха.
+                    </div>
                 </div>
             </div>
-
 
 
             <div class="grid-main">
@@ -302,8 +385,19 @@
                     </div>
                     <div class="table-wrap" style="max-height: 320px; overflow-y: auto;">
                         <table>
-                            <thead><tr><th>Упражнение</th><th>Макс. вес</th><th>Макс. повторы</th><th>Сессий</th></tr></thead>
-                            <tbody id="recordsTableBody"><tr><td colspan="4" style="color:#64748b;">Загрузка рекордов...</td></tr></tbody>
+                            <thead>
+                            <tr>
+                                <th>Упражнение</th>
+                                <th>Макс. вес</th>
+                                <th>Макс. повторы</th>
+                                <th>Сессий</th>
+                            </tr>
+                            </thead>
+                            <tbody id="recordsTableBody">
+                            <tr>
+                                <td colspan="4" style="color:#64748b;">Загрузка рекордов...</td>
+                            </tr>
+                            </tbody>
                         </table>
                     </div>
                 </div>
@@ -314,8 +408,20 @@
                     </div>
                     <div class="table-wrap" style="max-height: 320px; overflow-y: auto;">
                         <table>
-                            <thead><tr><th>Дата</th><th>Упражнение</th><th>Подх × Повт</th><th>Вес</th><th>Тоннаж</th></tr></thead>
-                            <tbody id="historyTableBody"><tr><td colspan="5" style="color:#64748b;">Загрузка истории...</td></tr></tbody>
+                            <thead>
+                            <tr>
+                                <th>Дата</th>
+                                <th>Упражнение</th>
+                                <th>Подх × Повт</th>
+                                <th>Вес</th>
+                                <th>Тоннаж</th>
+                            </tr>
+                            </thead>
+                            <tbody id="historyTableBody">
+                            <tr>
+                                <td colspan="5" style="color:#64748b;">Загрузка истории...</td>
+                            </tr>
+                            </tbody>
                         </table>
                     </div>
                 </div>
@@ -324,34 +430,60 @@
     </main>
 </div>
 <!-- МОДАЛЬНОЕ ОКНО 1: ЗЕЛЁНЫЙ КОРИДОР / ПОЛНОЭКРАННЫЙ БИРЖЕВОЙ ТЕРМИНАЛ -->
-<div id="weightTerminalModal" class="hidden" onclick="if(event.target===this) closeWeightModal()" style="position:fixed; inset:0; z-index:9999; background:#07090f; display:none; flex-direction:column; height:100dvh; overflow:hidden;">
+<div id="weightTerminalModal" class="hidden" onclick="if(event.target===this) closeWeightModal()"
+     style="position:fixed; inset:0; z-index:9999; background:#07090f; display:none; flex-direction:column; height:100dvh; overflow:hidden;">
     <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:#0b0f19; border-bottom:1px solid #1e293b; flex-shrink:0;">
         <div style="display:flex; align-items:center; gap:8px;">
-            <button type="button" onclick="closeWeightModal()" style="background:rgba(148,163,184,0.12); border:1px solid #334155; color:#f8fafc; width:32px; height:32px; border-radius:10px; font-size:16px; cursor:pointer;">✕</button>
+            <button type="button" onclick="closeWeightModal()"
+                    style="background:rgba(148,163,184,0.12); border:1px solid #334155; color:#f8fafc; width:32px; height:32px; border-radius:10px; font-size:16px; cursor:pointer;">
+                ✕
+            </button>
             <div>
                 <div style="display:flex; align-items:center; gap:6px;">
                     <strong style="font-size:14px; color:#00ff88; letter-spacing:0.4px;">WV·WEIGHT</strong>
-                    <span id="wtBreakoutBadge" class="badge" style="background:rgba(0,255,136,0.14); color:#00ff88; font-size:10px; padding:2px 6px;">В КОРИДОРЕ</span>
+                    <span id="wtBreakoutBadge" class="badge"
+                          style="background:rgba(0,255,136,0.14); color:#00ff88; font-size:10px; padding:2px 6px;">В КОРИДОРЕ</span>
                 </div>
-                <div id="wtTickerLine" style="font-size:12px; color:#e2e8f0; font-weight:700;">67.00 кг · Цель: 70.0 кг</div>
+                <div id="wtTickerLine" style="font-size:12px; color:#e2e8f0; font-weight:700;">67.00 кг · Цель: 70.0
+                    кг
+                </div>
             </div>
         </div>
         <div style="display:flex; align-items:center; gap:6px;">
-            <button type="button" id="wtChartTypeBtn" onclick="toggleWeightChartType()" style="background:rgba(217,70,239,0.16); border:1px solid rgba(217,70,239,0.5); color:#f5d0fe; padding:6px 10px; border-radius:10px; font-size:11px; font-weight:700; cursor:pointer;">🕯 Свечи</button>
+            <button type="button" id="wtChartTypeBtn" onclick="toggleWeightChartType()"
+                    style="background:rgba(217,70,239,0.16); border:1px solid rgba(217,70,239,0.5); color:#f5d0fe; padding:6px 10px; border-radius:10px; font-size:11px; font-weight:700; cursor:pointer;">
+                🕯 Свечи
+            </button>
         </div>
     </div>
 
     <div style="display:flex; justify-content:space-between; align-items:center; gap:6px; padding:7px 12px; background:#090d16; border-bottom:1px solid #161e31; flex-shrink:0;">
         <div style="display:flex; gap:4px; background:#0f172a; padding:3px; border-radius:9px; border:1px solid #1e293b;">
-            <button type="button" id="wtModeStageBtn" onclick="setWeightViewMode('stage')" style="background:#1e293b; color:#00ff88; border:1px solid rgba(0,255,136,0.45); border-radius:7px; padding:4px 9px; font-size:11px; font-weight:700; cursor:pointer;">Этап</button>
-            <button type="button" id="wtModeGoalBtn" onclick="setWeightViewMode('goal')" style="background:transparent; color:#94a3b8; border:none; border-radius:7px; padding:4px 9px; font-size:11px; font-weight:700; cursor:pointer;">Путь до цели</button>
+            <button type="button" id="wtModeStageBtn" onclick="setWeightViewMode('stage')"
+                    style="background:#1e293b; color:#00ff88; border:1px solid rgba(0,255,136,0.45); border-radius:7px; padding:4px 9px; font-size:11px; font-weight:700; cursor:pointer;">
+                Этап
+            </button>
+            <button type="button" id="wtModeGoalBtn" onclick="setWeightViewMode('goal')"
+                    style="background:transparent; color:#94a3b8; border:none; border-radius:7px; padding:4px 9px; font-size:11px; font-weight:700; cursor:pointer;">
+                Путь до цели
+            </button>
         </div>
         <div style="display:flex; gap:3px;">
-            <button type="button" class="chip-btn wt-tf-btn" data-days="14" onclick="setWeightTimeframe(14)" style="border-color:#00ff88; color:#00ff88; padding:4px 7px; font-size:11px;">14Д</button>
-            <button type="button" class="chip-btn wt-tf-btn" data-days="30" onclick="setWeightTimeframe(30)" style="padding:4px 7px; font-size:11px;">30Д</button>
-            <button type="button" class="chip-btn wt-tf-btn" data-days="90" onclick="setWeightTimeframe(90)" style="padding:4px 7px; font-size:11px;">90Д</button>
-            <button type="button" class="chip-btn wt-tf-btn" data-days="180" onclick="setWeightTimeframe(180)" style="padding:4px 7px; font-size:11px;">180Д</button>
-            <button type="button" class="chip-btn wt-tf-btn" data-days="365" onclick="setWeightTimeframe(365)" style="padding:4px 7px; font-size:11px;">365Д</button>
+            <button type="button" class="chip-btn wt-tf-btn" data-days="14" onclick="setWeightTimeframe(14)"
+                    style="border-color:#00ff88; color:#00ff88; padding:4px 7px; font-size:11px;">14Д
+            </button>
+            <button type="button" class="chip-btn wt-tf-btn" data-days="30" onclick="setWeightTimeframe(30)"
+                    style="padding:4px 7px; font-size:11px;">30Д
+            </button>
+            <button type="button" class="chip-btn wt-tf-btn" data-days="90" onclick="setWeightTimeframe(90)"
+                    style="padding:4px 7px; font-size:11px;">90Д
+            </button>
+            <button type="button" class="chip-btn wt-tf-btn" data-days="180" onclick="setWeightTimeframe(180)"
+                    style="padding:4px 7px; font-size:11px;">180Д
+            </button>
+            <button type="button" class="chip-btn wt-tf-btn" data-days="365" onclick="setWeightTimeframe(365)"
+                    style="padding:4px 7px; font-size:11px;">365Д
+            </button>
         </div>
     </div>
 
@@ -360,34 +492,55 @@
     </div>
 
     <div style="padding:9px 12px 12px; background:#0b0f19; border-top:1px solid #1e293b; flex-shrink:0;">
-        <div id="wtEnergyProgressBox" style="font-size:11.5px; color:#cbd5e1; margin-bottom:8px; line-height:1.35;">Расчёт траектории...</div>
+        <div id="wtEnergyProgressBox" style="font-size:11.5px; color:#cbd5e1; margin-bottom:8px; line-height:1.35;">
+            Расчёт траектории...
+        </div>
         <div style="display:flex; gap:8px; align-items:center;">
-            <input id="wtNewWeightInput" type="number" step="0.1" placeholder="Новый вес (кг), напр. 67.2" style="margin:0; flex:1; padding:9px 12px; font-size:14px; background:#0f172a; border:1px solid #334155; color:#f8fafc; border-radius:10px;">
-            <button type="button" onclick="submitNewWeightPoint()" class="btn-primary btn-green" style="margin:0; width:auto; padding:9px 16px; font-size:13px; background:linear-gradient(135deg, #00ff88, #10b981); color:#04100a; font-weight:800;">Записать</button>
+            <input id="wtNewWeightInput" type="number" step="0.1" placeholder="Новый вес (кг), напр. 67.2"
+                   style="margin:0; flex:1; padding:9px 12px; font-size:14px; background:#0f172a; border:1px solid #334155; color:#f8fafc; border-radius:10px;">
+            <button type="button" onclick="submitNewWeightPoint()" class="btn-primary btn-green"
+                    style="margin:0; width:auto; padding:9px 16px; font-size:13px; background:linear-gradient(135deg, #00ff88, #10b981); color:#04100a; font-weight:800;">
+                Записать
+            </button>
         </div>
     </div>
 </div>
 
 <!-- МОДАЛЬНОЕ ОКНО 2: УМНЫЙ ВЫБОР ЦЕЛИ И ПОЛЗУНОК КАЛОРИЙ -->
-<div id="goalSelectorModal" class="hidden" onclick="if(event.target===this) closeGoalModal()" style="position:fixed; inset:0; z-index:9999; background:rgba(5,8,17,0.84); backdrop-filter:blur(6px); display:none; align-items:center; justify-content:center; padding:14px;">
+<div id="goalSelectorModal" class="hidden" onclick="if(event.target===this) closeGoalModal()"
+     style="position:fixed; inset:0; z-index:9999; background:rgba(5,8,17,0.84); backdrop-filter:blur(6px); display:none; align-items:center; justify-content:center; padding:14px;">
     <div style="width:100%; max-width:440px; background:linear-gradient(180deg, #13182e 0%, #0b0f19 100%); border:1px solid rgba(168,85,247,0.5); border-radius:18px; padding:16px; box-shadow:0 16px 48px rgba(0,0,0,0.7);">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
             <h2 style="font-size:18px; color:#c084fc; margin:0;">Режим цели и калораж</h2>
-            <button type="button" onclick="closeGoalModal()" style="background:rgba(148,163,184,0.14); border:1px solid #334155; color:#e2e8f0; width:32px; height:32px; border-radius:10px; font-size:16px; cursor:pointer;">✕</button>
+            <button type="button" onclick="closeGoalModal()"
+                    style="background:rgba(148,163,184,0.14); border:1px solid #334155; color:#e2e8f0; width:32px; height:32px; border-radius:10px; font-size:16px; cursor:pointer;">
+                ✕
+            </button>
         </div>
 
         <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; margin-bottom:14px;">
-            <button type="button" id="goalDirCutBtn" onclick="selectGoalDirection('cut')" style="padding:9px 6px; border-radius:10px; border:1px solid #334155; background:#0f172a; color:#cbd5e1; font-size:12px; font-weight:700; cursor:pointer;">↘ Сушка</button>
-            <button type="button" id="goalDirHoldBtn" onclick="selectGoalDirection('hold')" style="padding:9px 6px; border-radius:10px; border:1px solid #334155; background:#0f172a; color:#cbd5e1; font-size:12px; font-weight:700; cursor:pointer;">→ Баланс</button>
-            <button type="button" id="goalDirBulkBtn" onclick="selectGoalDirection('bulk')" style="padding:9px 6px; border-radius:10px; border:1px solid #a855f7; background:rgba(168,85,247,0.2); color:#f3e8ff; font-size:12px; font-weight:700; cursor:pointer;">↗ Набор массы</button>
+            <button type="button" id="goalDirCutBtn" onclick="selectGoalDirection('cut')"
+                    style="padding:9px 6px; border-radius:10px; border:1px solid #334155; background:#0f172a; color:#cbd5e1; font-size:12px; font-weight:700; cursor:pointer;">
+                ↘ Сушка
+            </button>
+            <button type="button" id="goalDirHoldBtn" onclick="selectGoalDirection('hold')"
+                    style="padding:9px 6px; border-radius:10px; border:1px solid #334155; background:#0f172a; color:#cbd5e1; font-size:12px; font-weight:700; cursor:pointer;">
+                → Баланс
+            </button>
+            <button type="button" id="goalDirBulkBtn" onclick="selectGoalDirection('bulk')"
+                    style="padding:9px 6px; border-radius:10px; border:1px solid #a855f7; background:rgba(168,85,247,0.2); color:#f3e8ff; font-size:12px; font-weight:700; cursor:pointer;">
+                ↗ Набор массы
+            </button>
         </div>
 
-        <div id="goalSliderSection" style="background:#0f172a; border:1px solid #1e293b; border-radius:12px; padding:12px; margin-bottom:12px;">
+        <div id="goalSliderSection"
+             style="background:#0f172a; border:1px solid #1e293b; border-radius:12px; padding:12px; margin-bottom:12px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                 <span style="font-size:12px; color:#94a3b8;">Интенсивность режима:</span>
                 <strong id="goalIntensityLabel" style="font-size:13px; color:#34d399;">Плавный набор (+8%)</strong>
             </div>
-            <input id="goalIntensitySlider" type="range" min="1" max="5" step="1" value="1" oninput="updateGoalPreview()" style="width:100%; accent-color:#a855f7; cursor:pointer;">
+            <input id="goalIntensitySlider" type="range" min="1" max="5" step="1" value="1"
+                   oninput="updateGoalPreview()" style="width:100%; accent-color:#a855f7; cursor:pointer;">
             <div style="display:flex; justify-content:space-between; font-size:10.5px; color:#64748b; margin-top:4px;">
                 <span id="goalStep1Text">1. Мягкий</span>
                 <span id="goalStep2Text">2. Средний</span>
@@ -398,33 +551,47 @@
         </div>
 
 
-        <div id="goalTransitionHint" class="hidden" style="background:rgba(56,189,248,0.12); border:1px solid rgba(56,189,248,0.35); border-radius:10px; padding:8px 10px; font-size:11px; color:#bae6fd; margin-bottom:12px;"></div>
+        <div id="goalTransitionHint" class="hidden"
+             style="background:rgba(56,189,248,0.12); border:1px solid rgba(56,189,248,0.35); border-radius:10px; padding:8px 10px; font-size:11px; color:#bae6fd; margin-bottom:12px;"></div>
 
         <div style="background:#090d16; border:1px solid #1e293b; border-radius:12px; padding:12px; margin-bottom:14px;">
             <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;">
                 <span style="font-size:12px; color:#94a3b8;">Расчётная норма на день:</span>
                 <strong id="goalCalcKcalVal" style="font-size:22px; color:#38bdf8;">2541 ккал</strong>
             </div>
-            <div id="goalCalcMacrosVal" style="font-size:12px; color:#34d399; font-weight:600;">Белки: 145 г · Жиры: 70 г · Углеводы: 332 г</div>
-            <div id="goalSafetyNote" style="font-size:11px; color:#94a3b8; margin-top:6px;">С учётом базового обмена и тренировочной активности.</div>
+            <div id="goalCalcMacrosVal" style="font-size:12px; color:#34d399; font-weight:600;">Белки: 145 г · Жиры: 70
+                г · Углеводы: 332 г
+            </div>
+            <div id="goalSafetyNote" style="font-size:11px; color:#94a3b8; margin-top:6px;">С учётом базового обмена и
+                тренировочной активности.
+            </div>
         </div>
 
-        <button type="button" onclick="saveGoalSettings()" class="btn-primary btn-green" style="margin:0;">Применить цель и обновить расчёт</button>
+        <button type="button" onclick="saveGoalSettings()" class="btn-primary btn-green" style="margin:0;">Применить
+            цель и обновить расчёт
+        </button>
     </div>
 </div>
 
 <!-- МОДАЛЬНОЕ ОКНО 3: ЦЕНТР ПРОФИЛЯ, АНКЕТА И НАСТРОЙКИ В АВАТАРКЕ -->
-<div id="profileCenterModal" class="hidden" onclick="if(event.target===this) closeProfileModal()" style="position:fixed; inset:0; z-index:9999; background:rgba(5,8,17,0.84); backdrop-filter:blur(6px); display:none; align-items:center; justify-content:center; padding:14px;">
+<div id="profileCenterModal" class="hidden" onclick="if(event.target===this) closeProfileModal()"
+     style="position:fixed; inset:0; z-index:9999; background:rgba(5,8,17,0.84); backdrop-filter:blur(6px); display:none; align-items:center; justify-content:center; padding:14px;">
     <div style="width:100%; max-width:440px; max-height:88vh; overflow-y:auto; background:linear-gradient(180deg, #13182e 0%, #0b0f19 100%); border:1px solid rgba(168,85,247,0.5); border-radius:18px; padding:16px; box-shadow:0 16px 48px rgba(0,0,0,0.7);">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
             <div style="display:flex; align-items:center; gap:10px;">
-                <div id="modalAvatarPreview" style="width:46px; height:46px; border-radius:50%; border:2px solid #a855f7; background:linear-gradient(135deg, #1e1b4b 0%, #3b0764 100%); color:#f8fafc; font-weight:800; font-size:16px; display:flex; align-items:center; justify-content:center; overflow:hidden;">АС</div>
+                <div id="modalAvatarPreview"
+                     style="width:46px; height:46px; border-radius:50%; border:2px solid #a855f7; background:linear-gradient(135deg, #1e1b4b 0%, #3b0764 100%); color:#f8fafc; font-weight:800; font-size:16px; display:flex; align-items:center; justify-content:center; overflow:hidden;">
+                    АС
+                </div>
                 <div>
                     <h2 id="profileModalName" style="font-size:17px; color:#f8fafc; margin:0;">Александр</h2>
                     <span style="font-size:11px; color:#34d399;">Анкета и настройки Workout Vault</span>
                 </div>
             </div>
-            <button type="button" onclick="closeProfileModal()" style="background:rgba(148,163,184,0.14); border:1px solid #334155; color:#e2e8f0; width:32px; height:32px; border-radius:10px; font-size:16px; cursor:pointer;">✕</button>
+            <button type="button" onclick="closeProfileModal()"
+                    style="background:rgba(148,163,184,0.14); border:1px solid #334155; color:#e2e8f0; width:32px; height:32px; border-radius:10px; font-size:16px; cursor:pointer;">
+                ✕
+            </button>
         </div>
 
         <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin-bottom:12px;">
@@ -438,12 +605,14 @@
             </div>
             <div>
                 <label style="font-size:11px;">Целевой вес (кг)</label>
-                <input id="profTargetWeightInput" type="number" step="0.5" value="70.0" style="padding:8px; font-size:14px;">
+                <input id="profTargetWeightInput" type="number" step="0.5" value="70.0"
+                       style="padding:8px; font-size:14px;">
             </div>
         </div>
 
         <label style="font-size:11px;">Уровень активности (работа и тренировки)</label>
-        <select id="profActivitySelect" style="width:100%; background:#0f172a; border:1px solid #334155; color:#f8fafc; border-radius:10px; padding:9px; font-size:13px; margin-bottom:12px;">
+        <select id="profActivitySelect"
+                style="width:100%; background:#0f172a; border:1px solid #334155; color:#f8fafc; border-radius:10px; padding:9px; font-size:13px; margin-bottom:12px;">
             <option value="1.375">Лёгкая активность (сидячая работа, 1–2 трен.)</option>
             <option value="1.55" selected>Средняя активность (50/50 + 3–4 тренировки)</option>
             <option value="1.725">Высокая активность (работа на ногах + 4–5 трен.)</option>
@@ -454,7 +623,8 @@
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; background:#0f172a; border:1px solid #1e293b; border-radius:12px; padding:10px; margin-bottom:14px;">
             <div>
                 <div style="font-size:11px; color:#94a3b8; margin-bottom:4px;">Язык интерфейса</div>
-                <select id="profLangSelect" onchange="changeAppLanguage(this.value)" style="width:100%; background:#080c15; border:1px solid #334155; color:#f8fafc; border-radius:8px; padding:6px; font-size:12px;">
+                <select id="profLangSelect" onchange="changeAppLanguage(this.value)"
+                        style="width:100%; background:#080c15; border:1px solid #334155; color:#f8fafc; border-radius:8px; padding:6px; font-size:12px;">
                     <option value="ru" selected>🇷🇺 Русский</option>
                     <option value="en">🇬🇧 English (скоро)</option>
                 </select>
@@ -469,18 +639,25 @@
         </div>
 
         <div style="display:flex; gap:8px;">
-            <button type="button" onclick="saveProfileCenter()" class="btn-primary btn-green" style="margin:0; flex:1;">Сохранить анкету</button>
-            <button type="button" onclick="logout()" style="background:rgba(251,113,133,0.14); border:1px solid rgba(251,113,133,0.45); color:#fb7185; border-radius:12px; padding:0 14px; font-size:13px; font-weight:700; cursor:pointer;">Выйти</button>
+            <button type="button" onclick="saveProfileCenter()" class="btn-primary btn-green" style="margin:0; flex:1;">
+                Сохранить анкету
+            </button>
+            <button type="button" onclick="logout()"
+                    style="background:rgba(251,113,133,0.14); border:1px solid rgba(251,113,133,0.45); color:#fb7185; border-radius:12px; padding:0 14px; font-size:13px; font-weight:700; cursor:pointer;">
+                Выйти
+            </button>
         </div>
     </div>
 </div>
 <!-- МОДАЛЬНОЕ ОКНО 4: СТАРТОВАЯ АНКЕТА ПРИ ПЕРВОМ ВХОДЕ (ONBOARDING) -->
-<div id="onboardingWelcomeModal" class="hidden" style="position:fixed; inset:0; z-index:10000; background:rgba(5,8,17,0.92); backdrop-filter:blur(8px); display:none; align-items:center; justify-content:center; padding:14px;">
+<div id="onboardingWelcomeModal" class="hidden"
+     style="position:fixed; inset:0; z-index:10000; background:rgba(5,8,17,0.92); backdrop-filter:blur(8px); display:none; align-items:center; justify-content:center; padding:14px;">
     <div style="width:100%; max-width:440px; max-height:90vh; overflow-y:auto; background:linear-gradient(180deg, #151b33 0%, #0b0f19 100%); border:1px solid rgba(0,255,136,0.45); border-radius:18px; padding:18px; box-shadow:0 20px 60px rgba(0,0,0,0.8);">
         <div style="margin-bottom:12px;">
             <span class="badge" style="background:rgba(0,255,136,0.14); color:#00ff88; font-size:10px;">ПЕРВИЧНАЯ НАСТРОЙКА</span>
             <h2 style="font-size:19px; color:#f8fafc; margin:6px 0 4px;">Добро пожаловать в Workout Vault</h2>
-            <p style="font-size:12px; color:#94a3b8; margin:0;">Заполни 6 параметров — система рассчитает обмен веществ по Миффлину — Сан-Жеору и построит научный график до цели.</p>
+            <p style="font-size:12px; color:#94a3b8; margin:0;">Заполни 6 параметров — система рассчитает обмен веществ
+                по Миффлину — Сан-Жеору и построит научный график до цели.</p>
         </div>
 
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
@@ -490,7 +667,8 @@
             </div>
             <div>
                 <label style="font-size:11px;">Пол</label>
-                <select id="obGenderSelect" style="width:100%; background:#0f172a; border:1px solid #334155; color:#f8fafc; border-radius:10px; padding:8px; font-size:13px;">
+                <select id="obGenderSelect"
+                        style="width:100%; background:#0f172a; border:1px solid #334155; color:#f8fafc; border-radius:10px; padding:8px; font-size:13px;">
                     <option value="male" selected>Мужской</option>
                     <option value="female">Женский</option>
                 </select>
@@ -498,19 +676,28 @@
         </div>
 
         <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; margin-bottom:10px;">
-            <div><label style="font-size:10px;">Возраст</label><input id="obAgeInput" type="number" value="35" style="padding:7px; font-size:13px;"></div>
-            <div><label style="font-size:10px;">Рост (см)</label><input id="obHeightInput" type="number" value="176" style="padding:7px; font-size:13px;"></div>
-            <div><label style="font-size:10px;">Вес (кг)</label><input id="obWeightInput" type="number" step="0.1" value="70.0" style="padding:7px; font-size:13px;"></div>
-            <div><label style="font-size:10px; color:#00ff88;">Цель (кг)</label><input id="obTargetInput" type="number" step="0.1" value="72.0" style="padding:7px; font-size:13px; border-color:rgba(0,255,136,0.45);"></div>
+            <div><label style="font-size:10px;">Возраст</label><input id="obAgeInput" type="number" value="35"
+                                                                      style="padding:7px; font-size:13px;"></div>
+            <div><label style="font-size:10px;">Рост (см)</label><input id="obHeightInput" type="number" value="176"
+                                                                        style="padding:7px; font-size:13px;"></div>
+            <div><label style="font-size:10px;">Вес (кг)</label><input id="obWeightInput" type="number" step="0.1"
+                                                                       value="70.0"
+                                                                       style="padding:7px; font-size:13px;"></div>
+            <div><label style="font-size:10px; color:#00ff88;">Цель (кг)</label><input id="obTargetInput" type="number"
+                                                                                       step="0.1" value="72.0"
+                                                                                       style="padding:7px; font-size:13px; border-color:rgba(0,255,136,0.45);">
+            </div>
         </div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
             <div>
                 <label style="font-size:10.5px; color:#94a3b8;">Утренний мин. вес (необяз.)</label>
-                <input id="obMinWeightInput" type="number" step="0.1" placeholder="Напр. 66.0 (если знаешь)" style="padding:7px; font-size:12.5px;">
+                <input id="obMinWeightInput" type="number" step="0.1" placeholder="Напр. 66.0 (если знаешь)"
+                       style="padding:7px; font-size:12.5px;">
             </div>
             <div>
                 <label style="font-size:10.5px; color:#94a3b8;">Вечерний макс. вес (необяз.)</label>
-                <input id="obMaxWeightInput" type="number" step="0.1" placeholder="Напр. 66.8 (или замерим за 7 дн.)" style="padding:7px; font-size:12.5px;">
+                <input id="obMaxWeightInput" type="number" step="0.1" placeholder="Напр. 66.8 (или замерим за 7 дн.)"
+                       style="padding:7px; font-size:12.5px;">
             </div>
         </div>
 
@@ -518,7 +705,8 @@
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
             <div>
                 <label style="font-size:11px;">Характер работы и нагрузок</label>
-                <select id="obWorkTypeSelect" style="width:100%; background:#0f172a; border:1px solid #334155; color:#f8fafc; border-radius:10px; padding:8px; font-size:12px;">
+                <select id="obWorkTypeSelect"
+                        style="width:100%; background:#0f172a; border:1px solid #334155; color:#f8fafc; border-radius:10px; padding:8px; font-size:12px;">
                     <option value="sedentary">Сидячая работа</option>
                     <option value="mixed" selected>50/50 + тренировки</option>
                     <option value="physical">Активная на ногах</option>
@@ -527,7 +715,8 @@
             </div>
             <div>
                 <label style="font-size:11px;">График работы</label>
-                <select id="obScheduleSelect" style="width:100%; background:#0f172a; border:1px solid #334155; color:#f8fafc; border-radius:10px; padding:8px; font-size:12px;">
+                <select id="obScheduleSelect"
+                        style="width:100%; background:#0f172a; border:1px solid #334155; color:#f8fafc; border-radius:10px; padding:8px; font-size:12px;">
                     <option value="2/2" selected>Сменный 2/2</option>
                     <option value="5/2">Пятидневка 5/2</option>
                     <option value="free">Свободный</option>
@@ -536,21 +725,25 @@
         </div>
 
         <label style="font-size:11px;">Главная цель</label>
-        <select id="obGoalSelect" style="width:100%; background:#0f172a; border:1px solid #334155; color:#f8fafc; border-radius:10px; padding:9px; font-size:13px; margin-bottom:14px;">
+        <select id="obGoalSelect"
+                style="width:100%; background:#0f172a; border:1px solid #334155; color:#f8fafc; border-radius:10px; padding:9px; font-size:13px; margin-bottom:14px;">
             <option value="cut">↘ Бережное похудение / Сушка</option>
             <option value="recomp" selected>→ Баланс и рельеф (Рекомпозиция)</option>
             <option value="bulk">↗ Качественный набор мышечной массы</option>
         </select>
 
-        <button type="button" onclick="submitOnboardingWizard()" class="btn-primary btn-green" style="margin:0; background:linear-gradient(135deg, #00ff88, #10b981); color:#04100a; font-weight:800;">Рассчитать программу и открыть кабинет</button>
+        <button type="button" onclick="submitOnboardingWizard()" class="btn-primary btn-green"
+                style="margin:0; background:linear-gradient(135deg, #00ff88, #10b981); color:#04100a; font-weight:800;">
+            Рассчитать программу и открыть кабинет
+        </button>
     </div>
 </div>
 
-<script src="app.js?v=56"></script>
+<script src="app.js?v=57"></script>
 <script>
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/app/sw.js');
-  }
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/app/sw.js');
+    }
 </script>
 </body>
 </html>
