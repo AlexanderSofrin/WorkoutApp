@@ -55,7 +55,9 @@ class OnboardingRequest(BaseModel):
     weight_kg: float = Field(gt=30, lt=300, description="Текущий вес в кг")
     target_weight_kg: float | None = Field(default=None, gt=30, lt=300, description="Целевой вес (центр Зелёного коридора)")
     goal: str = Field(default="recomp", pattern="^(cut|recomp|bulk)$", description="Цель: cut / recomp / bulk")
-    work_type: str = Field(default="mixed", pattern="^(sedentary|mixed|physical)$", description="Характер работы")
+    work_type: str = Field(default="mixed", pattern="^(sedentary|mixed|physical|sport)$",
+                           description="Характер работы и нагрузок")
+
     work_schedule: str = Field(default="2/2", description="График работы: 2/2, 5/2 или free")
     workouts_per_week: int = Field(default=3, ge=0, le=14, description="Тренировок в неделю")
     experience_years: float = Field(default=1.0, ge=0, le=50, description="Тренировочный стаж в годах")
@@ -684,10 +686,11 @@ def get_nutrition_plan(
     # 2. Коэффициент бытовой активности + фактические тренировки из базы за последние 7 дней
     work_factors = {
         "sedentary": 1.25,
-        "mixed": 1.40,
-        "physical": 1.55,
+        "mixed": 1.45,
+        "physical": 1.65,
+        "sport": 1.90,
     }
-    base_factor = work_factors.get(current_user.work_type or "mixed", 1.40)
+    base_factor = work_factors.get(current_user.work_type or "mixed", 1.45)
 
     week_ago = datetime.utcnow() - timedelta(days=7)
     recent_workouts = (

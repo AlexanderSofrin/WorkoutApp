@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0b0f19">
     <link rel="manifest" href="manifest.json">
     <title>Workout Vault</title>
-    <link rel="stylesheet" href="style.css?v=51">
+    <link rel="stylesheet" href="style.css?v=52">
 </head>
 <body>
 <div class="container">
@@ -437,10 +437,12 @@
 
         <label style="font-size:11px;">Уровень активности (работа и тренировки)</label>
         <select id="profActivitySelect" style="width:100%; background:#0f172a; border:1px solid #334155; color:#f8fafc; border-radius:10px; padding:9px; font-size:13px; margin-bottom:12px;">
-            <option value="1.375">Лёгкая активность (1–2 тренировки в неделю)</option>
-            <option value="1.55" selected>Средняя активность (3–4 тренировки + смены)</option>
-            <option value="1.725">Высокая активность (4–5 интенсивных тренировок)</option>
+            <option value="1.375">Лёгкая активность (сидячая работа, 1–2 трен.)</option>
+            <option value="1.55" selected>Средняя активность (50/50 + 3–4 тренировки)</option>
+            <option value="1.725">Высокая активность (работа на ногах + 4–5 трен.)</option>
+            <option value="1.95">Спорт-режим / Хардгейнер (4000–6000 ккал)</option>
         </select>
+
 
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; background:#0f172a; border:1px solid #1e293b; border-radius:12px; padding:10px; margin-bottom:14px;">
             <div>
@@ -465,8 +467,68 @@
         </div>
     </div>
 </div>
+<!-- МОДАЛЬНОЕ ОКНО 4: СТАРТОВАЯ АНКЕТА ПРИ ПЕРВОМ ВХОДЕ (ONBOARDING) -->
+<div id="onboardingWelcomeModal" class="hidden" style="position:fixed; inset:0; z-index:10000; background:rgba(5,8,17,0.92); backdrop-filter:blur(8px); display:none; align-items:center; justify-content:center; padding:14px;">
+    <div style="width:100%; max-width:440px; max-height:90vh; overflow-y:auto; background:linear-gradient(180deg, #151b33 0%, #0b0f19 100%); border:1px solid rgba(0,255,136,0.45); border-radius:18px; padding:18px; box-shadow:0 20px 60px rgba(0,0,0,0.8);">
+        <div style="margin-bottom:12px;">
+            <span class="badge" style="background:rgba(0,255,136,0.14); color:#00ff88; font-size:10px;">ПЕРВИЧНАЯ НАСТРОЙКА</span>
+            <h2 style="font-size:19px; color:#f8fafc; margin:6px 0 4px;">Добро пожаловать в Workout Vault</h2>
+            <p style="font-size:12px; color:#94a3b8; margin:0;">Заполни 6 параметров — система рассчитает обмен веществ по Миффлину — Сан-Жеору и построит научный график до цели.</p>
+        </div>
 
-<script src="app.js?v=51"></script>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
+            <div>
+                <label style="font-size:11px;">Как к тебе обращаться</label>
+                <input id="obNameInput" type="text" placeholder="Имя" style="padding:8px; font-size:13px;">
+            </div>
+            <div>
+                <label style="font-size:11px;">Пол</label>
+                <select id="obGenderSelect" style="width:100%; background:#0f172a; border:1px solid #334155; color:#f8fafc; border-radius:10px; padding:8px; font-size:13px;">
+                    <option value="male" selected>Мужской</option>
+                    <option value="female">Женский</option>
+                </select>
+            </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; margin-bottom:10px;">
+            <div><label style="font-size:10px;">Возраст</label><input id="obAgeInput" type="number" value="35" style="padding:7px; font-size:13px;"></div>
+            <div><label style="font-size:10px;">Рост (см)</label><input id="obHeightInput" type="number" value="176" style="padding:7px; font-size:13px;"></div>
+            <div><label style="font-size:10px;">Вес (кг)</label><input id="obWeightInput" type="number" step="0.1" value="70.0" style="padding:7px; font-size:13px;"></div>
+            <div><label style="font-size:10px; color:#00ff88;">Цель (кг)</label><input id="obTargetInput" type="number" step="0.1" value="72.0" style="padding:7px; font-size:13px; border-color:rgba(0,255,136,0.45);"></div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
+            <div>
+                <label style="font-size:11px;">Характер работы и нагрузок</label>
+                <select id="obWorkTypeSelect" style="width:100%; background:#0f172a; border:1px solid #334155; color:#f8fafc; border-radius:10px; padding:8px; font-size:12px;">
+                    <option value="sedentary">Сидячая работа</option>
+                    <option value="mixed" selected>50/50 + тренировки</option>
+                    <option value="physical">Активная на ногах</option>
+                    <option value="sport">Спортсмен (4000+ ккал)</option>
+                </select>
+            </div>
+            <div>
+                <label style="font-size:11px;">График работы</label>
+                <select id="obScheduleSelect" style="width:100%; background:#0f172a; border:1px solid #334155; color:#f8fafc; border-radius:10px; padding:8px; font-size:12px;">
+                    <option value="2/2" selected>Сменный 2/2</option>
+                    <option value="5/2">Пятидневка 5/2</option>
+                    <option value="free">Свободный</option>
+                </select>
+            </div>
+        </div>
+
+        <label style="font-size:11px;">Главная цель</label>
+        <select id="obGoalSelect" style="width:100%; background:#0f172a; border:1px solid #334155; color:#f8fafc; border-radius:10px; padding:9px; font-size:13px; margin-bottom:14px;">
+            <option value="cut">↘ Бережное похудение / Сушка</option>
+            <option value="recomp" selected>→ Баланс и рельеф (Рекомпозиция)</option>
+            <option value="bulk">↗ Качественный набор мышечной массы</option>
+        </select>
+
+        <button type="button" onclick="submitOnboardingWizard()" class="btn-primary btn-green" style="margin:0; background:linear-gradient(135deg, #00ff88, #10b981); color:#04100a; font-weight:800;">Рассчитать программу и открыть кабинет</button>
+    </div>
+</div>
+
+<script src="app.js?v=52"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/app/sw.js');

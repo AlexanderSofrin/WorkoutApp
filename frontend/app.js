@@ -1656,17 +1656,9 @@ function selectGoalDirection(dir) {
     });
     const sliderSec = document.getElementById("goalSliderSection");
     if (sliderSec) sliderSec.style.display = dir === "hold" ? "none" : "block";
-    const hint = document.getElementById("goalTransitionHint");
-    if (hint) {
-        if (_wvGoalState.prevDirection === "cut" && dir === "bulk") {
-            hint.textContent = "💡 Переход после сушки: начни с 1-й ступени (+8%) на 10–14 дней, чтобы избежать резкого отката воды.";
-            hint.classList.remove("hidden");
-        } else {
-            hint.classList.add("hidden");
-        }
-    }
     updateGoalPreview();
 }
+
 
 function _computeGoalMetrics(dir, step) {
     const tdee = _calcMaintenanceTdee();
@@ -1742,6 +1734,20 @@ function updateGoalPreview() {
     if (kEl) kEl.textContent = `${m.kcal} ккал`;
     if (mEl) mEl.textContent = `Белки: ${m.prot} г · Жиры: ${m.fat} г · Углеводы: ${m.carbs} г`;
     if (nEl) nEl.textContent = m.note;
+
+        const hint = document.getElementById("goalTransitionHint");
+    if (hint) {
+        if (dir === "cut" && step >= 2) {
+            hint.innerHTML = "🧬 <strong>Научный совет:</strong> если вы ранее не проходили жёсткую сушку, лучше выбрать <strong>1-ю мягкую ступень (-15%)</strong> и растянуть путь на дольше. При резком дефиците подскакивает гормон голода <strong>грелин</strong> и падает <strong>лептин</strong> — мягкий темп защищает от срывов и сохраняет мышцы.";
+            hint.classList.remove("hidden");
+        } else if (_wvGoalState.prevDirection === "cut" && dir === "bulk") {
+            hint.textContent = "💡 Переход после сушки: начни с 1-й ступени (+8%) на 10–14 дней, чтобы избежать резкого отката воды.";
+            hint.classList.remove("hidden");
+        } else {
+            hint.classList.add("hidden");
+        }
+    }
+
 }
 
 function saveGoalSettings() {
@@ -2007,17 +2013,7 @@ function renderWeightTerminal() {
             ctx.fillRect(x - bodyW / 2, yTop, bodyW, Math.max(2, yBot - yTop));
         }
 
-        // Маркер тренировки на свече (как кружок B на референсе)
-        if (c.hasTrain) {
-            const by = Math.max(padT + 8, toY(c.high) - 9);
-            ctx.fillStyle = "#00ff88";
-            ctx.beginPath();
-            ctx.arc(x, by, 5.5, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = "#04100a";
-            ctx.font = "bold 7px sans-serif";
-            ctx.fillText("Т", x - 2.3, by + 2.5);
-        }
+
         ctx.restore();
     });
 
@@ -2071,14 +2067,79 @@ async function submitNewWeightPoint() {
     _wvProfile.weight = val;
     localStorage.setItem("wv_profile_v49", JSON.stringify(_wvProfile));
     if (typeof weightHistory !== "undefined" && Array.isArray(weightHistory)) {
-            weightHistory.push({ date: new Date().toISOString(), weight: val });
+        weightHistory.push({ date: new Date().toISOString(), weight: val });
     }
     inp.value = "";
+    _syncGoalCardsUI();
     renderWeightTerminal();
-    if (typeof apiFetch === "function") {
-        try {
-            await apiFetch("/weight", { method: "POST", body: JSON.stringify({ weight: val }) });
-        } catch (e) {}
+    try {
+        await fetch("/coach/ask", {
+            method: "POST",
+            headers: authHeaders(),
+            body: JSON.stringify({ message: `Мой вес ${val}` })
+        });
+        await Promise.all([loadSupport(), loadNutrition()]);
+    } catch (e) {}
+}
+
+async function checkAndOpenOnboarding() {
+    if (!token) return;
+    try {
+        const res = await fetch("/auth/me", { headers: authHeaders() });
+        if (!res.ok) return;
+        const prof = await res.json();
+        if (prof.weight_kg) _wvProfile.weight = prof.weight_kg;
+        if (prof.target_weight_kg) _wvProfile.targetWeight = prof.target_weight_kg;
+        if (prof.height_cm) _wvProfile.height = prof.height_cm;
+        if (prof.age) _wvProfile.age = prof.age;
+        localStorage.setItem("wv_profile_v49", JSON.stringify(_wvProfile));
+        _syncGoalCardsUI();
+
+        if (prof.is_onboarded === false) {
+            const m = document.getElementById("onboardingWelcomeModal");
+            if (m) {
+                const nameInp = document.getElementById("obNameInput");
+                if (nameInp && prof.username) nameInp.value = prof.username;
+                m.classList.remove("hidden");
+                m.style.display = "flex";
+            }
+        }
+    } catch (e) {}
+}
+
+async function submitOnboardingWizard() {
+    const payload = {
+        full_name: (document.getElementById("obNameInput")?.value || "").trim() || "Атлет",
+        gender: document.getElementById("obGenderSelect")?.value || "male",
+        age: parseInt(document.getElementById("obAgeInput")?.value) || 35,
+        height_cm: parseFloat(document.getElementById("obHeightInput")?.value) || 176,
+        weight_kg: parseFloat(document.getElementById("obWeightInput")?.value) || 70.0,
+        target_weight_kg: parseFloat(document.getElementById("obTargetInput")?.value) || 72.0,
+        work_type: document.getElementById("obWorkTypeSelect")?.value || "mixed",
+        work_schedule: document.getElementById("obScheduleSelect")?.value || "2/2",
+        goal: document.getElementById("obGoalSelect")?.value || "recomp",
+        workouts_per_week: 3
+    };
+    const res = await fetch("/auth/onboarding", {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify(payload)
+    });
+    if (res.ok) {
+        const actMap = { sedentary: 1.375, mixed: 1.55, physical: 1.725, sport: 1.95 };
+        _wvProfile = {
+            age: payload.age,
+            height: payload.height_cm,
+            weight: payload.weight_kg,
+            targetWeight: payload.target_weight_kg,
+            activity: actMap[payload.work_type] || 1.55
+        };
+        localStorage.setItem("wv_profile_v49", JSON.stringify(_wvProfile));
+        const m = document.getElementById("onboardingWelcomeModal");
+        if (m) { m.classList.add("hidden"); m.style.display = "none"; }
+        _syncGoalCardsUI();
+        renderWeightTerminal();
+        await Promise.all([loadSupport(), loadNutrition()]);
     }
 }
 
@@ -2086,6 +2147,7 @@ function initV49Modules() {
     _syncAvatarUI();
     _syncGoalCardsUI();
     renderWeightTerminal();
+    checkAndOpenOnboarding();
 }
 
 if (document.readyState === "loading") {
