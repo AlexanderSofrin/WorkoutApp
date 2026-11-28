@@ -976,15 +976,17 @@ async function loadNutrition() {
     const goalEl = document.getElementById("goalLabel");
     if (goalEl) goalEl.textContent = d.goal_ru;
 
+        const targetWeightVal = parseFloat(_wvProfile.targetWeight) || 70.0;
     const mainGoalEl = document.getElementById("mainGoalTitle");
     if (mainGoalEl) mainGoalEl.textContent = d.goal_ru;
     const mainGoalSubEl = document.getElementById("mainGoalSub");
-    if (mainGoalSubEl) mainGoalSubEl.textContent = `Цель: ${d.daily_target.calories_kcal} ккал/день`;
+    if (mainGoalSubEl) mainGoalSubEl.textContent = `Цель: ${targetWeightVal.toFixed(1)} кг`;
 
     const heroBurnEl = document.getElementById("heroDailyBurnVal");
     if (heroBurnEl) heroBurnEl.textContent = d.tdee_maintenance_kcal + " ккал";
     const heroTargetEl = document.getElementById("heroKcalTargetSub");
-    if (heroTargetEl) heroTargetEl.textContent = "Цель на день: " + d.daily_target.calories_kcal + " ккал";
+    if (heroTargetEl) heroTargetEl.textContent = `Цель: ${d.daily_target.calories_kcal} ккал/день`;
+
 
     const heroCorrEl = document.getElementById("heroCorridorRange");
     if (heroCorrEl) heroCorrEl.textContent = d.green_corridor.safe_range_kg;
@@ -1752,6 +1754,7 @@ function _syncGoalCardsUI() {
     const dir = _wvGoalState.direction || "bulk";
     const step = _wvGoalState.intensity || 1;
     const m = _computeGoalMetrics(dir, step);
+    const targetW = parseFloat(_wvProfile.targetWeight) || 70.0;
     const tEl = document.getElementById("mainGoalTitle");
     const sEl = document.getElementById("mainGoalSub");
     const bEl = document.getElementById("heroDailyBurnVal");
@@ -1759,9 +1762,10 @@ function _syncGoalCardsUI() {
     const macEl = document.getElementById("macrosInfo");
     const gLbl = document.getElementById("goalLabel");
     if (tEl) tEl.textContent = m.title;
-    if (sEl) sEl.textContent = `Цель: ${m.kcal} ккал/день`;
+    if (sEl) sEl.textContent = `Цель: ${targetW.toFixed(1)} кг`;
     if (bEl) bEl.textContent = `${m.tdee} ккал`;
-    if (ktEl) ktEl.textContent = `Цель на день: ${m.kcal} ккал`;
+    if (ktEl) ktEl.textContent = `Цель: ${m.kcal} ккал/день`;
+
     if (macEl) macEl.textContent = `${m.prot}г / ${m.fat}г / ${m.carbs}г`;
     if (gLbl) gLbl.textContent = m.title;
 }
