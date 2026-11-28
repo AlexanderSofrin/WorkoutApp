@@ -66,10 +66,12 @@ function toggleCoachFullscreen() {
     const card = document.getElementById("coachCard");
     const btn = document.getElementById("fullscreenCoachBtn");
     const isFull = card.classList.toggle("coach-fullscreen");
-    btn.textContent = isFull ? "✕ Свернуть" : "⤢ Весь экран";
+    btn.textContent = isFull ? "✕" : "⤢";
+    btn.title = isFull ? "Свернуть чат" : "Развернуть на весь экран";
     const box = document.getElementById("aiCoachBox");
     if (box) box.scrollTop = box.scrollHeight;
 }
+
 
 let isSendingCoach = false;
 let lastCoachText = "";
@@ -1759,20 +1761,20 @@ function _syncGoalCardsUI() {
     const fc = _calcPhysiologyForecast(curW, targetW, dir, m.kcal, m.tdee);
     const rateTxt = fc.weeklyRate !== 0 ? ` (${fc.weeklyRate > 0 ? "+" : ""}${fc.weeklyRate} кг/нед)` : "";
 
-    const tEl = document.getElementById("mainGoalTitle");
-    const sEl = document.getElementById("mainGoalSub");
-    const bEl = document.getElementById("heroDailyBurnVal");
     const ktEl = document.getElementById("heroKcalTargetSub");
+    const rateEl = document.getElementById("heroWeeklyRateSub");
     const macEl = document.getElementById("macrosInfo");
     const gLbl = document.getElementById("goalLabel");
     if (tEl) tEl.textContent = m.title;
     if (sEl) sEl.textContent = `Цель: ${targetW.toFixed(1)} кг`;
     if (bEl) bEl.textContent = `${m.tdee} ккал`;
-    if (ktEl) ktEl.textContent = `Цель: ${m.kcal} ккал/день${rateTxt}`;
+    if (ktEl) ktEl.textContent = `Цель: ${m.kcal} ккал/день`;
+    if (rateEl) {
+        rateEl.textContent = fc.weeklyRate !== 0
+            ? `Темп: ${fc.weeklyRate > 0 ? "+" : ""}${fc.weeklyRate} кг/нед`
+            : "Темп: 0.0 кг/нед (баланс)";
+    }
 
-    if (macEl) macEl.textContent = `${m.prot}г / ${m.fat}г / ${m.carbs}г`;
-    if (gLbl) gLbl.textContent = m.title;
-}
 
 // === БИРЖЕВОЙ ТЕРМИНАЛ «ЗЕЛЁНЫЙ КОРИДОР» (НЕОН WORKOUT VAULT + МОДЕЛЬ ХОЛЛА) ===
 let _wtDays = 14;
